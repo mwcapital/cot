@@ -57,5 +57,7 @@ zipp==3.21.0
 flask_sqlalchemy
 psycopg2-binary
 plotting
+streamlit-chat
+
 
 
