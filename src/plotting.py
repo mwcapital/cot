@@ -6,15 +6,125 @@ from plotly.subplots import make_subplots
 import datetime
 
 
-def plot_cftc_data(data):
-    """
-    Create interactive plots for CFTC data with week-over-week changes and net positions
+@st.cache_data
+def calculate_correct_pct_change(series):
+    pct_changes = []
+    for i in range(1, len(series)):
+        prev_val = series.iloc[i - 1]
+        current_val = series.iloc[i]
 
-    Parameters:
-    data (pd.DataFrame): The CFTC data to plot
-    """
-    st.subheader("Data Visualization")
+        # If both values have the same sign
+        if (prev_val >= 0 and current_val >= 0) or (prev_val <= 0 and current_val <= 0):
+            # For negative values, a more negative value means decrease
+            if prev_val < 0:
+                # Calculate the absolute change
+                abs_change = abs(current_val) - abs(prev_val)
+                # A positive abs_change means the value became more negative
+                pct_change = -(abs_change / abs(prev_val) * 100) if prev_val != 0 else 0
+            else:
+                # Normal calculation for positive values
+                pct_change = ((current_val - prev_val) / abs(prev_val) * 100) if prev_val != 0 else 0
+        else:
+            # When values cross zero, use absolute difference
+            pct_change = ((current_val - prev_val) / abs(prev_val) * 100) if prev_val != 0 else 0
 
+        pct_changes.append(pct_change)
+
+    # Add NaN for the first row where there's no previous value
+    pct_changes = [float('nan')] + pct_changes
+    return pd.Series(pct_changes, index=series.index).round(1)
+
+
+@st.cache_data
+def create_hover_text(row, col):
+    date_str = pd.to_datetime(row['date']).strftime('%Y-%m-%d')
+    value_str = f"{row[col]:,.0f}"
+
+    # Change values
+    change = row[f'{col}_change']
+    change_pct = row[f'{col}_change_pct']
+    change_str = f"Change: {change:+,.0f} ({change_pct:+.1f}%)" if not pd.isna(change) else "Change: N/A"
+
+    # Percentile ranks
+    pct_ytd = row[f'{col}_pct_ytd']
+    pct_1yr = row[f'{col}_pct_1yr']
+    pct_2yr = row[f'{col}_pct_2yr']
+    pct_5yr = row[f'{col}_pct_5yr']
+
+    pct_ytd_str = f"YTD Percentile: {pct_ytd:.1f}%" if not pd.isna(pct_ytd) else "YTD Percentile: N/A"
+    pct_1yr_str = f"1Y Percentile: {pct_1yr:.1f}%" if not pd.isna(pct_1yr) else "1Y Percentile: N/A"
+    pct_2yr_str = f"2Y Percentile: {pct_2yr:.1f}%" if not pd.isna(pct_2yr) else "2Y Percentile: N/A"
+    pct_5yr_str = f"5Y Percentile: {pct_5yr:.1f}%" if not pd.isna(pct_5yr) else "5Y Percentile: N/A"
+
+    hover_text = f"<b>{date_str}</b><br>{col}: {value_str}<br>{change_str}<br>{pct_ytd_str}<br>{pct_1yr_str}<br>{pct_2yr_str}<br>{pct_5yr_str}"
+    return hover_text
+
+
+@st.cache_data
+def get_color_for_column(column_name):
+    column_lower = column_name.lower()
+
+    # Net position colors - using a distinct color scheme
+    if 'commercial net' in column_lower:
+        return '#d62728'  # Red for Commercial Net
+    elif 'large speculator net' in column_lower or 'money_manager net' in column_lower:
+        return '#1f77b4'  # Blue for Large Speculator Net
+    elif 'small speculator net' in column_lower or 'non_reportable net' in column_lower:
+        return '#B8860B'  # Dark goldenrod (burnt yellow)
+    elif 'other reportables net' in column_lower:
+        return '#9467bd'  # Purple for Other Reportables Net
+    elif 'swap dealer net' in column_lower:
+        return '#ff7f0e'  # Orange for Swap Dealer Net
+
+    # Original colors for standard columns with long/short differentiation
+    elif 'non_commercial' in column_lower or 'money_manager' in column_lower:
+        if 'longs' in column_lower:
+            return '#1f77b4'  # Standard blue for longs
+        elif 'shorts' in column_lower:
+            return '#7bafd4'  # Lighter blue for shorts
+        else:
+            return '#1f77b4'  # Default blue for other variations
+    elif 'commercial' in column_lower or 'producer' in column_lower:
+        if 'longs' in column_lower:
+            return '#d62728'  # Standard red for longs
+        elif 'shorts' in column_lower:
+            return '#ff9999'  # Lighter red for shorts
+        else:
+            return '#d62728'  # Default red for other variations
+    elif 'non_reportable' in column_lower:
+        if 'longs' in column_lower:
+            return '#B8860B'  # Dark goldenrod for longs
+        elif 'shorts' in column_lower:
+            return '#DAA520'  # Regular goldenrod (lighter) for shorts
+        else:
+            return '#B8860B'  # Default dark goldenrod for other variations
+    elif 'swap' in column_lower:
+        if 'longs' in column_lower:
+            return '#ff7f0e'  # Standard orange for longs
+        elif 'shorts' in column_lower:
+            return '#ffbb78'  # Lighter orange for shorts
+        else:
+            return '#ff7f0e'  # Default orange for other variations
+    elif 'dealer' in column_lower:
+        if 'longs' in column_lower:
+            return '#2ca02c'  # Standard green for longs
+        elif 'shorts' in column_lower:
+            return '#98df8a'  # Lighter green for shorts
+        else:
+            return '#2ca02c'  # Default green for other variations
+    elif 'other' in column_lower:
+        if 'longs' in column_lower:
+            return '#9467bd'  # Standard purple for longs
+        elif 'shorts' in column_lower:
+            return '#c5b0d5'  # Lighter purple for shorts
+        else:
+            return '#9467bd'  # Default purple for other variations
+    else:
+        return None  # Use default Plotly colors
+
+
+@st.cache_data
+def process_cftc_data(data):
     # Ensure data is sorted by date
     data = data.sort_values('date')
 
@@ -59,6 +169,11 @@ def plot_cftc_data(data):
     if 'spreading' in data.columns and 'Large Speculator Net' in data.columns:
         data['Large Speculator Net'] = data['Large Speculator Net'] - data['spreading']
 
+    return data
+
+
+@st.cache_data
+def calculate_data_changes(data):
     # Calculate change from previous week for all numerical columns
     numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
 
@@ -67,39 +182,9 @@ def plot_cftc_data(data):
     for col in numeric_cols:
         # Calculate absolute change
         data_change[f'{col}_change'] = data_change[col].diff()
-        # Replace it with this corrected version:
-        # This handles negative numbers properly
-        def calculate_correct_pct_change(series):
-            pct_changes = []
-            for i in range(1, len(series)):
-                prev_val = series.iloc[i - 1]
-                current_val = series.iloc[i]
-
-                # If both values have the same sign
-                if (prev_val >= 0 and current_val >= 0) or (prev_val <= 0 and current_val <= 0):
-                    # For negative values, a more negative value means decrease
-                    if prev_val < 0:
-                        # Calculate the absolute change
-                        abs_change = abs(current_val) - abs(prev_val)
-                        # A positive abs_change means the value became more negative
-                        pct_change = -(abs_change / abs(prev_val) * 100) if prev_val != 0 else 0
-                    else:
-                        # Normal calculation for positive values
-                        pct_change = ((current_val - prev_val) / abs(prev_val) * 100) if prev_val != 0 else 0
-                else:
-                    # When values cross zero, use absolute difference
-                    pct_change = ((current_val - prev_val) / abs(prev_val) * 100) if prev_val != 0 else 0
-
-                pct_changes.append(pct_change)
-
-            # Add NaN for the first row where there's no previous value
-            pct_changes = [float('nan')] + pct_changes
-            return pd.Series(pct_changes, index=series.index).round(1)
-
         # Apply the custom percentage calculation
         data_change[f'{col}_change_pct'] = calculate_correct_pct_change(data_change[col])
-        # Apply the custom percentage calculation
-        data_change[f'{col}_change_pct'] = calculate_correct_pct_change(data_change[col])
+
         # Calculate percentile ranks for different time periods
         if len(data) >= 260:  # If we have at least 5 years of data (52 weeks * 5)
             data_change[f'{col}_pct_5yr'] = data_change[col].rolling(260).apply(
@@ -132,6 +217,96 @@ def plot_cftc_data(data):
             data_change.loc[ytd_data.index, f'{col}_pct_ytd'] = ytd_values.rank(pct=True) * 100
         else:
             data_change[f'{col}_pct_ytd'] = np.nan
+
+    return data_change
+
+
+@st.cache_data
+def filter_data_by_date_range(data, data_change, start_date, end_date):
+    """Filter data based on selected date range"""
+    plot_data = data[(data['date'] >= start_date) & (data['date'] <= end_date)]
+    plot_data_change = data_change[(data_change['date'] >= start_date) & (data_change['date'] <= end_date)]
+    return plot_data, plot_data_change
+
+
+@st.cache_data
+def prepare_hover_texts(plot_data_change, selected_cols):
+    """Prepare hover texts for each data point"""
+    for col in selected_cols:
+        plot_data_change[f'{col}_hover'] = plot_data_change.apply(
+            lambda row: create_hover_text(row, col), axis=1
+        )
+    return plot_data_change
+
+
+@st.cache_data
+def create_annotations(plot_data_change, selected_cols, num_periods, separate_plots):
+    """Create annotations for the change percentages"""
+    annotations = []
+
+    # Only create annotations if there are 90 or fewer periods
+    if num_periods <= 90:
+        for col in selected_cols:
+            for i, (date, value, change_pct) in enumerate(zip(
+                    plot_data_change['date'],
+                    plot_data_change[col],
+                    plot_data_change[f'{col}_change_pct']
+            )):
+                if not pd.isna(change_pct):
+                    # Format the change percentage
+                    change_text = f"{change_pct:+.1f}%"
+
+                    # Create annotation with color based on value
+                    annotation = dict(
+                        x=date,
+                        y=value,
+                        text=change_text,
+                        showarrow=False,
+                        font=dict(
+                            size=12,  # Increased font size
+                            color="green" if change_pct > 0 else "red"  # Green for positive, red for negative
+                        ),
+                        xanchor="center",
+                        yanchor="bottom",
+                    )
+
+                    if separate_plots:
+                        # For separate plots, specify which subplot
+                        subplot_idx = selected_cols.index(col) + 1
+                        annotation["xref"] = f"x{subplot_idx}" if subplot_idx > 1 else "x"
+                        annotation["yref"] = f"y{subplot_idx}" if subplot_idx > 1 else "y"
+
+                    annotations.append(annotation)
+    else:
+        # If more than 90 periods are selected, create an annotation explaining why changes aren't shown
+        explanation = dict(
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            text="Change percentages only available for 90 or fewer periods",
+            showarrow=False,
+            font=dict(size=14),
+            visible=False  # Hidden by default, will only show when "Show Changes" is clicked
+        )
+        annotations.append(explanation)
+
+    return annotations
+
+
+def plot_cftc_data(data):
+    """
+    Create interactive plots for CFTC data with week-over-week changes and net positions
+
+    Parameters:
+    data (pd.DataFrame): The CFTC data to plot
+    """
+    st.subheader("Data Visualization")
+
+    # Use cached functions for data processing
+    data = process_cftc_data(data)
+    with st.spinner("Calculating data changes... This may take a moment."):
+        data_change = calculate_data_changes(data)
 
     # Create column selection options
     # Exclude 'None', 'contract_code', 'type', 'date' columns from plotting options
@@ -254,10 +429,8 @@ def plot_cftc_data(data):
     selected_start_date = pd.to_datetime(selected_start_date)
     selected_end_date = pd.to_datetime(selected_end_date)
 
-    # Filter data based on selected date range
-    plot_data = data[(data['date'] >= selected_start_date) & (data['date'] <= selected_end_date)]
-    plot_data_change = data_change[
-        (data_change['date'] >= selected_start_date) & (data_change['date'] <= selected_end_date)]
+    # Use cached function to filter data by date range
+    plot_data, plot_data_change = filter_data_by_date_range(data, data_change, selected_start_date, selected_end_date)
 
     # Count the number of periods
     num_periods = len(plot_data)
@@ -271,147 +444,11 @@ def plot_cftc_data(data):
     st.write(
         f"## CFTC Data Visualization - {selected_start_date.strftime('%Y-%m-%d')} to {selected_end_date.strftime('%Y-%m-%d')}")
 
-    # Define color mapping for various categories
-    def get_color_for_column(column_name):
-        column_lower = column_name.lower()
+    # Use cached function to prepare hover texts
+    plot_data_change = prepare_hover_texts(plot_data_change, selected_cols)
 
-        # Net position colors - using a distinct color scheme
-        if 'commercial net' in column_lower:
-            return '#d62728'  # Red for Commercial Net
-        elif 'large speculator net' in column_lower or 'money_manager net' in column_lower:
-            return '#1f77b4'  # Blue for Large Speculator Net
-        elif 'small speculator net' in column_lower or 'non_reportable net' in column_lower:
-            return '#B8860B'  # Dark goldenrod (burnt yellow)
-        elif 'other reportables net' in column_lower:
-            return '#9467bd'  # Purple for Other Reportables Net
-        elif 'swap dealer net' in column_lower:
-            return '#ff7f0e'  # Orange for Swap Dealer Net
-
-        # Original colors for standard columns with long/short differentiation
-        elif 'non_commercial' in column_lower or 'money_manager' in column_lower:
-            if 'longs' in column_lower:
-                return '#1f77b4'  # Standard blue for longs
-            elif 'shorts' in column_lower:
-                return '#7bafd4'  # Lighter blue for shorts
-            else:
-                return '#1f77b4'  # Default blue for other variations
-        elif 'commercial' in column_lower or 'producer' in column_lower:
-            if 'longs' in column_lower:
-                return '#d62728'  # Standard red for longs
-            elif 'shorts' in column_lower:
-                return '#ff9999'  # Lighter red for shorts
-            else:
-                return '#d62728'  # Default red for other variations
-        elif 'non_reportable' in column_lower:
-            if 'longs' in column_lower:
-                return '#B8860B'  # Dark goldenrod for longs
-            elif 'shorts' in column_lower:
-                return '#DAA520'  # Regular goldenrod (lighter) for shorts
-            else:
-                return '#B8860B'  # Default dark goldenrod for other variations
-        elif 'swap' in column_lower:
-            if 'longs' in column_lower:
-                return '#ff7f0e'  # Standard orange for longs
-            elif 'shorts' in column_lower:
-                return '#ffbb78'  # Lighter orange for shorts
-            else:
-                return '#ff7f0e'  # Default orange for other variations
-        elif 'dealer' in column_lower:
-            if 'longs' in column_lower:
-                return '#2ca02c'  # Standard green for longs
-            elif 'shorts' in column_lower:
-                return '#98df8a'  # Lighter green for shorts
-            else:
-                return '#2ca02c'  # Default green for other variations
-        elif 'other' in column_lower:
-            if 'longs' in column_lower:
-                return '#9467bd'  # Standard purple for longs
-            elif 'shorts' in column_lower:
-                return '#c5b0d5'  # Lighter purple for shorts
-            else:
-                return '#9467bd'  # Default purple for other variations
-        else:
-            return None  # Use default Plotly colors
-
-    # Create hover text with all the statistical information requested
-    def create_hover_text(row, col):
-        date_str = pd.to_datetime(row['date']).strftime('%Y-%m-%d')
-        value_str = f"{row[col]:,.0f}"
-
-        # Change values
-        change = row[f'{col}_change']
-        change_pct = row[f'{col}_change_pct']
-        change_str = f"Change: {change:+,.0f} ({change_pct:+.1f}%)" if not pd.isna(change) else "Change: N/A"
-
-        # Percentile ranks
-        pct_ytd = row[f'{col}_pct_ytd']
-        pct_1yr = row[f'{col}_pct_1yr']
-        pct_2yr = row[f'{col}_pct_2yr']
-        pct_5yr = row[f'{col}_pct_5yr']
-
-        pct_ytd_str = f"YTD Percentile: {pct_ytd:.1f}%" if not pd.isna(pct_ytd) else "YTD Percentile: N/A"
-        pct_1yr_str = f"1Y Percentile: {pct_1yr:.1f}%" if not pd.isna(pct_1yr) else "1Y Percentile: N/A"
-        pct_2yr_str = f"2Y Percentile: {pct_2yr:.1f}%" if not pd.isna(pct_2yr) else "2Y Percentile: N/A"
-        pct_5yr_str = f"5Y Percentile: {pct_5yr:.1f}%" if not pd.isna(pct_5yr) else "5Y Percentile: N/A"
-
-        hover_text = f"<b>{date_str}</b><br>{col}: {value_str}<br>{change_str}<br>{pct_ytd_str}<br>{pct_1yr_str}<br>{pct_2yr_str}<br>{pct_5yr_str}"
-        return hover_text
-
-    # Create hover texts for each data point
-    for col in selected_cols:
-        plot_data_change[f'{col}_hover'] = plot_data_change.apply(
-            lambda row: create_hover_text(row, col), axis=1
-        )
-
-    # Create annotations for the change percentages
-    annotations = []
-
-    # Only create annotations if there are 90 or fewer periods
-    if num_periods <= 90:
-        for col in selected_cols:
-            for i, (date, value, change_pct) in enumerate(zip(
-                    plot_data_change['date'],
-                    plot_data_change[col],
-                    plot_data_change[f'{col}_change_pct']
-            )):
-                if not pd.isna(change_pct):
-                    # Format the change percentage
-                    change_text = f"{change_pct:+.1f}%"
-
-                    # Create annotation with color based on value
-                    annotation = dict(
-                        x=date,
-                        y=value,
-                        text=change_text,
-                        showarrow=False,
-                        font=dict(
-                            size=12,  # Increased font size
-                            color="green" if change_pct > 0 else "red"  # Green for positive, red for negative
-                        ),
-                        xanchor="center",
-                        yanchor="bottom",
-                    )
-
-                    if separate_plots:
-                        # For separate plots, specify which subplot
-                        subplot_idx = selected_cols.index(col) + 1
-                        annotation["xref"] = f"x{subplot_idx}" if subplot_idx > 1 else "x"
-                        annotation["yref"] = f"y{subplot_idx}" if subplot_idx > 1 else "y"
-
-                    annotations.append(annotation)
-    else:
-        # If more than 90 periods are selected, create an annotation explaining why changes aren't shown
-        explanation = dict(
-            x=0.5,
-            y=0.5,
-            xref="paper",
-            yref="paper",
-            text="Change percentages only available for 90 or fewer periods",
-            showarrow=False,
-            font=dict(size=14),
-            visible=False  # Hidden by default, will only show when "Show Changes" is clicked
-        )
-        annotations.append(explanation)
+    # Use cached function to create annotations
+    annotations = create_annotations(plot_data_change, selected_cols, num_periods, separate_plots)
 
     # Determine plot layout
     if separate_plots:
