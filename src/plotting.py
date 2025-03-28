@@ -67,10 +67,39 @@ def plot_cftc_data(data):
     for col in numeric_cols:
         # Calculate absolute change
         data_change[f'{col}_change'] = data_change[col].diff()
+        # Replace it with this corrected version:
+        # This handles negative numbers properly
+        def calculate_correct_pct_change(series):
+            pct_changes = []
+            for i in range(1, len(series)):
+                prev_val = series.iloc[i - 1]
+                current_val = series.iloc[i]
 
-        # Calculate percentage change
-        data_change[f'{col}_change_pct'] = data_change[col].pct_change().multiply(100).round(1)
+                # If both values have the same sign
+                if (prev_val >= 0 and current_val >= 0) or (prev_val <= 0 and current_val <= 0):
+                    # For negative values, a more negative value means decrease
+                    if prev_val < 0:
+                        # Calculate the absolute change
+                        abs_change = abs(current_val) - abs(prev_val)
+                        # A positive abs_change means the value became more negative
+                        pct_change = -(abs_change / abs(prev_val) * 100) if prev_val != 0 else 0
+                    else:
+                        # Normal calculation for positive values
+                        pct_change = ((current_val - prev_val) / abs(prev_val) * 100) if prev_val != 0 else 0
+                else:
+                    # When values cross zero, use absolute difference
+                    pct_change = ((current_val - prev_val) / abs(prev_val) * 100) if prev_val != 0 else 0
 
+                pct_changes.append(pct_change)
+
+            # Add NaN for the first row where there's no previous value
+            pct_changes = [float('nan')] + pct_changes
+            return pd.Series(pct_changes, index=series.index).round(1)
+
+        # Apply the custom percentage calculation
+        data_change[f'{col}_change_pct'] = calculate_correct_pct_change(data_change[col])
+        # Apply the custom percentage calculation
+        data_change[f'{col}_change_pct'] = calculate_correct_pct_change(data_change[col])
         # Calculate percentile ranks for different time periods
         if len(data) >= 260:  # If we have at least 5 years of data (52 weeks * 5)
             data_change[f'{col}_pct_5yr'] = data_change[col].rolling(260).apply(
