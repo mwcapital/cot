@@ -69,7 +69,7 @@ def plot_cftc_data(data):
         data_change[f'{col}_change'] = data_change[col].diff()
 
         # Calculate percentage change
-        data_change[f'{col}_change_pct'] = data_change[col].pct_change().multiply(100).round(1)
+        data_change[f'{col}_change_pct'] = (data_change[col]-data_change[col].shift(1))/data_change[col]
 
         # Calculate percentile ranks for different time periods
         if len(data) >= 260:  # If we have at least 5 years of data (52 weeks * 5)
