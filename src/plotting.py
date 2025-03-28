@@ -582,12 +582,12 @@ def plot_cftc_data(data):
             fig.update_layout(
                 yaxis2=dict(
                     title='Market Participation',
-                    titlefont=dict(color='gray'),
+                    title_font=dict(color='gray'),  # Note the underscore in title_font instead of titlefont
                     tickfont=dict(color='gray'),
                     anchor='x',
                     overlaying='y',
                     side='right',
-                    position=1.02  # This moves it further to the right of the first y-axis
+                    position=1.0
                 )
             )
 
