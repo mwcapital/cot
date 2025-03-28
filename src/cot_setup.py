@@ -47,8 +47,13 @@ if st.button("Submit API Key"):
 # Load instrument mapping section
 st.subheader("Instrument Configuration")
 
-# Strictly load instrument mapping from instruments.json
-instrument_mapping_file = "instruments.json"
+## Strictly load instrument mapping from instruments.json
+import os
+
+# Find the directory where the script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# Construct the full path to instruments.json
+instrument_mapping_file = os.path.join(script_dir, "instruments.json")
 st.session_state.instrument_mapping = json.load(open(instrument_mapping_file, "r"))
 
 # Dataset and instrument configuration
