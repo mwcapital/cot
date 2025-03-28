@@ -49,15 +49,8 @@ st.subheader("Instrument Configuration")
 
 # Strictly load instrument mapping from instruments.json
 instrument_mapping_file = "instruments.json"
-try:
-    with open(instrument_mapping_file, "r") as f:
-        st.session_state.instrument_mapping = json.load(f)
-except json.JSONDecodeError as e:
-    st.error(f"Error decoding instruments.json: {e}")
-    st.stop()
-except Exception as e:
-        st.error(f"Error loading instruments.json: {e}")
-        st.stop()
+st.session_state.instrument_mapping = json.load(open(instrument_mapping_file, "r"))
+
 # Dataset and instrument configuration
 st.subheader("Data Selection")
 
