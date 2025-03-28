@@ -287,19 +287,49 @@ def plot_cftc_data(data):
         elif 'swap dealer net' in column_lower:
             return '#ff7f0e'  # Orange for Swap Dealer Net
 
-        # Original colors for standard columns
+        # Original colors for standard columns with long/short differentiation
         elif 'non_commercial' in column_lower or 'money_manager' in column_lower:
-            return '#1f77b4'  # Blue
+            if 'longs' in column_lower:
+                return '#1f77b4'  # Standard blue for longs
+            elif 'shorts' in column_lower:
+                return '#7bafd4'  # Lighter blue for shorts
+            else:
+                return '#1f77b4'  # Default blue for other variations
         elif 'commercial' in column_lower or 'producer' in column_lower:
-            return '#d62728'  # Red
+            if 'longs' in column_lower:
+                return '#d62728'  # Standard red for longs
+            elif 'shorts' in column_lower:
+                return '#ff9999'  # Lighter red for shorts
+            else:
+                return '#d62728'  # Default red for other variations
         elif 'non_reportable' in column_lower:
-            return '#B8860B'  # Dark goldenrod (burnt yellow)
+            if 'longs' in column_lower:
+                return '#B8860B'  # Dark goldenrod for longs
+            elif 'shorts' in column_lower:
+                return '#DAA520'  # Regular goldenrod (lighter) for shorts
+            else:
+                return '#B8860B'  # Default dark goldenrod for other variations
         elif 'swap' in column_lower:
-            return '#ff7f0e'  # Orange
+            if 'longs' in column_lower:
+                return '#ff7f0e'  # Standard orange for longs
+            elif 'shorts' in column_lower:
+                return '#ffbb78'  # Lighter orange for shorts
+            else:
+                return '#ff7f0e'  # Default orange for other variations
         elif 'dealer' in column_lower:
-            return '#2ca02c'  # Green
+            if 'longs' in column_lower:
+                return '#2ca02c'  # Standard green for longs
+            elif 'shorts' in column_lower:
+                return '#98df8a'  # Lighter green for shorts
+            else:
+                return '#2ca02c'  # Default green for other variations
         elif 'other' in column_lower:
-            return '#9467bd'  # Purple
+            if 'longs' in column_lower:
+                return '#9467bd'  # Standard purple for longs
+            elif 'shorts' in column_lower:
+                return '#c5b0d5'  # Lighter purple for shorts
+            else:
+                return '#9467bd'  # Default purple for other variations
         else:
             return None  # Use default Plotly colors
 

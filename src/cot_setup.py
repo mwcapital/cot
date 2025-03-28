@@ -170,39 +170,55 @@ st.write(f"**Dataset Code:** {dataset_code}")
 st.write(f"**Instrument Code:** {instrument_code}")
 st.write(f"**Type & Category:** {type_category}")
 
+# Check for API key first
+if 'api_key' not in st.session_state or not st.session_state.api_key:
+    st.info("Please enter your API key to begin.")
+else:
+    # API key exists, now check for data
+    if 'cftc_data' not in st.session_state or st.session_state.cftc_data is None:
+        st.info("API key is set. Please fetch data to continue.")
 
-# Add a fetch data button with a simple spinner for loading state
-if st.button("Fetch Data"):
-    with st.spinner(f"Fetching {selected_instrument} data..."):
-            # Fetch full data using your simpler approach
-            data = nasdaqdatalink.get_table(
-                dataset_code,  # Example: 'QDL/FON'
-                contract_code=instrument_code,  # Example: '067651'
-                type=type_category  # Example: 'F_ALL', 'FO_CHG'
-            )
+        # Add a fetch data button with a simple spinner for loading state
+        if st.button("Fetch Data"):
+            with st.spinner(f"Fetching {selected_instrument} data..."):
+                # Fetch full data using your simpler approach
+                data = nasdaqdatalink.get_table(
+                    dataset_code,  # Example: 'QDL/FON'
+                    contract_code=instrument_code,  # Example: '067651'
+                    type=type_category  # Example: 'F_ALL', 'FO_CHG'
+                )
 
-            # Display success and show the data
-            st.success(f"Successfully retrieved {len(data)} rows of data")
-            st.subheader("Data Preview")
-            st.dataframe(data)
+                # Display success and show the data
+                st.success(f"Successfully retrieved {len(data)} rows of data")
+                st.subheader("Data Preview")
+                st.dataframe(data)
 
-            # Save to session state for potential use elsewhere
-            st.session_state.cftc_data = data
+                # Save to session state for potential use elsewhere
+                st.session_state.cftc_data = data
 
-            # Add download option
-            csv = data.to_csv()
-            file_name = f"{instrument_code}_{type_category}.csv"
-            st.download_button(
-                label="Download as CSV",
-                data=csv,
-                file_name=file_name,
-                mime="text/csv",
-            )
+                # Add download option
+                csv = data.to_csv()
+                file_name = f"{instrument_code}_{type_category}.csv"
+                st.download_button(
+                    label="Download as CSV",
+                    data=csv,
+                    file_name=file_name,
+                    mime="text/csv",
+                )
 
 
-data = st.session_state.cftc_data
-# Call the plotting function
-plot_cftc_data(data)
+    else:
+        # Both API key and data exist, display the plot
+        data = st.session_state.cftc_data
+
+        # Add a button to fetch fresh data if needed
+        if st.button("Fetch New Data"):
+            st.session_state.cftc_data = None
+            st.experimental_rerun()
+
+        # Call the plotting function
+        plot_cftc_data(data)
+
 
 
 #
