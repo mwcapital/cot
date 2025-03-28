@@ -49,23 +49,19 @@ st.subheader("Instrument Configuration")
 
 # Strictly load instrument mapping from instruments.json
 instrument_mapping_file = "instruments.json"
-if not os.path.exists(instrument_mapping_file):
-    st.warning("instruments.json file not found, hardcoding of instruments doesn't exist")
-
-else:
-    try:
-        with open(instrument_mapping_file, "r") as f:
-            st.session_state.instrument_mapping = json.load(f)
-    except json.JSONDecodeError as e:
-        st.error(f"Error decoding instruments.json: {e}")
-        st.stop()
-    except Exception as e:
+try:
+    with open(instrument_mapping_file, "r") as f:
+        st.session_state.instrument_mapping = json.load(f)
+except json.JSONDecodeError as e:
+    st.error(f"Error decoding instruments.json: {e}")
+    st.stop()
+except Exception as e:
         st.error(f"Error loading instruments.json: {e}")
         st.stop()
 # Dataset and instrument configuration
 st.subheader("Data Selection")
 
-# Dataset selection dropdown
+# Dataset selection dropdow
 dataset_code = st.selectbox(
     "Select Dataset Code",
     ["QDL/FON", "QDL/LFON", "QDL/FCR", "QDL/CITS"]
