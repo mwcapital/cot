@@ -271,10 +271,7 @@ with config_col2:
         st.write("• Absolute position numbers")
     elif all_or_chg == "CHG":
         st.write("• Week-over-week changes")
-    elif all_or_chg == "OLD":
-        st.write("• Old crop year positions")
-    elif all_or_chg == "OTR":
-        st.write("• Other crop year positions")
+
 
     if "_CR" in selected_suffixes:
         st.write("• Concentration ratios")
