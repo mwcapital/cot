@@ -125,14 +125,12 @@ with col2:
         data_type_options = {
             "ALL": "All positions (absolute numbers)",
             "CHG": "Change in positions (week-over-week)",
-            "OLD": "Old Crop Years (agricultural futures)",
-            "OTR": "Other Crop Years (agricultural futures)"
+
         }
 
         # Filter available options based on dataset
         available_data_types = ["ALL", "CHG"]
-        if base_type == "F" and dataset_code in ["QDL/FON", "QDL/LFON"]:
-            available_data_types.extend(["OLD", "OTR"])
+
 
         all_or_chg = st.selectbox(
             "Select Data Type",
