@@ -124,7 +124,14 @@ def get_color_for_column(column_name):
 
 
 @st.cache_data
-def process_cftc_data(data):
+def process_cftc_data(data, is_all_data=True):
+    """
+    Process CFTC data and calculate net positions only for ALL data
+
+    Parameters:
+    data (pd.DataFrame): The CFTC data to process
+    is_all_data (bool): Whether this is ALL data (True) or CHG data (False)
+    """
     # Ensure data is sorted by date
     data = data.sort_values('date')
 
@@ -135,43 +142,46 @@ def process_cftc_data(data):
     # Fill missing values with previous values (for continuous visualization)
     data = data.fillna(method='ffill')
 
-    # Add net position columns based on dataset type
-    # For QDL/FON format (disaggregated)
-    if ('producer_merchant_processor_user_longs' in data.columns and
-            'producer_merchant_processor_user_shorts' in data.columns):
+    # Only calculate net positions if this is ALL data, not CHG data
+    if is_all_data:
+        # Add net position columns based on dataset type
+        # For QDL/FON format (disaggregated)
+        if ('producer_merchant_processor_user_longs' in data.columns and
+                'producer_merchant_processor_user_shorts' in data.columns):
 
-        # Add net position columns for FON format
-        data['Commercial Net'] = data['producer_merchant_processor_user_longs'] - data[
-            'producer_merchant_processor_user_shorts']
+            # Add net position columns for FON format
+            data['Commercial Net'] = data['producer_merchant_processor_user_longs'] - data[
+                'producer_merchant_processor_user_shorts']
 
-        if 'money_manager_longs' in data.columns and 'money_manager_shorts' in data.columns:
-            data['Large Speculator Net'] = data['money_manager_longs'] - data['money_manager_shorts']
+            if 'money_manager_longs' in data.columns and 'money_manager_shorts' in data.columns:
+                data['Large Speculator Net'] = data['money_manager_longs'] - data['money_manager_shorts']
 
-        if 'other_reportable_longs' in data.columns and 'other_reportable_shorts' in data.columns:
-            data['Other Reportables Net'] = data['other_reportable_longs'] - data['other_reportable_shorts']
+            if 'other_reportable_longs' in data.columns and 'other_reportable_shorts' in data.columns:
+                data['Other Reportables Net'] = data['other_reportable_longs'] - data['other_reportable_shorts']
 
-        if 'swap_dealer_longs' in data.columns and 'swap_dealer_shorts' in data.columns:
-            data['Swap Dealer Net'] = data['swap_dealer_longs'] - data['swap_dealer_shorts']
+            if 'swap_dealer_longs' in data.columns and 'swap_dealer_shorts' in data.columns:
+                data['Swap Dealer Net'] = data['swap_dealer_longs'] - data['swap_dealer_shorts']
 
-    # For QDL/LFON format (legacy)
-    elif ('commercial_longs' in data.columns and 'commercial_shorts' in data.columns):
+        # For QDL/LFON format (legacy)
+        elif ('commercial_longs' in data.columns and 'commercial_shorts' in data.columns):
 
-        # Add net position columns for LFON format
-        data['Commercial Net'] = data['commercial_longs'] - data['commercial_shorts']
+            # Add net position columns for LFON format
+            data['Commercial Net'] = data['commercial_longs'] - data['commercial_shorts']
 
-        if 'non_commercial_longs' in data.columns and 'non_commercial_shorts' in data.columns:
-            data['Large Speculator Net'] = data['non_commercial_longs'] - data['non_commercial_shorts']
+            if 'non_commercial_longs' in data.columns and 'non_commercial_shorts' in data.columns:
+                data['Large Speculator Net'] = data['non_commercial_longs'] - data['non_commercial_shorts']
 
-        if 'non_reportable_longs' in data.columns and 'non_reportable_shorts' in data.columns:
-            data['Small Speculator Net'] = data['non_reportable_longs'] - data['non_reportable_shorts']
+            if 'non_reportable_longs' in data.columns and 'non_reportable_shorts' in data.columns:
+                data['Small Speculator Net'] = data['non_reportable_longs'] - data['non_reportable_shorts']
 
-    # If 'spreading' is available for either format, subtract it from the Large Speculator Net
-    if 'spreading' in data.columns and 'Large Speculator Net' in data.columns:
-        data['Large Speculator Net'] = data['Large Speculator Net'] - data['spreading']
+        # If 'spreading' is available for either format, subtract it from the Large Speculator Net
+        if 'spreading' in data.columns and 'Large Speculator Net' in data.columns:
+            data['Large Speculator Net'] = data['Large Speculator Net'] - data['spreading']
 
     return data
 
 
+# Keep all the other cached functions the same...
 @st.cache_data
 def calculate_data_changes(data):
     # Calculate change from previous week for all numerical columns
@@ -240,12 +250,12 @@ def prepare_hover_texts(plot_data_change, selected_cols):
 
 
 @st.cache_data
-def create_annotations(plot_data_change, selected_cols, num_periods, separate_plots):
+def create_annotations(plot_data_change, selected_cols, num_periods, separate_plots, show_changes):
     """Create annotations for the change percentages"""
     annotations = []
 
-    # Only create annotations if there are 90 or fewer periods
-    if num_periods <= 90:
+    # Only create annotations if show_changes is True AND there are 90 or fewer periods
+    if show_changes and num_periods <= 90:
         for col in selected_cols:
             for i, (date, value, change_pct) in enumerate(zip(
                     plot_data_change['date'],
@@ -263,8 +273,8 @@ def create_annotations(plot_data_change, selected_cols, num_periods, separate_pl
                         text=change_text,
                         showarrow=False,
                         font=dict(
-                            size=12,  # Increased font size
-                            color="green" if change_pct > 0 else "red"  # Green for positive, red for negative
+                            size=12,
+                            color="green" if change_pct > 0 else "red"
                         ),
                         xanchor="center",
                         yanchor="bottom",
@@ -277,20 +287,6 @@ def create_annotations(plot_data_change, selected_cols, num_periods, separate_pl
                         annotation["yref"] = f"y{subplot_idx}" if subplot_idx > 1 else "y"
 
                     annotations.append(annotation)
-    else:
-        # If more than 90 periods are selected, create an annotation explaining why changes aren't shown
-        explanation = dict(
-            x=0.5,
-            y=0.5,
-            xref="paper",
-            yref="paper",
-            text="Change percentages only available for 90 or fewer periods",
-            showarrow=False,
-            font=dict(size=14),
-            visible=False  # Hidden by default, will only show when "Show Changes" is clicked
-        )
-        annotations.append(explanation)
-
     return annotations
 
 
@@ -303,24 +299,51 @@ def plot_cftc_data(data):
     """
     st.subheader("Data Visualization")
 
+    # Check if net positions should be calculated
+    # Net positions only for QDL/FON or QDL/LFON with plain ALL (no suffixes)
+    should_calculate_net = False
+
+    # First check if we have the right dataset
+    if 'dataset_code' in st.session_state:
+        dataset_code = st.session_state.get('dataset_code', '')
+        if dataset_code in ['QDL/FON', 'QDL/LFON']:
+            # Now check the type column for plain ALL without suffixes
+            if 'type' in data.columns and not data.empty:
+                type_value = str(data['type'].iloc[0]) if len(data) > 0 else ""
+                # Check if it's plain ALL (F_ALL, FO_ALL, F_L_ALL, FO_L_ALL)
+                # without any suffixes like _NT, _OI, _CR
+                type_patterns = ['F_ALL', 'FO_ALL', 'F_L_ALL', 'FO_L_ALL']
+                should_calculate_net = type_value in type_patterns
+
     # Use cached functions for data processing
-    data = process_cftc_data(data)
+    data = process_cftc_data(data, is_all_data=should_calculate_net)
     with st.spinner("Calculating data changes... This may take a moment."):
         data_change = calculate_data_changes(data)
 
     # Create column selection options
-    # Exclude 'None', 'contract_code', 'type', 'date' columns from plotting options
     plot_cols = [col for col in data.columns if col not in ['None', 'contract_code', 'type', 'date']]
-
-    # Filter out market_participation from regular column options
     regular_plot_cols = [col for col in plot_cols if col != 'market_participation']
 
     # Let user select which columns to plot
     st.write("### Select Columns to Plot")
 
     # First, create a section specifically for net position columns
-    st.write("#### Net Position Columns")
-    net_position_cols = [col for col in regular_plot_cols if 'Net' in col]
+    # Only show net position columns if they should be calculated
+    if should_calculate_net:
+        st.write("#### Net Position Columns")
+        net_position_cols = [col for col in regular_plot_cols if 'Net' in col]
+    else:
+        # Provide specific feedback based on why net positions aren't available
+        if 'dataset_code' in st.session_state:
+            dataset_code = st.session_state.get('dataset_code', '')
+            if dataset_code not in ['QDL/FON', 'QDL/LFON']:
+                st.info("Net position columns are only available for QDL/FON and QDL/LFON datasets.")
+            else:
+                st.info(
+                    "Net position columns are only available for plain ALL data without additional categories (NT, OI, CR).")
+        else:
+            st.info("Net position columns require plain ALL data from QDL/FON or QDL/LFON datasets.")
+        net_position_cols = []
 
     selected_cols = []
 
@@ -331,8 +354,7 @@ def plot_cftc_data(data):
         for row in net_rows:
             cols = st.columns(cols_per_row)
             for i, col in enumerate(row):
-                if i < len(row):  # Ensure we don't go out of bounds
-                    # Determine color for the checkbox label
+                if i < len(row):
                     label_color = ""
                     col_lower = row[i].lower()
 
@@ -341,25 +363,21 @@ def plot_cftc_data(data):
                     elif 'large speculator net' in col_lower:
                         label_color = "blue"
                     elif 'small speculator net' in col_lower or 'non_reportable net' in col_lower:
-                        label_color = "orange"  # Using orange for burnt yellow in Streamlit
+                        label_color = "orange"
                     elif 'other reportables net' in col_lower:
                         label_color = "violet"
                     elif 'swap dealer net' in col_lower:
                         label_color = "orange"
 
-                    # Add colored checkbox
                     if label_color:
                         if cols[i].checkbox(f":{label_color}[{row[i]}]", key=f"checkbox_{row[i]}"):
                             selected_cols.append(row[i])
                     else:
                         if cols[i].checkbox(row[i], key=f"checkbox_{row[i]}"):
                             selected_cols.append(row[i])
-    else:
-        st.info("No net position columns available. They may be calculated when necessary columns are present.")
 
     # Then show the original columns section
     st.write("#### Original Position Columns")
-    # Remove net position columns from regular column options
     original_cols = [col for col in regular_plot_cols if 'Net' not in col]
 
     cols_per_row = 3
@@ -368,8 +386,7 @@ def plot_cftc_data(data):
     for row in original_rows:
         cols = st.columns(cols_per_row)
         for i, col in enumerate(row):
-            if i < len(row):  # Ensure we don't go out of bounds
-                # Determine color for the checkbox label
+            if i < len(row):
                 label_color = ""
                 col_lower = row[i].lower()
                 if 'non_commercial' in col_lower or 'money_manager' in col_lower:
@@ -377,9 +394,8 @@ def plot_cftc_data(data):
                 elif 'commercial' in col_lower or 'producer' in col_lower:
                     label_color = "red"
                 elif 'non_reportable' in col_lower:
-                    label_color = "orange"  # Using orange for burnt yellow in Streamlit
+                    label_color = "orange"
 
-                # Add colored checkbox
                 if label_color:
                     if cols[i].checkbox(f":{label_color}[{row[i]}]", key=f"checkbox_{row[i]}"):
                         selected_cols.append(row[i])
@@ -396,11 +412,18 @@ def plot_cftc_data(data):
         st.warning("Please select at least one column to plot.")
         return
 
+    # Rest of the function remains the same...
     # Chart options
     st.write("### Chart Settings")
 
-    # Plot type selection
-    plot_type = st.radio("Plot Type", ["Line", "Bar"], horizontal=True)
+    # Plot type selection and show changes toggle in the same row
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        plot_type = st.radio("Plot Type", ["Line", "Bar"], horizontal=True)
+    with col2:
+        # Add the toggle for showing changes here, outside the plot
+        show_changes = st.toggle("Show percentage changes", value=False,
+                                 help="Toggle to show/hide percentage changes on the plot. Only available for 90 or fewer periods.")
 
     # Additional options
     separate_plots = st.checkbox("Create Separate Plots for Each Column", value=False)
@@ -408,51 +431,40 @@ def plot_cftc_data(data):
     # Set fixed height for plots at 600px
     height_per_plot = 600
 
-    # Create a date range selector instead of periods
-    # Get min and max dates for the slider
+    # Create a date range selector
     min_date = data['date'].min().date()
     max_date = data['date'].max().date()
 
-    # Calculate the default start date (to show the last 89 periods by default)
     all_dates = sorted(data['date'].unique())
     default_start_date = all_dates[-min(89, len(all_dates))].date() if len(all_dates) > 1 else min_date
     default_end_date = max_date
 
-    # Create a date range slider
     selected_start_date, selected_end_date = st.select_slider(
         "Select Date Range:",
         options=[d.date() for d in all_dates],
         value=(default_start_date, default_end_date)
     )
 
-    # Convert to datetime for filtering
     selected_start_date = pd.to_datetime(selected_start_date)
     selected_end_date = pd.to_datetime(selected_end_date)
 
-    # Use cached function to filter data by date range
     plot_data, plot_data_change = filter_data_by_date_range(data, data_change, selected_start_date, selected_end_date)
 
-    # Count the number of periods
     num_periods = len(plot_data)
 
-    # Show info about the number of periods and the 90-period limit for showing changes
-    if num_periods > 90:
+    if num_periods > 90 and show_changes:
         st.info(
-            f"Note: Percentage changes will only be shown for 90 or fewer periods. Currently displaying {num_periods} periods.")
+            f"Note: Percentage changes are only shown for 90 or fewer periods. Currently displaying {num_periods} periods. Changes are hidden.")
+        show_changes = False
 
-    # Start plotting
     st.write(
         f"## CFTC Data Visualization - {selected_start_date.strftime('%Y-%m-%d')} to {selected_end_date.strftime('%Y-%m-%d')}")
 
-    # Use cached function to prepare hover texts
     plot_data_change = prepare_hover_texts(plot_data_change, selected_cols)
-
-    # Use cached function to create annotations
-    annotations = create_annotations(plot_data_change, selected_cols, num_periods, separate_plots)
+    annotations = create_annotations(plot_data_change, selected_cols, num_periods, separate_plots, show_changes)
 
     # Determine plot layout
     if separate_plots:
-        # Create a separate subplot for each column
         fig = make_subplots(rows=len(selected_cols), cols=1,
                             subplot_titles=selected_cols,
                             shared_xaxes=True,
@@ -462,7 +474,6 @@ def plot_cftc_data(data):
             row = i + 1
             color = get_color_for_column(col)
 
-            # Add appropriate trace based on plot type
             if plot_type == "Line":
                 fig.add_trace(
                     go.Scatter(
@@ -489,10 +500,8 @@ def plot_cftc_data(data):
                     row=row, col=1
                 )
 
-            # Update y-axis title
             fig.update_yaxes(title_text=col, row=row, col=1)
 
-        # Add market participation if requested (to each subplot)
         if include_market_participation and 'market_participation' in data.columns:
             for i in range(len(selected_cols)):
                 row = i + 1
@@ -508,7 +517,7 @@ def plot_cftc_data(data):
                     row=row, col=1
                 )
 
-                # Add secondary y-axis
+                # Hide gridlines for secondary y-axis to avoid clutter
                 fig.update_layout(**{
                     f'yaxis{row * 2}': dict(
                         title='Market Participation',
@@ -516,16 +525,15 @@ def plot_cftc_data(data):
                         tickfont=dict(color='gray'),
                         overlaying=f'y{row * 2 - 1}',
                         side='right',
-                        position=1.0
+                        position=1.0,
+                        showgrid=False  # Hide gridlines for secondary axis
                     )
                 })
 
-        # Calculate total height based on number of plots with fixed height
         total_height = height_per_plot * len(selected_cols)
 
     else:
         # Create a single plot with all selected columns
-        # For secondary y-axis, we'll use Plotly's built-in dual axis capabilities
         has_secondary_axis = include_market_participation and 'market_participation' in data.columns
 
         fig = go.Figure()
@@ -533,7 +541,6 @@ def plot_cftc_data(data):
         for col in selected_cols:
             color = get_color_for_column(col)
 
-            # Add appropriate trace based on plot type
             if plot_type == "Line":
                 fig.add_trace(
                     go.Scatter(
@@ -558,9 +565,7 @@ def plot_cftc_data(data):
                     )
                 )
 
-        # Add market participation with secondary y-axis if requested
         if has_secondary_axis:
-            # Create market participation hover text
             plot_data_change['market_participation_hover'] = plot_data_change.apply(
                 lambda row: create_hover_text(row, 'market_participation'), axis=1
             )
@@ -578,23 +583,24 @@ def plot_cftc_data(data):
                 )
             )
 
-            # Configure the secondary y-axis
+            # Configure the secondary y-axis and hide its gridlines
             fig.update_layout(
                 yaxis2=dict(
                     title='Market Participation',
-                    title_font=dict(color='gray'),  # Note the underscore in title_font instead of titlefont
+                    title_font=dict(color='gray'),
                     tickfont=dict(color='gray'),
                     anchor='x',
                     overlaying='y',
                     side='right',
-                    position=1.0
+                    position=1.0,
+                    showgrid=False  # Hide gridlines for secondary axis
                 )
             )
 
         total_height = height_per_plot
 
-    # Create two versions of the layout - one with annotations and one without
-    layout_with_annotations = {
+    # Create the layout with annotations based on the toggle state
+    layout = {
         'annotations': annotations,
         'title': f"CFTC Data Visualization - {selected_start_date.strftime('%Y-%m-%d')} to {selected_end_date.strftime('%Y-%m-%d')} ({num_periods} periods)",
         'xaxis_title': "Date",
@@ -610,52 +616,8 @@ def plot_cftc_data(data):
         }
     }
 
-    layout_without_annotations = {
-        'annotations': [],
-        'title': f"CFTC Data Visualization - {selected_start_date.strftime('%Y-%m-%d')} to {selected_end_date.strftime('%Y-%m-%d')} ({num_periods} periods)",
-        'xaxis_title': "Date",
-        'legend_title': "Data Series",
-        'height': total_height,
-        'hovermode': "closest",
-        'legend': {
-            'orientation': "h",
-            'yanchor': "bottom",
-            'y': 1.02,
-            'xanchor': "center",
-            'x': 0.5
-        }
-    }
-
-    # Apply initial layout without annotations (changes hidden by default)
-    fig.update_layout(layout_without_annotations)
-
-    # Now add the buttons that will update the entire layout
-    fig.update_layout(
-        updatemenus=[
-            dict(
-                type="buttons",
-                direction="right",
-                buttons=[
-                    dict(
-                        args=[layout_with_annotations],
-                        label="Show Changes",
-                        method="relayout"
-                    ),
-                    dict(
-                        args=[layout_without_annotations],
-                        label="Hide Changes",
-                        method="relayout"
-                    )
-                ],
-                pad={"r": 10, "t": 10},
-                showactive=True,
-                x=0.1,
-                xanchor="left",
-                y=1.1,
-                yanchor="top"
-            )
-        ]
-    )
+    # Apply layout with or without annotations based on toggle
+    fig.update_layout(layout)
 
     # Display the plot
     st.plotly_chart(fig, use_container_width=True)
@@ -670,7 +632,7 @@ def plot_cftc_data(data):
         if f'{col}_change_pct' in plot_data_change.columns:
             show_cols.append(f'{col}_change_pct')
 
-    if len(show_cols) > 1:  # Only if we have at least one change column
+    if len(show_cols) > 1:
         recent_changes = plot_data_change.iloc[-5:][show_cols]
         renamed_cols = {f'{col}_change_pct': f'{col} (% change)' for col in selected_cols if
                         f'{col}_change_pct' in plot_data_change.columns}
