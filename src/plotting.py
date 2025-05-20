@@ -50,13 +50,15 @@ def create_hover_text(row, col):
     pct_1yr = row[f'{col}_pct_1yr']
     pct_2yr = row[f'{col}_pct_2yr']
     pct_5yr = row[f'{col}_pct_5yr']
+    pct_10yr = row[f'{col}_pct_10yr'] if f'{col}_pct_10yr' in row else np.nan  # Add 10Y percentile
 
     pct_ytd_str = f"YTD Percentile: {pct_ytd:.1f}%" if not pd.isna(pct_ytd) else "YTD Percentile: N/A"
     pct_1yr_str = f"1Y Percentile: {pct_1yr:.1f}%" if not pd.isna(pct_1yr) else "1Y Percentile: N/A"
     pct_2yr_str = f"2Y Percentile: {pct_2yr:.1f}%" if not pd.isna(pct_2yr) else "2Y Percentile: N/A"
     pct_5yr_str = f"5Y Percentile: {pct_5yr:.1f}%" if not pd.isna(pct_5yr) else "5Y Percentile: N/A"
+    pct_10yr_str = f"10Y Percentile: {pct_10yr:.1f}%" if not pd.isna(pct_10yr) else "10Y Percentile: N/A"  # Add this line
 
-    hover_text = f"<b>{date_str}</b><br>{col}: {value_str}<br>{change_str}<br>{pct_ytd_str}<br>{pct_1yr_str}<br>{pct_2yr_str}<br>{pct_5yr_str}"
+    hover_text = f"<b>{date_str}</b><br>{col}: {value_str}<br>{change_str}<br>{pct_ytd_str}<br>{pct_1yr_str}<br>{pct_2yr_str}<br>{pct_5yr_str}<br>{pct_10yr_str}"
     return hover_text
 
 
@@ -196,6 +198,13 @@ def calculate_data_changes(data):
         data_change[f'{col}_change_pct'] = calculate_correct_pct_change(data_change[col])
 
         # Calculate percentile ranks for different time periods
+        # Add 10-year percentile (52 weeks * 10 = 520)
+        if len(data) >= 520:  # If we have at least 10 years of data
+            data_change[f'{col}_pct_10yr'] = data_change[col].rolling(520).apply(
+                lambda x: pd.Series(x).rank(pct=True).iloc[-1] * 100).round(1)
+        else:
+            data_change[f'{col}_pct_10yr'] = np.nan
+
         if len(data) >= 260:  # If we have at least 5 years of data (52 weeks * 5)
             data_change[f'{col}_pct_5yr'] = data_change[col].rolling(260).apply(
                 lambda x: pd.Series(x).rank(pct=True).iloc[-1] * 100).round(1)
@@ -299,6 +308,14 @@ def plot_cftc_data(data):
     """
     st.subheader("Data Visualization")
 
+    # Check if this is CHG data by examining the type column
+    is_chg_data = False
+    if 'type' in data.columns and not data.empty:
+        type_value = str(data['type'].iloc[0]) if len(data) > 0 else ""
+        is_chg_data = '_CHG' in type_value
+
+
+
     # Check if net positions should be calculated
     # Net positions only for QDL/FON or QDL/LFON with plain ALL (no suffixes)
     should_calculate_net = False
@@ -316,9 +333,26 @@ def plot_cftc_data(data):
                 should_calculate_net = type_value in type_patterns
 
     # Use cached functions for data processing
-    data = process_cftc_data(data, is_all_data=should_calculate_net)
-    with st.spinner("Calculating data changes... This may take a moment."):
-        data_change = calculate_data_changes(data)
+    data = process_cftc_data(data, is_all_data=not is_chg_data)  # Don't calculate net for CHG data
+    # Only calculate changes if not CHG data
+    if not is_chg_data:
+        with st.spinner("Calculating data changes... This may take a moment."):
+            data_change = calculate_data_changes(data)
+    else:
+        # For CHG data, create a minimal data_change dataframe without calculating changes
+        # since the data itself already represents changes
+        data_change = data.copy()
+        # Add empty columns that would normally be created by calculate_data_changes
+        # to avoid errors in other parts of the code
+        numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+        for col in numeric_cols:
+            data_change[f'{col}_change'] = np.nan
+            data_change[f'{col}_change_pct'] = np.nan
+            data_change[f'{col}_pct_10yr'] = np.nan  # Add this line
+            data_change[f'{col}_pct_5yr'] = np.nan
+            data_change[f'{col}_pct_2yr'] = np.nan
+            data_change[f'{col}_pct_1yr'] = np.nan
+            data_change[f'{col}_pct_ytd'] = np.nan
 
     # Create column selection options
     plot_cols = [col for col in data.columns if col not in ['None', 'contract_code', 'type', 'date']]
@@ -412,7 +446,6 @@ def plot_cftc_data(data):
         st.warning("Please select at least one column to plot.")
         return
 
-    # Rest of the function remains the same...
     # Chart options
     st.write("### Chart Settings")
 
@@ -421,9 +454,15 @@ def plot_cftc_data(data):
     with col1:
         plot_type = st.radio("Plot Type", ["Line", "Bar"], horizontal=True)
     with col2:
-        # Add the toggle for showing changes here, outside the plot
-        show_changes = st.toggle("Show percentage changes", value=False,
-                                 help="Toggle to show/hide percentage changes on the plot. Only available for 90 or fewer periods.")
+        # Only show the toggle for percentage changes if not CHG data
+        if not is_chg_data:
+            show_changes = st.toggle("Show percentage changes", value=False,
+                                     help="Toggle to show/hide percentage changes on the plot. Only available for 90 or fewer periods.")
+        else:
+            # For CHG data, display an info message and set show_changes to False
+            st.info(
+                "Percentage changes are not shown for CHG data as the data already represents week-over-week changes.")
+            show_changes = False
 
     # Additional options
     separate_plots = st.checkbox("Create Separate Plots for Each Column", value=False)
@@ -460,7 +499,17 @@ def plot_cftc_data(data):
     st.write(
         f"## CFTC Data Visualization - {selected_start_date.strftime('%Y-%m-%d')} to {selected_end_date.strftime('%Y-%m-%d')}")
 
-    plot_data_change = prepare_hover_texts(plot_data_change, selected_cols)
+    # For CHG data, modify how we prepare hover text
+    if not is_chg_data:
+        plot_data_change = prepare_hover_texts(plot_data_change, selected_cols)
+    else:
+        # For CHG data, create simpler hover text that doesn't display changes
+        for col in selected_cols:
+            plot_data_change[f'{col}_hover'] = plot_data_change.apply(
+                lambda row: f"<b>{pd.to_datetime(row['date']).strftime('%Y-%m-%d')}</b><br>{col}: {row[col]:,.0f}",
+                axis=1
+            )
+
     annotations = create_annotations(plot_data_change, selected_cols, num_periods, separate_plots, show_changes)
 
     # Determine plot layout
@@ -625,19 +674,30 @@ def plot_cftc_data(data):
     # Display some statistics about the selected columns
     st.write("### Data Statistics")
 
-    # Show recent changes as a table
-    st.write("#### Recent Week-over-Week Changes")
-    show_cols = ['date']
-    for col in selected_cols:
-        if f'{col}_change_pct' in plot_data_change.columns:
-            show_cols.append(f'{col}_change_pct')
+    # Only show recent changes table if not CHG data
+    if not is_chg_data:
+        st.write("#### Recent Week-over-Week Changes")
+        show_cols = ['date']
+        for col in selected_cols:
+            if f'{col}_change_pct' in plot_data_change.columns:
+                show_cols.append(f'{col}_change_pct')
 
-    if len(show_cols) > 1:
-        recent_changes = plot_data_change.iloc[-5:][show_cols]
-        renamed_cols = {f'{col}_change_pct': f'{col} (% change)' for col in selected_cols if
-                        f'{col}_change_pct' in plot_data_change.columns}
-        recent_changes = recent_changes.rename(columns=renamed_cols)
-        st.dataframe(recent_changes.style.format({col: "{:+.2f}%" for col in recent_changes.columns if col != 'date'}))
+        if len(show_cols) > 1:
+            recent_changes = plot_data_change.iloc[-5:][show_cols]
+            renamed_cols = {f'{col}_change_pct': f'{col} (% change)' for col in selected_cols if
+                            f'{col}_change_pct' in plot_data_change.columns}
+            recent_changes = recent_changes.rename(columns=renamed_cols)
+            st.dataframe(
+                recent_changes.style.format({col: "{:+.2f}%" for col in recent_changes.columns if col != 'date'}))
+    else:
+        # For CHG data, show a different message
+        st.info(
+            "Recent week-over-week changes table is not shown for CHG data as the data itself already represents changes.")
+
+        # Instead, show the most recent values
+        st.write("#### Most Recent Values")
+        recent_values = plot_data.iloc[-5:][['date'] + selected_cols]
+        st.dataframe(recent_values.style.format({col: "{:,.0f}" for col in selected_cols}))
 
     # Add download button for the plotted data
     columns_to_download = ['date'] + selected_cols

@@ -58,6 +58,4 @@ flask_sqlalchemy
 psycopg2-binary
 plotting
 streamlit-chat
-
-
-
+scipy

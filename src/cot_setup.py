@@ -6,6 +6,8 @@ import os
 from streamlit_chat import message
 from plotting import plot_cftc_data
 from plotting2 import display_historical_analysis
+from plotting import process_cftc_data
+
 
 # Page configuration - correctly using the JPEG file as page icon
 st.set_page_config(
@@ -160,10 +162,11 @@ with col2:
     elif dataset_code in ["QDL/FON", "QDL/LFON"]:
         # For FON and LFON, _CR is not available
         # Additional check for LFON with legacy and CHG
-        if dataset_code == "QDL/LFON" and use_legacy and all_or_chg == "CHG":
-            # No additional categories available for LFON with legacy and CHG
+        if (dataset_code == "QDL/LFON" and use_legacy and all_or_chg == "CHG") or \
+                (dataset_code == "QDL/FON" and all_or_chg == "CHG"):
+            # No additional categories available for CHG data for both FON and LFON(legacy)
             suffix_options = []
-            st.write("**Additional Categories:** Not available for Legacy CHG data")
+            st.write("**Additional Categories:** Not available for CHG data")
             available_suffixes = []
         else:
             suffix_options = ["_NT", "_OI"]
@@ -185,16 +188,40 @@ with col2:
 # Use available_suffixes instead of selected_suffixes
 selected_suffixes = available_suffixes
 
-# Construct the type category dynamically
+# Automatically construct the type category without additional choices
 prefix = f"{base_type}_L" if use_legacy else base_type
-type_category_options = [f"{prefix}_{all_or_chg}{suffix}" for suffix in [""] + selected_suffixes]
+base_type_category = f"{prefix}_{all_or_chg}"
 
-# Dropdown for selecting the final Type & Category
-type_category = st.selectbox(
-    "Select Type & Category",
-    type_category_options,
-    help="This is the final constructed query parameter combining all your selections"
-)
+# Check if we need to modify how we handle the API calls
+if selected_suffixes:
+    # For display purposes, show all suffixes together
+    display_type_category = f"{base_type_category}{'_'.join(selected_suffixes)}"
+
+    # For API calls, we'll need to make separate calls
+    api_type_categories = [f"{base_type_category}{suffix}" for suffix in selected_suffixes]
+
+    # If no suffixes selected, also include the base category
+    if not selected_suffixes:
+        api_type_categories = [base_type_category]
+    else:
+        # Always include base category
+        api_type_categories = [base_type_category] + api_type_categories
+
+    # Store for later use in data fetching
+    st.session_state.all_type_categories = api_type_categories
+else:
+    # No suffixes selected, just use base category
+    display_type_category = base_type_category
+    st.session_state.all_type_categories = [base_type_category]
+
+# Use the display version for UI
+type_category = display_type_category
+
+# Display the automatically constructed type_category with all suffixes included
+st.info(f"**Type & Category:** {type_category}")
+
+
+
 
 # Section for managing instruments (add and remove)
 st.subheader("Manage Instruments")
@@ -342,13 +369,25 @@ else:
                 mime="text/csv",
             )
 
-            # Display plots
-            plot_cftc_data(data)
+            # Check if this is CHG data
+            is_chg_data = False
+            if 'type' in data.columns and not data.empty:
+                type_value = str(data['type'].iloc[0]) if len(data) > 0 else ""
+                is_chg_data = '_CHG' in type_value
+
+            # Process the data - import this function from plotting.py
+            from plotting import process_cftc_data
+
+            processed_data = process_cftc_data(data, is_all_data=not is_chg_data)
+            # Now use processed_data for both functions
+            plot_cftc_data(processed_data)  # You'll need to modify plot_cftc_data to skip reprocessing
 
             # Filter out columns that aren't suitable for plotting
-            plotable_cols = [col for col in data.columns if col not in ['None', 'contract_code', 'type', 'date']]
-            # Call the historical analysis function
-            display_historical_analysis(data, plotable_cols)
+            plotable_cols = [col for col in processed_data.columns if
+                             col not in ['None', 'contract_code', 'type', 'date']]
+
+            # Call the historical analysis function with processed data
+            display_historical_analysis(processed_data, plotable_cols)
 
     else:
         if not fetch_button:  # Only show this if the button wasn't just pressed
