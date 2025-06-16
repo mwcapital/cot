@@ -47,5 +47,7 @@
     "NYMEX Coffee": "111659",
     "Cotton (NYMEX TT)": "033661",
     "Dutch TTF Natural Gas": "023661",
-    "Dubai Crude Oil (Platts)": "067661"
+    "Dubai Crude Oil (Platts)": "067661",
+    "WHEAT-SRW - CHICAGO BOARD OF TRADE": "001602",
+    "WHEAT-HRW - CHICAGO BOARD OF TRADE": "001612"
 }
