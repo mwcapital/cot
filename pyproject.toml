@@ -1,0 +1,14 @@
+[project]
+name = "cot4"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.3.0",
+    "pandas>=2.3.0",
+    "plotly>=6.1.2",
+    "scipy>=1.16.0",
+    "sodapy>=2.2.0",
+    "streamlit>=1.46.0",
+]
