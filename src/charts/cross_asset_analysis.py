@@ -648,9 +648,182 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
 
 
 def create_cross_asset_participation_comparison(selected_instruments, api_token, instruments_db):
-    """Create cross-asset trader participation comparison"""
-    st.info("Participation comparison - to be implemented")
-    return None
+    """Create cross-asset participation comparison showing trader count trends"""
+    try:
+        # Store data for all instruments
+        all_data = {}
+        
+        # Progress tracking
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        # Fetch data for each instrument
+        for idx, instrument in enumerate(selected_instruments):
+            status_text.text(f"Fetching data for {instrument}...")
+            progress_bar.progress((idx + 1) / len(selected_instruments))
+            
+            # Fetch data
+            df = fetch_cftc_data(instrument, api_token)
+            
+            if df is not None and not df.empty:
+                # Sort by date
+                df = df.sort_values('report_date_as_yyyy_mm_dd')
+                
+                # Store the data
+                all_data[instrument] = {
+                    'dates': df['report_date_as_yyyy_mm_dd'],
+                    'total_traders': df['traders_tot_all'],
+                    'noncomm_long': df['traders_noncomm_long_all'],
+                    'noncomm_short': df['traders_noncomm_short_all'],
+                    'comm_long': df['traders_comm_long_all'],
+                    'comm_short': df['traders_comm_short_all'],
+                    'open_interest': df['open_interest_all']
+                }
+        
+        progress_bar.empty()
+        status_text.empty()
+        
+        if not all_data:
+            st.error("No valid data found for selected instruments")
+            return None
+        
+        # Create figure with subplots
+        from plotly.subplots import make_subplots
+        import plotly.express as px
+        
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=('Total Trader Count', 'Trader Count YoY % Change', 
+                           'Avg Position per Trader', 'Participation Score'),
+            vertical_spacing=0.15,
+            horizontal_spacing=0.12
+        )
+        
+        # Define colors for instruments
+        colors = px.colors.qualitative.Plotly[:len(selected_instruments)]
+        
+        # 1. Total trader count time series
+        for idx, (instrument, data) in enumerate(all_data.items()):
+            short_name = instrument.split('-')[0].strip()
+            
+            fig.add_trace(go.Scatter(
+                x=data['dates'],
+                y=data['total_traders'],
+                mode='lines',
+                name=short_name,
+                line=dict(color=colors[idx], width=2),
+                showlegend=True,
+                legendgroup=short_name,
+                hovertemplate=f'<b>{instrument}</b><br>Date: %{{x}}<br>Traders: %{{y:,.0f}}<extra></extra>'
+            ), row=1, col=1)
+        
+        # 2. YoY % change in trader count
+        for idx, (instrument, data) in enumerate(all_data.items()):
+            short_name = instrument.split('-')[0].strip()
+            
+            # Calculate YoY change
+            import pandas as pd
+            trader_series = pd.Series(data['total_traders'].values, index=data['dates'])
+            yoy_change = trader_series.pct_change(52) * 100  # 52 weeks = 1 year
+            
+            fig.add_trace(go.Scatter(
+                x=data['dates'],
+                y=yoy_change,
+                mode='lines',
+                name=short_name,
+                line=dict(color=colors[idx], width=2),
+                showlegend=False,
+                legendgroup=short_name,
+                hovertemplate=f'<b>{instrument}</b><br>Date: %{{x}}<br>YoY Change: %{{y:.1f}}%<extra></extra>'
+            ), row=1, col=2)
+        
+        # 3. Average position per trader
+        for idx, (instrument, data) in enumerate(all_data.items()):
+            short_name = instrument.split('-')[0].strip()
+            
+            # Calculate avg position per trader
+            avg_position = data['open_interest'] / data['total_traders'].replace(0, 1)
+            
+            fig.add_trace(go.Scatter(
+                x=data['dates'],
+                y=avg_position,
+                mode='lines',
+                name=short_name,
+                line=dict(color=colors[idx], width=2),
+                showlegend=False,
+                legendgroup=short_name,
+                hovertemplate=f'<b>{instrument}</b><br>Date: %{{x}}<br>Avg Position: %{{y:,.0f}}<extra></extra>'
+            ), row=2, col=1)
+        
+        # 4. Participation score (traders as % of max historical)
+        for idx, (instrument, data) in enumerate(all_data.items()):
+            short_name = instrument.split('-')[0].strip()
+            
+            # Calculate participation score
+            max_traders = data['total_traders'].max()
+            participation_score = (data['total_traders'] / max_traders) * 100
+            
+            fig.add_trace(go.Scatter(
+                x=data['dates'],
+                y=participation_score,
+                mode='lines',
+                name=short_name,
+                line=dict(color=colors[idx], width=2),
+                showlegend=False,
+                legendgroup=short_name,
+                hovertemplate=f'<b>{instrument}</b><br>Date: %{{x}}<br>Participation: %{{y:.1f}}%<extra></extra>'
+            ), row=2, col=2)
+        
+        # Update layout
+        fig.update_layout(
+            title=dict(
+                text="Cross-Asset Participation Comparison",
+                y=0.98,
+                x=0.5,
+                xanchor='center',
+                yanchor='top',
+                font=dict(size=20)
+            ),
+            height=900,
+            hovermode='x unified',
+            margin=dict(t=120, b=50, l=60, r=40)
+        )
+        
+        # Update axes
+        fig.update_yaxes(title_text="Number of Traders", row=1, col=1)
+        fig.update_yaxes(title_text="YoY Change %", row=1, col=2)
+        fig.update_yaxes(title_text="Avg Position Size", row=2, col=1)
+        fig.update_yaxes(title_text="Participation %", row=2, col=2)
+        
+        # Add zero line for YoY change
+        fig.add_hline(y=0, row=1, col=2, line_dash="dash", line_color="gray")
+        
+        # Add range selector to first subplot
+        fig.update_xaxes(
+            rangeselector=dict(
+                buttons=list([
+                    dict(count=1, label="1Y", step="year", stepmode="backward"),
+                    dict(count=2, label="2Y", step="year", stepmode="backward"),
+                    dict(count=5, label="5Y", step="year", stepmode="backward"),
+                    dict(step="all", label="All")
+                ]),
+                yanchor="top",
+                y=1.06
+            ),
+            row=1, col=1
+        )
+        
+        # Update the y-axis domain of the first row to leave space for range selector
+        fig.update_yaxes(domain=[0.55, 0.92], row=1, col=1)
+        fig.update_yaxes(domain=[0.55, 0.92], row=1, col=2)
+        fig.update_yaxes(domain=[0, 0.37], row=2, col=1)
+        fig.update_yaxes(domain=[0, 0.37], row=2, col=2)
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Error creating participation comparison: {str(e)}")
+        return None
 
 
 def create_relative_strength_matrix(selected_instruments, api_token, time_period, instruments_db):
