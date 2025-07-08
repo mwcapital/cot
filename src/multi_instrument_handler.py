@@ -197,31 +197,31 @@ def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
         
         # UI elements outside the button to prevent reset
         if chart_type == "Cross-Asset":
-            st.markdown("---")
-            st.subheader("🔄 Cross-Asset Comparison")
-            
-            # Trader category selection - as selectbox like in the screenshot
-            trader_category = st.selectbox(
-                "Select trader category:",
-                ["Non-Commercial", "Commercial", "Non-Reportable"],
-                index=0,
-                key="cross_asset_trader_category"
-            )
-            
-            # Lookback period for Z-score calculation - as selectbox
-            lookback_period = st.selectbox(
-                "Lookback period for Z-score calculation:",
-                ["1 Year", "2 Years", "3 Years", "5 Years", "10 Years"],
-                index=1,
-                key="cross_asset_lookback"
-            )
-            
             # Fetch data button
-            if st.button("🚀 Analyze Cross-Asset Positioning", type="primary", key="fetch_cross_asset"):
+            if st.button("🚀 Fetch Data for All Instruments", type="primary", key="fetch_cross_asset"):
                 st.session_state.analysis_data_fetched = True
             
-            # Show analysis if data has been fetched
+            # Show analysis UI and chart if data has been fetched
             if st.session_state.analysis_data_fetched:
+                st.markdown("---")
+                st.subheader("🔄 Cross-Asset Comparison")
+                
+                # Trader category selection - as selectbox like in the screenshot
+                trader_category = st.selectbox(
+                    "Select trader category:",
+                    ["Non-Commercial", "Commercial", "Non-Reportable"],
+                    index=0,
+                    key="cross_asset_trader_category"
+                )
+                
+                # Lookback period for Z-score calculation - as selectbox
+                lookback_period = st.selectbox(
+                    "Lookback period for Z-score calculation:",
+                    ["1 Year", "2 Years", "3 Years", "5 Years", "10 Years"],
+                    index=1,
+                    key="cross_asset_lookback"
+                )
+                
                 # Map lookback period to start date
                 lookback_map = {
                     "1 Year": pd.Timestamp.now() - pd.DateOffset(years=1),
@@ -345,22 +345,29 @@ def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
                         - Compare how different markets rank on the same scale
                         """)
         
-        elif chart_type in ["WoW Changes", "Positioning Conc.", "Participation", "Strength Matrix"]:
-            # For other chart types, keep the original button approach
-            if st.button("🚀 Fetch Data for All Instruments", type="primary"):
+        elif chart_type == "WoW Changes":
+            # Initialize session state for WoW Changes
+            if 'wow_changes_data_fetched' not in st.session_state:
+                st.session_state.wow_changes_data_fetched = False
+            
+            # Fetch data button
+            if st.button("🚀 Fetch Data for All Instruments", type="primary", key="fetch_wow_changes"):
+                st.session_state.wow_changes_data_fetched = True
+            
+            # Show analysis UI and chart if data has been fetched
+            if st.session_state.wow_changes_data_fetched:
                 st.markdown("---")
+                st.subheader("📊 Week-over-Week Changes")
                 
-                if chart_type == "WoW Changes":
-                    # Week-over-week changes
-                    st.subheader("📊 Week-over-Week Changes")
-                    
-                    # Trader category selection
-                    trader_category = st.selectbox(
-                        "Select trader category:",
-                        ["Non-Commercial", "Commercial", "Non-Reportable"],
-                        index=0
-                    )
-                    
+                # Trader category selection - appears only after data is fetched
+                trader_category = st.selectbox(
+                    "Select trader category:",
+                    ["Non-Commercial", "Commercial", "Non-Reportable"],
+                    index=0,
+                    key="wow_changes_trader_category"
+                )
+                
+                with st.spinner("Calculating week-over-week changes..."):
                     # Create WoW changes chart
                     fig = create_cross_asset_wow_changes(
                         selected_instruments,
@@ -368,11 +375,28 @@ def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
                         api_token,
                         instruments_db
                     )
+                
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
                     
-                    if fig:
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                elif chart_type == "Positioning Conc.":
+                    # Download button
+                    col1, col2, col3 = st.columns([1, 1, 3])
+                    with col1:
+                        if st.button("💾 Download WoW Changes Chart", key="download_wow"):
+                            html_string = fig.to_html(include_plotlyjs='cdn')
+                            st.download_button(
+                                label="Download Chart",
+                                data=html_string,
+                                file_name=f"cftc_wow_changes_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                                mime="text/html"
+                            )
+        
+        elif chart_type in ["Positioning Conc.", "Participation", "Strength Matrix"]:
+            # For other chart types, keep the original button approach
+            if st.button("🚀 Fetch Data for All Instruments", type="primary"):
+                st.markdown("---")
+                
+                if chart_type == "Positioning Conc.":
                     # Positioning concentration
                     st.subheader("📈 Positioning Concentration Analysis")
                     
