@@ -213,7 +213,7 @@ def main():
         st.markdown("### Multi-Instrument Analysis")
         multi_chart_type = st.segmented_control(
             "Select chart type",
-            ["Cross-Asset", "Market Matrix", "Asset Concentration", "Z-Score Analysis", "WoW Changes", "Positioning Conc.", "Participation", "Strength Matrix"],
+            ["Cross-Asset", "Market Matrix", "WoW Changes", "Positioning Conc.", "Participation", "Strength Matrix"],
             selection_mode="single", 
             default=None,
             key="multi_chart_type",

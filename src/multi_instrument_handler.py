@@ -345,7 +345,7 @@ def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
                         - Compare how different markets rank on the same scale
                         """)
         
-        elif chart_type in ["WoW Changes", "Positioning Conc.", "Participation", "Strength Matrix", "Asset Concentration", "Z-Score Analysis"]:
+        elif chart_type in ["WoW Changes", "Positioning Conc.", "Participation", "Strength Matrix"]:
             # For other chart types, keep the original button approach
             if st.button("🚀 Fetch Data for All Instruments", type="primary"):
                 st.markdown("---")
@@ -432,73 +432,6 @@ def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
                     if fig:
                         st.plotly_chart(fig, use_container_width=True)
                         
-                elif chart_type == "Asset Concentration":
-                    # Asset concentration analysis (same as market matrix but different name)
-                    st.subheader("🎯 Asset Concentration Analysis")
-                    st.info("Analyzes the concentration of positions across different assets.")
-                    
-                    # Fetch data for all instruments
-                    all_instruments_data = {}
-                    
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    for idx, instrument in enumerate(selected_instruments):
-                        status_text.text(f"Fetching data for {instrument}...")
-                        progress_bar.progress((idx + 1) / len(selected_instruments))
-                        
-                        df = fetch_cftc_data(instrument, api_token)
-                        if df is not None and not df.empty:
-                            all_instruments_data[instrument] = df
-                    
-                    progress_bar.empty()
-                    status_text.empty()
-                    
-                    if all_instruments_data:
-                        fig = create_market_structure_matrix(all_instruments_data, selected_instruments)
-                        if fig:
-                            st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.error("Failed to fetch data for the selected instruments")
-                        
-                elif chart_type == "Z-Score Analysis":
-                    # Z-Score analysis (similar to cross-asset but focused on z-scores)
-                    st.subheader("📊 Z-Score Analysis")
-                    
-                    # Trader category selection
-                    trader_category = st.selectbox(
-                        "Select trader category:",
-                        ["Non-Commercial", "Commercial", "Non-Reportable"],
-                        index=0
-                    )
-                    
-                    # Lookback period
-                    lookback_period = st.selectbox(
-                        "Lookback period for Z-score calculation:",
-                        ["1 Year", "2 Years", "3 Years", "5 Years", "10 Years"],
-                        index=1
-                    )
-                    
-                    lookback_map = {
-                        "1 Year": pd.Timestamp.now() - pd.DateOffset(years=1),
-                        "2 Years": pd.Timestamp.now() - pd.DateOffset(years=2),
-                        "3 Years": pd.Timestamp.now() - pd.DateOffset(years=3),
-                        "5 Years": pd.Timestamp.now() - pd.DateOffset(years=5),
-                        "10 Years": pd.Timestamp.now() - pd.DateOffset(years=10)
-                    }
-                    
-                    # Create z-score analysis (reuse cross-asset analysis)
-                    fig = create_cross_asset_analysis(
-                        selected_instruments, 
-                        trader_category, 
-                        api_token,
-                        lookback_start=lookback_map[lookback_period],
-                        show_week_ago=False,  # Different from cross-asset
-                        instruments_db=instruments_db
-                    )
-                    
-                    if fig:
-                        st.plotly_chart(fig, use_container_width=True)
                         
                         
     else:
