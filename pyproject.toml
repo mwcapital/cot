@@ -8,7 +8,9 @@ dependencies = [
     "numpy>=2.3.0",
     "pandas>=2.3.0",
     "plotly>=6.1.2",
+    "scikit-learn>=1.7.0",
     "scipy>=1.16.0",
     "sodapy>=2.2.0",
+    "statsmodels>=0.14.4",
     "streamlit>=1.46.0",
 ]

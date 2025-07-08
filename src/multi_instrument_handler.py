@@ -1,0 +1,505 @@
+"""
+Multi-instrument flow handler for the CFTC COT Dashboard
+"""
+import streamlit as st
+import pandas as pd
+from data_fetcher import fetch_cftc_data
+from charts.cross_asset_analysis import (
+    create_cross_asset_analysis,
+    create_cross_asset_wow_changes,
+    create_positioning_concentration_charts,
+    create_cross_asset_participation_comparison,
+    create_relative_strength_matrix,
+    create_market_structure_matrix
+)
+
+
+def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
+    """Handle multi-instrument selection and analysis"""
+    st.header("🎯 Select Multiple Instruments")
+    
+    # Initialize session state for multi-instrument selection
+    if 'multi_selected_instruments' not in st.session_state:
+        st.session_state.multi_selected_instruments = []
+    
+    # Search method selection
+    search_method = st.radio(
+        "Choose search method:",
+        ["Search by Commodity Subgroup", "Search by Commodity Type", "Free Text Search"],
+        horizontal=True
+    )
+    
+    # Clear selections button
+    if st.button("🗑️ Clear All Selections", type="secondary"):
+        st.session_state.multi_selected_instruments = []
+        st.rerun()
+    
+    selected_instruments = []
+    
+    if search_method == "Search by Commodity Subgroup":
+        st.subheader("📁 Search by Commodity Subgroup")
+        
+        # Get all subgroups
+        if instruments_db and 'commodity_subgroups' in instruments_db:
+            subgroups = sorted(list(instruments_db['commodity_subgroups'].keys()))
+            
+            # Multi-select for subgroups
+            selected_subgroups = st.multiselect(
+                "Select commodity subgroups:",
+                options=subgroups,
+                help="Choose one or more subgroups to see their instruments"
+            )
+            
+            if selected_subgroups:
+                # Collect all instruments from selected subgroups
+                filtered_instruments = []
+                for subgroup in selected_subgroups:
+                    filtered_instruments.extend(instruments_db['commodity_subgroups'][subgroup])
+                
+                filtered_instruments = sorted(set(filtered_instruments))
+                st.success(f"✅ Found {len(filtered_instruments)} instruments in selected subgroups")
+                
+                # Combine with previously selected instruments
+                combined_options = sorted(set(st.session_state.multi_selected_instruments + filtered_instruments))
+                
+                # Multi-select for instruments
+                selected_instruments = st.multiselect(
+                    f"📊 Select instruments (showing {len(filtered_instruments)} new matches):",
+                    combined_options,
+                    default=st.session_state.multi_selected_instruments,
+                    max_selections=15,
+                    help="Select up to 15 instruments for comparison",
+                    key="subgroup_multiselect"
+                )
+                
+                st.session_state.multi_selected_instruments = selected_instruments
+            else:
+                st.info("Select one or more subgroups to see available instruments")
+                
+    elif search_method == "Search by Commodity Type":
+        st.subheader("🔸 Search by Commodity Type")
+        
+        # Get all commodities
+        if instruments_db and 'commodities' in instruments_db:
+            commodities = sorted(list(instruments_db['commodities'].keys()))
+            
+            # Multi-select for commodities
+            selected_commodities = st.multiselect(
+                "Select commodity types:",
+                options=commodities,
+                help="Choose one or more commodity types"
+            )
+            
+            if selected_commodities:
+                # Collect all instruments from selected commodities
+                filtered_instruments = []
+                for commodity in selected_commodities:
+                    filtered_instruments.extend(instruments_db['commodities'][commodity])
+                
+                filtered_instruments = sorted(set(filtered_instruments))
+                st.success(f"✅ Found {len(filtered_instruments)} instruments for selected commodities")
+                
+                # Combine with previously selected instruments
+                combined_options = sorted(set(st.session_state.multi_selected_instruments + filtered_instruments))
+                
+                # Multi-select for instruments
+                selected_instruments = st.multiselect(
+                    f"📊 Select instruments (showing {len(filtered_instruments)} new matches):",
+                    combined_options,
+                    default=st.session_state.multi_selected_instruments,
+                    max_selections=15,
+                    help="Select up to 15 instruments for comparison",
+                    key="commodity_multiselect"
+                )
+                
+                st.session_state.multi_selected_instruments = selected_instruments
+            else:
+                st.info("Select one or more commodity types to see available instruments")
+                
+    else:  # Free Text Search
+        st.subheader("🔍 Free Text Search")
+        
+        # Text input for search
+        search_text = st.text_input(
+            "Type keywords (comma-separated for multiple):",
+            placeholder="e.g., gold, silver, crude oil",
+            help="Enter instrument names or keywords. Use commas to search for multiple terms."
+        )
+        
+        if search_text:
+            # Get all instruments
+            if instruments_db and 'all_instruments' in instruments_db:
+                all_instruments = instruments_db['all_instruments']
+            else:
+                # Fallback: build all_instruments list
+                all_instruments = []
+                if instruments_db and 'exchanges' in instruments_db:
+                    for exchange, groups in instruments_db['exchanges'].items():
+                        for group, subgroups in groups.items():
+                            for subgroup, commodities in subgroups.items():
+                                for commodity, instruments in commodities.items():
+                                    all_instruments.extend(instruments)
+                all_instruments = sorted(list(set(all_instruments)))
+            
+            # Parse search terms
+            search_terms = [term.strip().upper() for term in search_text.split(',') if term.strip()]
+            
+            # Filter instruments
+            filtered_instruments = []
+            for instrument in all_instruments:
+                instrument_upper = instrument.upper()
+                if any(term in instrument_upper for term in search_terms):
+                    filtered_instruments.append(instrument)
+            
+            if filtered_instruments:
+                st.success(f"✅ Found {len(filtered_instruments)} matching instruments")
+                
+                # Combine with previously selected instruments
+                combined_options = sorted(set(st.session_state.multi_selected_instruments + filtered_instruments))
+                
+                # Multi-select for instruments
+                selected_instruments = st.multiselect(
+                    f"📊 Select instruments (showing {len(filtered_instruments)} new matches):",
+                    combined_options,
+                    default=st.session_state.multi_selected_instruments,
+                    max_selections=15,
+                    help="Select up to 15 instruments for comparison",
+                    key="free_text_multiselect"
+                )
+                
+                st.session_state.multi_selected_instruments = selected_instruments
+            else:
+                st.warning("No instruments found matching your search terms")
+        else:
+            # Show previously selected instruments if any
+            if st.session_state.multi_selected_instruments:
+                selected_instruments = st.multiselect(
+                    "📊 Previously selected instruments:",
+                    st.session_state.multi_selected_instruments,
+                    default=st.session_state.multi_selected_instruments,
+                    max_selections=15,
+                    key="previous_multiselect"
+                )
+                st.session_state.multi_selected_instruments = selected_instruments
+            else:
+                st.info("Enter search terms to find instruments")
+    
+    # Show selected count
+    if st.session_state.multi_selected_instruments:
+        st.success(f"✅ {len(st.session_state.multi_selected_instruments)} instruments selected")
+    
+    selected_instruments = st.session_state.multi_selected_instruments
+    
+    if selected_instruments:
+        # Initialize session state for analysis settings
+        if 'analysis_data_fetched' not in st.session_state:
+            st.session_state.analysis_data_fetched = False
+        
+        # UI elements outside the button to prevent reset
+        if chart_type == "Cross-Asset":
+            st.markdown("---")
+            st.subheader("🔄 Cross-Asset Comparison")
+            
+            # Trader category selection - as selectbox like in the screenshot
+            trader_category = st.selectbox(
+                "Select trader category:",
+                ["Non-Commercial", "Commercial", "Non-Reportable"],
+                index=0,
+                key="cross_asset_trader_category"
+            )
+            
+            # Lookback period for Z-score calculation - as selectbox
+            lookback_period = st.selectbox(
+                "Lookback period for Z-score calculation:",
+                ["1 Year", "2 Years", "3 Years", "5 Years", "10 Years"],
+                index=1,
+                key="cross_asset_lookback"
+            )
+            
+            # Fetch data button
+            if st.button("🚀 Analyze Cross-Asset Positioning", type="primary", key="fetch_cross_asset"):
+                st.session_state.analysis_data_fetched = True
+            
+            # Show analysis if data has been fetched
+            if st.session_state.analysis_data_fetched:
+                # Map lookback period to start date
+                lookback_map = {
+                    "1 Year": pd.Timestamp.now() - pd.DateOffset(years=1),
+                    "2 Years": pd.Timestamp.now() - pd.DateOffset(years=2), 
+                    "3 Years": pd.Timestamp.now() - pd.DateOffset(years=3),
+                    "5 Years": pd.Timestamp.now() - pd.DateOffset(years=5),
+                    "10 Years": pd.Timestamp.now() - pd.DateOffset(years=10)
+                }
+                
+                lookback_start = lookback_map[lookback_period]
+                
+                with st.spinner("Fetching data for selected instruments..."):
+                    # Create cross-asset z-score analysis
+                    fig = create_cross_asset_analysis(
+                        selected_instruments,
+                        trader_category,
+                        api_token,
+                        lookback_start,
+                        True,  # Always show week ago values
+                        instruments_db
+                    )
+                
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Download button
+                    col1, col2, col3 = st.columns([1, 1, 3])
+                    with col1:
+                        if st.button("💾 Download Cross-Asset Chart", key="download_cross"):
+                            html_string = fig.to_html(include_plotlyjs='cdn')
+                            st.download_button(
+                                label="Download Chart",
+                                data=html_string,
+                                file_name=f"cftc_cross_asset_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                                mime="text/html"
+                            )
+        
+        elif chart_type == "Market Matrix":
+            # Initialize session state for Market Matrix
+            if 'market_matrix_data' not in st.session_state:
+                st.session_state.market_matrix_data = {}
+                
+            # For Market Matrix, show the concentration selector before the button
+            if st.button("🚀 Fetch Data for All Instruments", type="primary"):
+                # Fetch data for all instruments
+                all_instruments_data = {}
+                
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                for idx, instrument in enumerate(selected_instruments):
+                    status_text.text(f"Fetching data for {instrument}...")
+                    progress_bar.progress((idx + 1) / len(selected_instruments))
+                    
+                    df = fetch_cftc_data(instrument, api_token)
+                    if df is not None and not df.empty:
+                        all_instruments_data[instrument] = df
+                
+                progress_bar.empty()
+                status_text.empty()
+                
+                if all_instruments_data:
+                    st.session_state.market_matrix_data = all_instruments_data
+                    st.success("✅ Data fetched successfully!")
+                else:
+                    st.error("Failed to fetch data for the selected instruments")
+            
+            # Show the UI and chart if data exists
+            if st.session_state.market_matrix_data:
+                st.markdown("---")
+                st.subheader("🎯 Market Structure Matrix")
+                st.info("Visualizes market structure using 5-year percentiles for cross-market comparability. Each axis shows where instruments rank relative to their own history.")
+                
+                # Add concentration metric selector - will persist after data is fetched
+                concentration_options = {
+                    'conc_gross_le_4_tdr_long': 'Gross Top 4 Traders Long',
+                    'conc_gross_le_4_tdr_short': 'Gross Top 4 Traders Short',
+                    'conc_gross_le_8_tdr_long': 'Gross Top 8 Traders Long',
+                    'conc_gross_le_8_tdr_short': 'Gross Top 8 Traders Short',
+                    'conc_net_le_4_tdr_long_all': 'Net Top 4 Traders Long',
+                    'conc_net_le_4_tdr_short_all': 'Net Top 4 Traders Short',
+                    'conc_net_le_8_tdr_long_all': 'Net Top 8 Traders Long',
+                    'conc_net_le_8_tdr_short_all': 'Net Top 8 Traders Short'
+                }
+                
+                concentration_metric = st.selectbox(
+                    "Select concentration metric for Y-axis:",
+                    options=list(concentration_options.keys()),
+                    format_func=lambda x: concentration_options[x],
+                    index=0,
+                    help="Choose which concentration metric to compare across markets",
+                    key="market_matrix_concentration_metric"
+                )
+                
+                # Create and show the chart
+                with st.spinner("Calculating 5-year percentiles..."):
+                    fig = create_market_structure_matrix(
+                        st.session_state.market_matrix_data, 
+                        selected_instruments, 
+                        concentration_metric
+                    )
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Add explanation
+                    with st.expander("📊 Understanding the Percentile-Based Matrix", expanded=False):
+                        st.markdown("""
+                        **Why Percentiles?**
+                        - Raw trader counts and concentration ratios vary significantly across markets
+                        - Percentiles allow fair comparison by showing where each market stands relative to its own 5-year history
+                        - 50th percentile (median) divides the quadrants
+                        
+                        **How to Read:**
+                        - **X-axis**: Percentile of 'traders_tot_all' variable from API (0% = historically low, 100% = historically high)
+                        - **Y-axis**: Concentration percentile based on selected metric
+                        - **Best Quadrant** (Green): Above median traders + Below median concentration
+                        - **Worst Quadrant** (Red): Below median traders + Above median concentration
+                        
+                        **Hover for Details:**
+                        - See both percentile rankings and actual values
+                        - Compare how different markets rank on the same scale
+                        """)
+        
+        elif chart_type in ["WoW Changes", "Positioning Conc.", "Participation", "Strength Matrix", "Asset Concentration", "Z-Score Analysis"]:
+            # For other chart types, keep the original button approach
+            if st.button("🚀 Fetch Data for All Instruments", type="primary"):
+                st.markdown("---")
+                
+                if chart_type == "WoW Changes":
+                    # Week-over-week changes
+                    st.subheader("📊 Week-over-Week Changes")
+                    
+                    # Trader category selection
+                    trader_category = st.selectbox(
+                        "Select trader category:",
+                        ["Non-Commercial", "Commercial", "Non-Reportable"],
+                        index=0
+                    )
+                    
+                    # Create WoW changes chart
+                    fig = create_cross_asset_wow_changes(
+                        selected_instruments,
+                        trader_category,
+                        api_token,
+                        instruments_db
+                    )
+                    
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                elif chart_type == "Positioning Conc.":
+                    # Positioning concentration
+                    st.subheader("📈 Positioning Concentration Analysis")
+                    
+                    # Trader category selection
+                    trader_category = st.selectbox(
+                        "Select trader category:",
+                        ["Non-Commercial", "Commercial", "Non-Reportable"],
+                        index=0
+                    )
+                    
+                    # Create positioning concentration charts
+                    fig_ts, fig_bar = create_positioning_concentration_charts(
+                        selected_instruments,
+                        trader_category,
+                        api_token,
+                        instruments_db
+                    )
+                    
+                    if fig_ts:
+                        st.plotly_chart(fig_ts, use_container_width=True)
+                    if fig_bar:
+                        st.plotly_chart(fig_bar, use_container_width=True)
+                        
+                elif chart_type == "Participation":
+                    # Trader participation comparison
+                    st.subheader("👥 Trader Participation Comparison")
+                    
+                    # Create participation comparison
+                    fig = create_cross_asset_participation_comparison(
+                        selected_instruments,
+                        api_token,
+                        instruments_db
+                    )
+                    
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                elif chart_type == "Strength Matrix":
+                    # Relative strength matrix
+                    st.subheader("💪 Relative Strength Matrix")
+                    
+                    # Time period selection
+                    time_period = st.selectbox(
+                        "Select time period:",
+                        ["1 Month", "3 Months", "6 Months", "1 Year"],
+                        index=1
+                    )
+                    
+                    # Create relative strength matrix
+                    fig = create_relative_strength_matrix(
+                        selected_instruments,
+                        api_token,
+                        time_period,
+                        instruments_db
+                    )
+                    
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                elif chart_type == "Asset Concentration":
+                    # Asset concentration analysis (same as market matrix but different name)
+                    st.subheader("🎯 Asset Concentration Analysis")
+                    st.info("Analyzes the concentration of positions across different assets.")
+                    
+                    # Fetch data for all instruments
+                    all_instruments_data = {}
+                    
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    for idx, instrument in enumerate(selected_instruments):
+                        status_text.text(f"Fetching data for {instrument}...")
+                        progress_bar.progress((idx + 1) / len(selected_instruments))
+                        
+                        df = fetch_cftc_data(instrument, api_token)
+                        if df is not None and not df.empty:
+                            all_instruments_data[instrument] = df
+                    
+                    progress_bar.empty()
+                    status_text.empty()
+                    
+                    if all_instruments_data:
+                        fig = create_market_structure_matrix(all_instruments_data, selected_instruments)
+                        if fig:
+                            st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.error("Failed to fetch data for the selected instruments")
+                        
+                elif chart_type == "Z-Score Analysis":
+                    # Z-Score analysis (similar to cross-asset but focused on z-scores)
+                    st.subheader("📊 Z-Score Analysis")
+                    
+                    # Trader category selection
+                    trader_category = st.selectbox(
+                        "Select trader category:",
+                        ["Non-Commercial", "Commercial", "Non-Reportable"],
+                        index=0
+                    )
+                    
+                    # Lookback period
+                    lookback_period = st.selectbox(
+                        "Lookback period for Z-score calculation:",
+                        ["1 Year", "2 Years", "3 Years", "5 Years", "10 Years"],
+                        index=1
+                    )
+                    
+                    lookback_map = {
+                        "1 Year": pd.Timestamp.now() - pd.DateOffset(years=1),
+                        "2 Years": pd.Timestamp.now() - pd.DateOffset(years=2),
+                        "3 Years": pd.Timestamp.now() - pd.DateOffset(years=3),
+                        "5 Years": pd.Timestamp.now() - pd.DateOffset(years=5),
+                        "10 Years": pd.Timestamp.now() - pd.DateOffset(years=10)
+                    }
+                    
+                    # Create z-score analysis (reuse cross-asset analysis)
+                    fig = create_cross_asset_analysis(
+                        selected_instruments, 
+                        trader_category, 
+                        api_token,
+                        lookback_start=lookback_map[lookback_period],
+                        show_week_ago=False,  # Different from cross-asset
+                        instruments_db=instruments_db
+                    )
+                    
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        
+    else:
+        st.warning("Please select at least one instrument for analysis")
