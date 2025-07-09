@@ -391,60 +391,135 @@ def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
                                 mime="text/html"
                             )
         
-        elif chart_type in ["Positioning Conc.", "Participation", "Strength Matrix"]:
-            # For other chart types, keep the original button approach
-            if st.button("🚀 Fetch Data for All Instruments", type="primary"):
+        elif chart_type == "Positioning Conc.":
+            # Initialize session state for Positioning Concentration
+            if 'positioning_conc_data_fetched' not in st.session_state:
+                st.session_state.positioning_conc_data_fetched = False
+            
+            # Fetch data button
+            if st.button("🚀 Fetch Data for All Instruments", type="primary", key="fetch_positioning_conc"):
+                st.session_state.positioning_conc_data_fetched = True
+            
+            # Show analysis UI and charts if data has been fetched
+            if st.session_state.positioning_conc_data_fetched:
                 st.markdown("---")
+                st.subheader("📈 Positioning Concentration Analysis")
+                st.info("Compares positioning as % of open interest across instruments")
                 
-                if chart_type == "Positioning Conc.":
-                    # Positioning concentration
-                    st.subheader("📈 Positioning Concentration Analysis")
-                    
-                    # Trader category selection
-                    trader_category = st.selectbox(
-                        "Select trader category:",
-                        ["Non-Commercial", "Commercial", "Non-Reportable"],
-                        index=0
-                    )
-                    
+                # Trader category selection - appears only after data is fetched
+                trader_category = st.selectbox(
+                    "Select trader category:",
+                    ["Non-Commercial", "Commercial", "Non-Reportable"],
+                    index=0,
+                    key="positioning_conc_trader_category"
+                )
+                
+                with st.spinner("Calculating positioning concentration..."):
                     # Create positioning concentration charts
-                    fig_ts, fig_bar = create_positioning_concentration_charts(
+                    fig_ts, fig_bar, fig_avg = create_positioning_concentration_charts(
                         selected_instruments,
                         trader_category,
                         api_token,
                         instruments_db
                     )
+                
+                if fig_ts and fig_bar and fig_avg:
+                    st.plotly_chart(fig_ts, use_container_width=True)
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                    st.plotly_chart(fig_avg, use_container_width=True)
                     
-                    if fig_ts:
-                        st.plotly_chart(fig_ts, use_container_width=True)
-                    if fig_bar:
-                        st.plotly_chart(fig_bar, use_container_width=True)
-                        
-                elif chart_type == "Participation":
-                    # Trader participation comparison
-                    st.subheader("👥 Trader Participation Comparison")
-                    
+                    # Download buttons
+                    col1, col2, col3 = st.columns([1, 1, 1])
+                    with col1:
+                        if st.button("💾 Download Time Series Chart", key="download_positioning_ts"):
+                            html_string = fig_ts.to_html(include_plotlyjs='cdn')
+                            st.download_button(
+                                label="Download Time Series",
+                                data=html_string,
+                                file_name=f"cftc_positioning_timeseries_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                                mime="text/html"
+                            )
+                    with col2:
+                        if st.button("💾 Download Bar Chart", key="download_positioning_bar"):
+                            html_string = fig_bar.to_html(include_plotlyjs='cdn')
+                            st.download_button(
+                                label="Download Bar Chart",
+                                data=html_string,
+                                file_name=f"cftc_positioning_current_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                                mime="text/html"
+                            )
+                    with col3:
+                        if st.button("💾 Download Average Positions Chart", key="download_positioning_avg"):
+                            html_string = fig_avg.to_html(include_plotlyjs='cdn')
+                            st.download_button(
+                                label="Download Average Positions",
+                                data=html_string,
+                                file_name=f"cftc_positioning_average_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                                mime="text/html"
+                            )
+        
+        elif chart_type == "Participation":
+            # Initialize session state for Participation
+            if 'participation_data_fetched' not in st.session_state:
+                st.session_state.participation_data_fetched = False
+            
+            # Fetch data button
+            if st.button("🚀 Fetch Data for All Instruments", type="primary", key="fetch_participation"):
+                st.session_state.participation_data_fetched = True
+            
+            # Show analysis UI and chart if data has been fetched
+            if st.session_state.participation_data_fetched:
+                st.markdown("---")
+                st.subheader("👥 Trader Participation Comparison")
+                st.info("Analyzes trader count trends, year-over-year changes, average positions per trader, and participation scores across instruments")
+                
+                with st.spinner("Calculating participation metrics..."):
                     # Create participation comparison
                     fig = create_cross_asset_participation_comparison(
                         selected_instruments,
                         api_token,
                         instruments_db
                     )
+                
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
                     
-                    if fig:
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                elif chart_type == "Strength Matrix":
-                    # Relative strength matrix
-                    st.subheader("💪 Relative Strength Matrix")
-                    
-                    # Time period selection
-                    time_period = st.selectbox(
-                        "Select time period:",
-                        ["1 Month", "3 Months", "6 Months", "1 Year"],
-                        index=1
-                    )
-                    
+                    # Download button
+                    col1, col2, col3 = st.columns([1, 1, 3])
+                    with col1:
+                        if st.button("💾 Download Participation Chart", key="download_participation"):
+                            html_string = fig.to_html(include_plotlyjs='cdn')
+                            st.download_button(
+                                label="Download Chart",
+                                data=html_string,
+                                file_name=f"cftc_participation_comparison_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                                mime="text/html"
+                            )
+        
+        elif chart_type == "Strength Matrix":
+            # Initialize session state for Strength Matrix
+            if 'strength_matrix_data_fetched' not in st.session_state:
+                st.session_state.strength_matrix_data_fetched = False
+            
+            # Fetch data button
+            if st.button("🚀 Fetch Data for All Instruments", type="primary", key="fetch_strength_matrix"):
+                st.session_state.strength_matrix_data_fetched = True
+            
+            # Show analysis UI and chart if data has been fetched
+            if st.session_state.strength_matrix_data_fetched:
+                st.markdown("---")
+                st.subheader("💪 Relative Strength Matrix")
+                st.info("Heatmap showing positioning correlations between instruments over the selected time period")
+                
+                # Time period selector - appears only after data is fetched
+                time_period = st.selectbox(
+                    "Select time period:",
+                    ["6 Months", "1 Year", "2 Years", "5 Years", "10 Years"],
+                    index=1,
+                    key="strength_matrix_time_period"
+                )
+                
+                with st.spinner("Calculating positioning correlations..."):
                     # Create relative strength matrix
                     fig = create_relative_strength_matrix(
                         selected_instruments,
@@ -452,9 +527,48 @@ def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
                         time_period,
                         instruments_db
                     )
+                
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
                     
-                    if fig:
-                        st.plotly_chart(fig, use_container_width=True)
+                    # Add explainer
+                    with st.expander("📊 Understanding the Strength Matrix", expanded=False):
+                        st.markdown("""
+                        **What This Matrix Shows:**
+                        - Correlation between Non-Commercial net positioning (long - short) across different instruments
+                        - Values range from -1 to +1, where:
+                          - **+1** (dark blue): Perfect positive correlation - instruments move together
+                          - **0** (white): No correlation - instruments move independently
+                          - **-1** (dark red): Perfect negative correlation - instruments move opposite
+                        
+                        **How to Use It:**
+                        - **Portfolio Diversification**: Look for instruments with low or negative correlations
+                        - **Risk Management**: High correlations mean similar market exposure
+                        - **Trading Opportunities**: Divergence from typical correlations may signal opportunities
+                        - **Market Regime**: Changing correlations can indicate shifts in market dynamics
+                        
+                        **Example Interpretations:**
+                        - If Gold and Silver show +0.8: They tend to move in the same direction
+                        - If Oil and Bonds show -0.5: They often move in opposite directions
+                        - If Wheat and Gold show 0.1: They have little relationship
+                        
+                        **Time Period Impact:**
+                        - Shorter periods (6M-1Y): Capture recent market dynamics and short-term relationships
+                        - Medium periods (2Y): Balance between recent trends and historical patterns
+                        - Longer periods (5Y-10Y): Show stable, long-term relationships and structural correlations
+                        """)
+                    
+                    # Download button
+                    col1, col2, col3 = st.columns([1, 1, 3])
+                    with col1:
+                        if st.button("💾 Download Strength Matrix", key="download_strength"):
+                            html_string = fig.to_html(include_plotlyjs='cdn')
+                            st.download_button(
+                                label="Download Chart",
+                                data=html_string,
+                                file_name=f"cftc_strength_matrix_{time_period.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                                mime="text/html"
+                            )
                         
                         
                         
