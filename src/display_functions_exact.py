@@ -10,7 +10,7 @@ from charts.base_charts import create_plotly_chart
 from charts.seasonality_charts import create_seasonality_chart
 from charts.percentile_charts import create_percentile_chart
 from charts.momentum_charts import create_single_variable_momentum_dashboard
-from charts.participation_charts_improved import create_participation_density_dashboard
+from charts.participation_charts import create_participation_density_dashboard
 from charts.share_of_oi import create_share_of_oi_chart
 from charts.trader_participation_analysis import (
     create_concentration_risk_heatmap,
