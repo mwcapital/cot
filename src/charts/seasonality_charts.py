@@ -26,6 +26,69 @@ def create_seasonality_chart(df, column, lookback_years=5, show_previous_year=Tr
         # Filter for lookback period
         df_lookback = df_season[df_season['year'] >= start_year]
 
+        # Create figure
+        fig = go.Figure()
+
+        # If lookback is 5 years and not 'all', just plot the raw data for each year
+        if lookback_years == 5:
+            # Create a reference year for x-axis (using current year for display)
+            current_year = pd.Timestamp.now().year
+            
+            # Plot each year's data overlaid on the same annual timeline
+            colors = ['blue', 'green', 'red', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
+            for idx, year in enumerate(sorted(df_lookback['year'].unique(), reverse=True)):
+                df_year = df_lookback[df_lookback['year'] == year].copy()
+                if not df_year.empty:
+                    # Create display dates using a common year for overlay
+                    df_year['display_date'] = pd.to_datetime(
+                        df_year['day_of_year'].astype(str) + f'-{current_year}',
+                        format='%j-%Y'
+                    )
+                    
+                    # Use different styling for current year
+                    is_current_year = (year == df_lookback['year'].max())
+                    
+                    fig.add_trace(go.Scatter(
+                        x=df_year['display_date'],
+                        y=df_year[column],
+                        mode='lines+markers' if is_current_year else 'lines',
+                        name=str(year),
+                        line=dict(
+                            width=3 if is_current_year else 2,
+                            color=colors[idx % len(colors)]
+                        ),
+                        marker=dict(size=4) if is_current_year else None
+                    ))
+            
+            # Update layout for seasonality view
+            fig.update_layout(
+                title=f'{column.replace("_", " ").title()} - Last {lookback_years} Years Seasonal Comparison',
+                xaxis_title='Month',
+                yaxis_title=column.replace('_', ' ').title(),
+                hovermode='x unified',
+                height=600,
+                showlegend=True,
+                legend=dict(
+                    orientation="v",
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="left",
+                    x=1.02
+                )
+            )
+            
+            # Format x-axis to show months
+            fig.update_xaxes(
+                tickformat="%b",
+                dtick="M1",
+                ticklabelmode="period",
+                rangeslider_visible=True,
+                rangeslider_thickness=0.05
+            )
+            
+            return fig
+
+        # Otherwise, continue with the original statistical analysis
         # Calculate statistics for each day of year
         daily_stats = df_lookback.groupby('day_of_year')[column].agg([
             'mean', 'std', 'count',
