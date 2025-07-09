@@ -827,9 +827,111 @@ def create_cross_asset_participation_comparison(selected_instruments, api_token,
 
 
 def create_relative_strength_matrix(selected_instruments, api_token, time_period, instruments_db):
-    """Create relative strength heatmap matrix"""
-    st.info("Relative strength matrix - to be implemented")
-    return None
+    """Create relative strength heatmap matrix showing positioning correlations"""
+    try:
+        # Store data for all instruments
+        all_data = {}
+        
+        # Progress tracking
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        # Define time period mapping
+        period_days = {
+            "6 Months": 180,
+            "1 Year": 365,
+            "2 Years": 730,
+            "5 Years": 1825,
+            "10 Years": 3650
+        }
+        
+        # Calculate cutoff date
+        cutoff_date = pd.Timestamp.now() - pd.DateOffset(days=period_days[time_period])
+        
+        # Fetch data for each instrument
+        for idx, instrument in enumerate(selected_instruments):
+            status_text.text(f"Fetching data for {instrument}...")
+            progress_bar.progress((idx + 1) / len(selected_instruments))
+            
+            # Fetch data
+            df = fetch_cftc_data(instrument, api_token)
+            
+            if df is not None and not df.empty:
+                # Filter by time period
+                df = df[df['report_date_as_yyyy_mm_dd'] >= cutoff_date]
+                
+                if not df.empty:
+                    # Sort by date
+                    df = df.sort_values('report_date_as_yyyy_mm_dd')
+                    
+                    # Calculate net position for non-commercial
+                    df['net_noncomm'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
+                    
+                    # Store the series indexed by date
+                    all_data[instrument] = df.set_index('report_date_as_yyyy_mm_dd')['net_noncomm']
+        
+        progress_bar.empty()
+        status_text.empty()
+        
+        if len(all_data) < 2:
+            st.warning("Need at least 2 instruments with valid data for correlation matrix")
+            return None
+        
+        # Create DataFrame with all instruments
+        df_combined = pd.DataFrame(all_data)
+        
+        # Calculate correlation matrix
+        correlation_matrix = df_combined.corr()
+        
+        # Create heatmap
+        fig = go.Figure(data=go.Heatmap(
+            z=correlation_matrix.values,
+            x=[name.split('-')[0].strip() for name in correlation_matrix.columns],
+            y=[name.split('-')[0].strip() for name in correlation_matrix.index],
+            colorscale='RdBu',
+            zmid=0,
+            text=np.round(correlation_matrix.values, 2),
+            texttemplate='%{text}',
+            textfont={"size": 10},
+            reversescale=True,
+            colorbar=dict(
+                title="Correlation",
+                tickmode="linear",
+                tick0=-1,
+                dtick=0.2
+            )
+        ))
+        
+        # Update layout
+        fig.update_layout(
+            title=f"Positioning Correlation Matrix - {time_period}",
+            height=600,
+            width=700,
+            xaxis=dict(
+                tickangle=-45,
+                side="bottom"
+            ),
+            yaxis=dict(
+                autorange="reversed"
+            ),
+            margin=dict(t=100, b=100, l=100, r=150)
+        )
+        
+        # Add annotation explaining the matrix
+        fig.add_annotation(
+            text="Non-Commercial Net Positioning Correlations",
+            xref="paper", yref="paper",
+            x=0.5, y=-0.15,
+            showarrow=False,
+            font=dict(size=12, color="gray"),
+            xanchor="center"
+        )
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Error creating relative strength matrix: {str(e)}")
+        return None
 
 
 def create_market_structure_matrix(all_instruments_data, selected_instruments, concentration_metric='average_net_4'):
