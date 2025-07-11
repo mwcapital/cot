@@ -25,9 +25,9 @@ def create_percentile_chart(df, column, lookback_years=5, chart_type='time_serie
             # Calculate rolling percentile rank
             # Use the specified lookback period for the rolling window
             if lookback_years == 'all':
-                window_days = 252 * 20  # Use 20 years for 'all time'
+                window_days = None  # Use all available data
             else:
-                window_days = 252 * lookback_years  # Trading days based on lookback period
+                window_days = 365 * lookback_years  # Use calendar days to match distribution view
             
             df_display['percentile_rank'] = np.nan
             df_display['actual_value'] = df_display[column]
@@ -38,11 +38,15 @@ def create_percentile_chart(df, column, lookback_years=5, chart_type='time_serie
                 current_value = df_display.iloc[idx][column]
                 
                 # Define the lookback window
-                window_start = current_date - pd.Timedelta(days=window_days)
+                if window_days is None:
+                    # Use all available data up to current date
+                    mask = df_pct['report_date_as_yyyy_mm_dd'] <= current_date
+                else:
+                    # Use fixed window matching distribution view calculation
+                    window_start = current_date - pd.DateOffset(years=lookback_years)
+                    mask = (df_pct['report_date_as_yyyy_mm_dd'] >= window_start) & \
+                           (df_pct['report_date_as_yyyy_mm_dd'] <= current_date)
                 
-                # Get all historical values in the window (including from full dataset)
-                mask = (df_pct['report_date_as_yyyy_mm_dd'] >= window_start) & \
-                       (df_pct['report_date_as_yyyy_mm_dd'] <= current_date)
                 window_values = df_pct.loc[mask, column].values
                 
                 if len(window_values) > 1:
@@ -59,7 +63,7 @@ def create_percentile_chart(df, column, lookback_years=5, chart_type='time_serie
                 row_heights=[0.7, 0.3],
                 vertical_spacing=0.05,
                 subplot_titles=(
-                    f'Percentile Rank (Rolling {lookback_years if lookback_years != "all" else "20"}-Year Window)', 
+                    f'Percentile Rank (Rolling {lookback_years if lookback_years != "all" else "All Time"} Window)', 
                     'Full Period Navigator'
                 )
             )
