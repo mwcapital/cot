@@ -37,11 +37,19 @@ def load_instruments_database():
 def fetch_cftc_data(instrument_name, api_token):
     """Fetch CFTC data for a specific instrument"""
     try:
+        # Strip the contract code if present (everything after the last space and parenthesis)
+        # Format: "INSTRUMENT NAME (CODE)" -> "INSTRUMENT NAME"
+        if ' (' in instrument_name and instrument_name.endswith(')'):
+            # Find the last occurrence of ' (' which indicates the start of the code
+            instrument_name_clean = instrument_name.rsplit(' (', 1)[0]
+        else:
+            instrument_name_clean = instrument_name
+            
         client = Socrata(CFTC_API_BASE, api_token)
 
         results = client.get(
             DATASET_CODE,
-            where=f"market_and_exchange_names='{instrument_name}'",
+            where=f"market_and_exchange_names='{instrument_name_clean}'",
             select=",".join(CFTC_COLUMNS),
             order="report_date_as_yyyy_mm_dd ASC",
             limit=DEFAULT_LIMIT
@@ -77,17 +85,3 @@ def fetch_cftc_data(instrument_name, api_token):
         return None
 
 
-def get_asset_class(commodity_group):
-    """Map commodity group to asset class"""
-    energy = ["PETROLEUM AND PRODUCTS", "ELECTRICITY", "NATURAL GAS"]
-    metals = ["PRECIOUS METALS", "BASE METALS"]
-    agriculture = ["GRAINS AND OILSEEDS", "LIVESTOCK", "DAIRY", "SOFTS", "WOOD PRODUCTS"]
-    
-    if commodity_group in energy:
-        return "Energy"
-    elif commodity_group in metals:
-        return "Metals"
-    elif commodity_group in agriculture:
-        return "Agriculture"
-    else:
-        return "Other"

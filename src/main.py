@@ -23,17 +23,6 @@ from display_functions_exact import (
 )
 from multi_instrument_handler import handle_multi_instrument_flow
 
-# Initialize session state
-if 'data_fetched' not in st.session_state:
-    st.session_state.data_fetched = False
-if 'fetched_data' not in st.session_state:
-    st.session_state.fetched_data = None
-if 'fetched_instrument' not in st.session_state:
-    st.session_state.fetched_instrument = None
-if 'fetched_instruments_multi' not in st.session_state:
-    st.session_state.fetched_instruments_multi = []
-
-
 def handle_single_instrument_flow(chart_type, instruments_db, api_token):
     """Handle single instrument selection and analysis - EXACT copy from legacyF.py"""
     st.header("🎯 Select Instrument")
@@ -174,6 +163,16 @@ def handle_single_instrument_flow(chart_type, instruments_db, api_token):
 
 def main():
     """Main function - EXACT copy of UI from legacyF.py"""
+    # Initialize session state FIRST before anything else
+    if 'data_fetched' not in st.session_state:
+        st.session_state.data_fetched = False
+    if 'fetched_data' not in st.session_state:
+        st.session_state.fetched_data = None
+    if 'fetched_instrument' not in st.session_state:
+        st.session_state.fetched_instrument = None
+    if 'fetched_instruments_multi' not in st.session_state:
+        st.session_state.fetched_instruments_multi = []
+    
     st.title("📊 CFTC Commitments of Traders Dashboard")
     st.markdown("Interactive analysis of CFTC COT data")
 
