@@ -70,6 +70,7 @@ MANIFEST
 *.ipynb
 
 # UV package manager
-uv.lock# Large data files
-instrument_management/FUT86_16.txt
-*.txt
+uv.lock
+
+# Large data files (excluding LFS tracked files)
+# FUT86_16.txt is tracked by Git LFS
