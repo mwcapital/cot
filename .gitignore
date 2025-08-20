@@ -70,4 +70,6 @@ MANIFEST
 *.ipynb
 
 # UV package manager
-uv.lock
+uv.lock# Large data files
+instrument_management/FUT86_16.txt
+*.txt
