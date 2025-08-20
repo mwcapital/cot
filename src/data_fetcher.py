@@ -47,13 +47,38 @@ def fetch_cftc_data(instrument_name, api_token):
             
         client = Socrata(CFTC_API_BASE, api_token)
 
-        results = client.get(
-            DATASET_CODE,
-            where=f"market_and_exchange_names='{instrument_name_clean}'",
-            select=",".join(CFTC_COLUMNS),
-            order="report_date_as_yyyy_mm_dd ASC",
-            limit=DEFAULT_LIMIT
-        )
+        # Special handling for WTI-PHYSICAL: merge with historical CRUDE OIL, LIGHT SWEET data
+        if instrument_name_clean == "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE":
+            # First, get historical data from CRUDE OIL, LIGHT SWEET (2000-2022)
+            historical_results = client.get(
+                DATASET_CODE,
+                where="market_and_exchange_names='CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE'",
+                select=",".join(CFTC_COLUMNS),
+                order="report_date_as_yyyy_mm_dd ASC",
+                limit=DEFAULT_LIMIT
+            )
+            
+            # Then get current data from WTI-PHYSICAL (2022-present)
+            current_results = client.get(
+                DATASET_CODE,
+                where="market_and_exchange_names='WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE'",
+                select=",".join(CFTC_COLUMNS),
+                order="report_date_as_yyyy_mm_dd ASC",
+                limit=DEFAULT_LIMIT
+            )
+            
+            # Merge the results
+            results = historical_results + current_results
+            
+        else:
+            # Standard fetch for all other instruments
+            results = client.get(
+                DATASET_CODE,
+                where=f"market_and_exchange_names='{instrument_name_clean}'",
+                select=",".join(CFTC_COLUMNS),
+                order="report_date_as_yyyy_mm_dd ASC",
+                limit=DEFAULT_LIMIT
+            )
 
         client.close()
 
@@ -65,6 +90,9 @@ def fetch_cftc_data(instrument_name, api_token):
 
         # Convert date column
         df['report_date_as_yyyy_mm_dd'] = pd.to_datetime(df['report_date_as_yyyy_mm_dd'])
+        
+        # Remove duplicates based on date (in case of overlapping data at transition)
+        df = df.drop_duplicates(subset=['report_date_as_yyyy_mm_dd'], keep='last')
 
         # Convert numeric columns
         numeric_columns = [col for col in CFTC_COLUMNS if
