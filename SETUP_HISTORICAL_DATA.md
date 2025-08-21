@@ -1,10 +1,11 @@
-# Setting Up Historical COT Data
+# Historical COT Data Setup
 
-The historical COT data file (FUT86_16.txt, 160MB) is too large for regular Git but is essential for accessing data from 1986-2016.
+This repository uses Git LFS to manage the historical COT data file (FUT86_16.txt, 160MB) which provides data from 1986-2016.
 
-## Option 1: Using Git LFS (Recommended)
+## Prerequisites
 
-### Step 1: Install Git LFS
+Ensure Git LFS is installed on your system:
+
 ```bash
 # On macOS with Homebrew
 brew install git-lfs
@@ -12,31 +13,20 @@ brew install git-lfs
 # Or download from: https://git-lfs.github.com/
 ```
 
-### Step 2: Initialize Git LFS in your repository
+## Cloning the Repository
+
+When cloning this repository, Git LFS will automatically download the historical data file:
+
 ```bash
-git lfs install
+git clone https://github.com/mwcapital/COT-Monitor.git
+cd COT-Monitor
 ```
 
-### Step 3: Track the historical data file
+If the LFS file didn't download automatically:
+
 ```bash
-git lfs track "instrument_management/FUT86_16.txt"
-git add .gitattributes
+git lfs pull
 ```
-
-### Step 4: Add and commit the file
-```bash
-git add instrument_management/FUT86_16.txt
-git commit -m "Add historical COT data file via Git LFS"
-git push origin main
-```
-
-## Option 2: Manual Download
-
-If you're cloning this repository on a new machine and don't have the historical data file:
-
-1. Download FUT86_16.txt from the CFTC website or your backup location
-2. Place it in: `instrument_management/FUT86_16.txt`
-3. The app will automatically detect and use it
 
 ## What This File Provides
 
