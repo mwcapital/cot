@@ -168,3 +168,72 @@ def fetch_cftc_data(instrument_name, api_token):
         return None
 
 
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def fetch_cftc_data_ytd_only(instrument_name, api_token):
+    """Optimized fetch for dashboard - only gets YTD data plus latest record"""
+    try:
+        from datetime import datetime
+        
+        # Strip the contract code if present
+        if ' (' in instrument_name and instrument_name.endswith(')'):
+            instrument_name_clean = instrument_name.rsplit(' (', 1)[0]
+        else:
+            instrument_name_clean = instrument_name
+            
+        client = Socrata(CFTC_API_BASE, api_token)
+        
+        # Get current year
+        current_year = datetime.now().year
+        year_start = f"{current_year}-01-01T00:00:00.000"
+        
+        # Only fetch the columns we need for dashboard
+        dashboard_columns = [
+            "report_date_as_yyyy_mm_dd",
+            "net_noncomm_positions",
+            "comm_positions_long_all",
+            "comm_positions_short_all",
+            "conc_net_le_4_tdr_long_all",
+            "conc_net_le_4_tdr_short_all"
+        ]
+        
+        # Special handling for WTI-PHYSICAL
+        if instrument_name_clean == "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE":
+            # For WTI, just get YTD data from the current instrument
+            results = client.get(
+                DATASET_CODE,
+                where=f"market_and_exchange_names='WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE' AND report_date_as_yyyy_mm_dd >= '{year_start}'",
+                select=",".join(dashboard_columns),
+                order="report_date_as_yyyy_mm_dd ASC",
+                limit=100  # YTD should be ~50 records max
+            )
+        else:
+            # Standard fetch for YTD data only
+            results = client.get(
+                DATASET_CODE,
+                where=f"market_and_exchange_names='{instrument_name_clean}' AND report_date_as_yyyy_mm_dd >= '{year_start}'",
+                select=",".join(dashboard_columns),
+                order="report_date_as_yyyy_mm_dd ASC",
+                limit=100  # YTD should be ~50 records max
+            )
+        
+        if not results:
+            return None
+            
+        df = pd.DataFrame.from_records(results)
+        
+        # Convert date column
+        df['report_date_as_yyyy_mm_dd'] = pd.to_datetime(df['report_date_as_yyyy_mm_dd'])
+        
+        # Convert numeric columns
+        numeric_columns = [col for col in dashboard_columns if col != 'report_date_as_yyyy_mm_dd']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        return df.sort_values('report_date_as_yyyy_mm_dd')
+        
+    except Exception as e:
+        st.error(f"Error fetching YTD data: {e}")
+        return None
+
+

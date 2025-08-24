@@ -22,6 +22,7 @@ from display_functions_exact import (
     display_trader_participation_chart
 )
 from multi_instrument_handler import handle_multi_instrument_flow
+from dashboard_overview import display_dashboard
 
 def handle_single_instrument_flow(chart_type, instruments_db, api_token):
     """Handle single instrument selection and analysis - EXACT copy from legacyF.py"""
@@ -190,6 +191,11 @@ def main():
             help="Enter your CFTC API token for higher rate limits. Leave empty to use default limits."
         )
 
+    st.markdown("---")
+    
+    # Display Dashboard Overview
+    display_dashboard(api_token)
+    
     st.markdown("---")
 
     # Chart Type Selection FIRST
