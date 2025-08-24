@@ -187,9 +187,11 @@ def fetch_cftc_data_ytd_only(instrument_name, api_token):
         year_start = f"{current_year}-01-01T00:00:00.000"
         
         # Only fetch the columns we need for dashboard
+        # Note: net_noncomm_positions needs to be calculated
         dashboard_columns = [
             "report_date_as_yyyy_mm_dd",
-            "net_noncomm_positions",
+            "noncomm_positions_long_all",
+            "noncomm_positions_short_all",
             "comm_positions_long_all",
             "comm_positions_short_all",
             "conc_net_le_4_tdr_long_all",
@@ -229,6 +231,10 @@ def fetch_cftc_data_ytd_only(instrument_name, api_token):
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # Calculate net positions
+        if 'noncomm_positions_long_all' in df.columns and 'noncomm_positions_short_all' in df.columns:
+            df['net_noncomm_positions'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
         
         return df.sort_values('report_date_as_yyyy_mm_dd')
         
