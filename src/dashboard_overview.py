@@ -7,6 +7,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from data_fetcher import fetch_cftc_data_ytd_only
 import plotly.graph_objects as go
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Define key instruments for dashboard
 KEY_INSTRUMENTS = {
@@ -94,9 +95,75 @@ def create_sparkline(df, column_name):
     return fig
 
 
+def fetch_single_instrument_data(category, instrument, api_token):
+    """Helper function to fetch data for a single instrument"""
+    try:
+        # Fetch YTD data only (optimized for dashboard)
+        df = fetch_cftc_data_ytd_only(instrument, api_token)
+        
+        if df is not None and not df.empty:
+            # Get latest data point
+            latest = df.iloc[-1]
+            
+            # Data is already YTD only from optimized fetch
+            ytd_df = df
+            
+            # Create sparkline data as a list of values for LineChartColumn
+            ytd_sparkline = None
+            if not ytd_df.empty and 'net_noncomm_positions' in ytd_df.columns:
+                # Sort by date and get values as list
+                ytd_sorted = ytd_df.sort_values('report_date_as_yyyy_mm_dd')
+                ytd_sparkline = ytd_sorted['net_noncomm_positions'].fillna(0).tolist()
+            
+            # Calculate metrics
+            row_data = {
+                'Category': category,
+                'Instrument': instrument.split(' - ')[0],  # Simplified name
+                
+                # Non-Commercial Net Positions
+                'NC Net Position': latest.get('net_noncomm_positions', np.nan),
+                'NC Net YTD %ile': calculate_ytd_percentile(
+                    ytd_df.get('net_noncomm_positions', pd.Series()),
+                    latest.get('net_noncomm_positions', np.nan)
+                ),
+                'NC Correlation': '',  # Placeholder for future price correlation
+                
+                # Commercial Longs
+                'Comm Long': latest.get('comm_positions_long_all', np.nan),
+                'Comm Long YTD %ile': calculate_ytd_percentile(
+                    ytd_df.get('comm_positions_long_all', pd.Series()),
+                    latest.get('comm_positions_long_all', np.nan)
+                ),
+                'Comm Long Corr': '',  # Placeholder
+                
+                # Commercial Shorts
+                'Comm Short': latest.get('comm_positions_short_all', np.nan),
+                'Comm Short YTD %ile': calculate_ytd_percentile(
+                    ytd_df.get('comm_positions_short_all', pd.Series()),
+                    latest.get('comm_positions_short_all', np.nan)
+                ),
+                'Comm Short Corr': '',  # Placeholder
+                
+                # Concentration (4 traders)
+                'Conc Long 4T': latest.get('conc_net_le_4_tdr_long_all', np.nan),
+                'Conc Short 4T': latest.get('conc_net_le_4_tdr_short_all', np.nan),
+                
+                # YTD NC Net Position sparkline
+                'YTD NC Net Trend': ytd_sparkline if ytd_sparkline else [],
+                
+                # Last update
+                'Last Update': latest['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'),
+            }
+            
+            return row_data
+            
+    except Exception as e:
+        return None
+
+
 @st.cache_data(ttl=3600)
 def fetch_dashboard_data(api_token):
-    """Fetch YTD-only data for all dashboard instruments (optimized)"""
+    """Fetch YTD-only data for all dashboard instruments (optimized with parallel fetching)"""
     dashboard_data = []
     
     # Flatten instrument list
@@ -108,74 +175,29 @@ def fetch_dashboard_data(api_token):
     # Progress bar
     progress_bar = st.progress(0)
     status_text = st.empty()
+    status_text.text("Fetching dashboard data in parallel...")
     
-    for idx, (category, instrument) in enumerate(all_instruments):
-        status_text.text(f"Fetching {instrument.split(' - ')[0]}...")
-        progress_bar.progress((idx + 1) / len(all_instruments))
+    # Use ThreadPoolExecutor for parallel fetching
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        # Submit all fetch tasks
+        future_to_instrument = {
+            executor.submit(fetch_single_instrument_data, cat, inst, api_token): (cat, inst) 
+            for cat, inst in all_instruments
+        }
         
-        try:
-            # Fetch YTD data only (optimized for dashboard)
-            df = fetch_cftc_data_ytd_only(instrument, api_token)
+        completed = 0
+        # Process completed futures as they finish
+        for future in as_completed(future_to_instrument):
+            completed += 1
+            progress_bar.progress(completed / len(all_instruments))
             
-            if df is not None and not df.empty:
-                # Get latest data point
-                latest = df.iloc[-1]
-                
-                # Data is already YTD only from optimized fetch
-                ytd_df = df
-                
-                # Create sparkline data as a list of values for LineChartColumn
-                ytd_sparkline = None
-                if not ytd_df.empty and 'net_noncomm_positions' in ytd_df.columns:
-                    # Sort by date and get values as list
-                    ytd_sorted = ytd_df.sort_values('report_date_as_yyyy_mm_dd')
-                    ytd_sparkline = ytd_sorted['net_noncomm_positions'].fillna(0).tolist()
-                
-                # Calculate metrics
-                row_data = {
-                    'Category': category,
-                    'Instrument': instrument.split(' - ')[0],  # Simplified name
-                    
-                    # Non-Commercial Net Positions
-                    'NC Net Position': latest.get('net_noncomm_positions', np.nan),
-                    'NC Net YTD %ile': calculate_ytd_percentile(
-                        ytd_df.get('net_noncomm_positions', pd.Series()),
-                        latest.get('net_noncomm_positions', np.nan)
-                    ),
-                    'NC Correlation': '',  # Placeholder for future price correlation
-                    
-                    # Commercial Longs
-                    'Comm Long': latest.get('comm_positions_long_all', np.nan),
-                    'Comm Long YTD %ile': calculate_ytd_percentile(
-                        ytd_df.get('comm_positions_long_all', pd.Series()),
-                        latest.get('comm_positions_long_all', np.nan)
-                    ),
-                    'Comm Long Corr': '',  # Placeholder
-                    
-                    # Commercial Shorts
-                    'Comm Short': latest.get('comm_positions_short_all', np.nan),
-                    'Comm Short YTD %ile': calculate_ytd_percentile(
-                        ytd_df.get('comm_positions_short_all', pd.Series()),
-                        latest.get('comm_positions_short_all', np.nan)
-                    ),
-                    'Comm Short Corr': '',  # Placeholder
-                    
-                    # Concentration (4 traders)
-                    'Conc Long 4T': latest.get('conc_net_le_4_tdr_long_all', np.nan),
-                    'Conc Short 4T': latest.get('conc_net_le_4_tdr_short_all', np.nan),
-                    
-                    # YTD NC Net Position sparkline
-                    'YTD NC Net Trend': ytd_sparkline if ytd_sparkline else [],
-                    
-                    # Last update
-                    'Last Update': latest['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'),
-                }
-                
-                dashboard_data.append(row_data)
-                
-        except Exception as e:
-            st.warning(f"Could not fetch data for {instrument}: {e}")
-            continue
+            category, instrument = future_to_instrument[future]
+            try:
+                row_data = future.result()
+                if row_data:
+                    dashboard_data.append(row_data)
+            except Exception as e:
+                st.warning(f"Could not fetch data for {instrument}: {e}")
     
     progress_bar.empty()
     status_text.empty()
