@@ -279,8 +279,160 @@ def display_time_series_chart(df, instrument_name):
                               key=f"ts_checkbox_{col}"):
                     selected_columns.append(col)
         
+        # Add custom formula section
+        st.markdown("---")
+        st.markdown("#### 🧮 Custom Formula (Optional)")
+        
+        with st.expander("Create custom calculations from metrics", expanded=False):
+            st.info("""
+            **How to use:**
+            - Enter a formula using metric abbreviations
+            - Supported operations: +, -, *, /, ()
+            - Example formulas:
+                - `NC_NET / OI * 100` - Net NC as % of Open Interest
+                - `NC_LONG - NC_SHORT` - Calculate net positioning
+                - `(NC_LONG + NC_SHORT) / OI` - Total NC activity ratio
+            """)
+            
+            # Metric abbreviations
+            st.markdown("**Available metrics:**")
+            metric_abbr = {
+                "OI": "open_interest_all",
+                "NC_LONG": "noncomm_positions_long_all",
+                "NC_SHORT": "noncomm_positions_short_all", 
+                "NC_SPREAD": "noncomm_postions_spread_all",
+                "C_LONG": "comm_positions_long_all",
+                "C_SHORT": "comm_positions_short_all",
+                "NC_NET": "net_noncomm_positions",
+                "C_NET": "net_comm_positions",
+                "R_NET": "net_reportable_positions",
+                "NR_LONG": "nonrept_positions_long_all",
+                "NR_SHORT": "nonrept_positions_short_all",
+                "TRADERS": "traders_tot_all"
+            }
+            
+            # Display abbreviations in columns
+            abbr_col1, abbr_col2, abbr_col3 = st.columns(3)
+            items = list(metric_abbr.items())
+            third = len(items) // 3
+            
+            with abbr_col1:
+                for abbr, full in items[:third]:
+                    display_name = column_display_names.get(full, full.replace('_', ' ').title())
+                    st.text(f"{abbr} = {display_name}")
+            with abbr_col2:
+                for abbr, full in items[third:2*third]:
+                    display_name = column_display_names.get(full, full.replace('_', ' ').title())
+                    st.text(f"{abbr} = {display_name}")
+            with abbr_col3:
+                for abbr, full in items[2*third:]:
+                    display_name = column_display_names.get(full, full.replace('_', ' ').title())
+                    st.text(f"{abbr} = {display_name}")
+            
+            # Preset formulas
+            st.markdown("**Quick formulas:**")
+            preset_formulas = {
+                "NC Net % of OI": "NC_NET / OI * 100",
+                "Commercial Hedging Pressure": "C_NET / OI * 100",
+                "NC Long/Short Ratio": "NC_LONG / NC_SHORT",
+                "Total NC Activity": "(NC_LONG + NC_SHORT) / OI * 100",
+                "Spec vs Commercial": "NC_NET / C_NET",
+                "Average Position per Trader": "OI / TRADERS",
+                "NC Spread % of NC Total": "NC_SPREAD / (NC_LONG + NC_SHORT + NC_SPREAD) * 100"
+            }
+            
+            preset_col1, preset_col2 = st.columns([3, 1])
+            with preset_col1:
+                selected_preset = st.selectbox(
+                    "Or select a preset formula:",
+                    [""] + list(preset_formulas.keys()),
+                    key="preset_formula_select"
+                )
+            
+            # Formula input
+            formula_col1, formula_col2 = st.columns([3, 1])
+            with formula_col1:
+                # Use preset if selected, otherwise allow custom input
+                default_formula = preset_formulas.get(selected_preset, "") if selected_preset else ""
+                custom_formula = st.text_input(
+                    "Enter formula:",
+                    value=default_formula,
+                    placeholder="e.g., NC_NET / OI * 100",
+                    key="custom_formula_input"
+                )
+            
+            with formula_col2:
+                default_name = selected_preset if selected_preset else ""
+                formula_name = st.text_input(
+                    "Formula name:",
+                    value=default_name,
+                    placeholder="e.g., NC % of OI",
+                    key="formula_name_input"
+                )
+            
+            # Process custom formula if provided
+            if custom_formula:
+                try:
+                    # Create a copy of the dataframe for calculations
+                    calc_df = filtered_df.copy()
+                    
+                    # Sort abbreviations by length (longest first) to avoid partial replacements
+                    sorted_abbr = sorted(metric_abbr.items(), key=lambda x: len(x[0]), reverse=True)
+                    
+                    # Replace abbreviations with actual column names
+                    formula_expanded = custom_formula.upper()  # Make case-insensitive
+                    for abbr, col in sorted_abbr:
+                        if col in calc_df.columns:
+                            # Use word boundaries to avoid partial replacements
+                            import re
+                            pattern = r'\b' + re.escape(abbr) + r'\b'
+                            formula_expanded = re.sub(pattern, f"calc_df['{col}']", formula_expanded)
+                    
+                    # Check for any remaining unrecognized variables
+                    remaining_vars = re.findall(r'\b[A-Z_]+\b', formula_expanded.replace("calc_df", ""))
+                    if remaining_vars:
+                        st.warning(f"⚠️ Unrecognized variables: {', '.join(remaining_vars)}")
+                    
+                    # Handle division by zero
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        calc_df['custom_formula_result'] = eval(formula_expanded)
+                        # Replace inf and nan with None for cleaner display
+                        calc_df['custom_formula_result'] = calc_df['custom_formula_result'].replace([np.inf, -np.inf], np.nan)
+                    
+                    # Add to selected columns for plotting
+                    if 'custom_formula_result' not in selected_columns:
+                        selected_columns.append('custom_formula_result')
+                    filtered_df['custom_formula_result'] = calc_df['custom_formula_result']
+                    
+                    # Update display names
+                    column_display_names['custom_formula_result'] = formula_name if formula_name else f"Custom: {custom_formula}"
+                    
+                    st.success(f"✅ Formula applied: {formula_name if formula_name else custom_formula}")
+                    
+                    # Show statistics
+                    valid_values = calc_df['custom_formula_result'].dropna()
+                    if len(valid_values) > 0:
+                        st.caption(f"Min: {valid_values.min():.2f} | Max: {valid_values.max():.2f} | Mean: {valid_values.mean():.2f}")
+                    
+                except SyntaxError as e:
+                    st.error(f"❌ Syntax error in formula: {str(e)}")
+                    st.info("Check parentheses and operators (+, -, *, /)")
+                except KeyError as e:
+                    st.error(f"❌ Column not found: {str(e)}")
+                    st.info("Make sure all metrics exist in the data")
+                except Exception as e:
+                    st.error(f"❌ Formula error: {str(e)}")
+                    st.info("Please check your formula syntax and ensure all metrics exist in the data")
+        
         if selected_columns:
             fig = create_plotly_chart(filtered_df, selected_columns, f"{instrument_name} - Time Series Analysis")
+            
+            # Update legend labels for custom formula
+            if fig and 'custom_formula_result' in selected_columns:
+                for trace in fig.data:
+                    if trace.name == 'custom_formula_result':
+                        trace.name = column_display_names.get('custom_formula_result', 'Custom Formula')
+            
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
         else:
