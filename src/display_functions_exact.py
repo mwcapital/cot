@@ -6,6 +6,8 @@ import numpy as np
 from scipy import stats
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import re
+from datetime import datetime
 from charts.base_charts import create_plotly_chart
 from charts.seasonality_charts import create_seasonality_chart
 from charts.percentile_charts import create_percentile_chart
@@ -23,6 +25,9 @@ from charts.concentration_momentum import create_concentration_momentum_analysis
 from charts.participant_behavior_clusters import create_participant_behavior_clusters
 from charts.regime_detection import create_regime_detection_dashboard
 from charts.market_microstructure import create_market_microstructure_analysis
+from futures_price_fetcher import FuturesPriceFetcher
+from streamlit_lightweight_charts import renderLightweightCharts
+from display_functions_lwc_sync import display_time_series_chart_lwc
 
 
 def calculate_percentiles_for_column(df, column, lookback_days):
@@ -219,12 +224,18 @@ def create_participation_density_dashboard_original(df, instrument_name, percent
 
 
 def display_time_series_chart(df, instrument_name):
-    """Display time series analysis - EXACT copy from legacyF.py"""
+    """Display time series analysis using unified Lightweight Charts implementation"""
+    # Use the new unified Lightweight Charts implementation
+    display_time_series_chart_lwc(df, instrument_name)
+
+
+def display_time_series_chart_old(df, instrument_name):
+    """OLD VERSION - Display time series analysis - EXACT copy from legacyF.py"""
     st.subheader("📈 Time Series Analysis")
-    
-    # Create tabs
-    tab1, tab2, tab3 = st.tabs(["Standard Time Series", "Share of Open Interest", "Seasonality"])
-    
+
+    # Create tabs - now including Futures Price
+    tab1, tab2, tab3, tab4 = st.tabs(["Standard Time Series", "Share of Open Interest", "Seasonality", "Futures Price"])
+
     with tab1:
         # Date range selection
         min_date = df['report_date_as_yyyy_mm_dd'].min()
@@ -427,11 +438,19 @@ def display_time_series_chart(df, instrument_name):
         if selected_columns:
             fig = create_plotly_chart(filtered_df, selected_columns, f"{instrument_name} - Time Series Analysis")
             
-            # Update legend labels for custom formula
-            if fig and 'custom_formula_result' in selected_columns:
+            # Update legend labels for custom formula and other columns
+            if fig:
                 for trace in fig.data:
-                    if trace.name == 'custom_formula_result':
-                        trace.name = column_display_names.get('custom_formula_result', 'Custom Formula')
+                    # Check if this is a data trace (not a marker)
+                    if hasattr(trace, 'name') and trace.name:
+                        # Look for the original column name in our display names
+                        for original_name, display_name in column_display_names.items():
+                            if trace.name == original_name or trace.name == original_name.replace('_', ' ').title():
+                                trace.name = display_name
+                                break
+                        # Special handling for custom formula result
+                        if trace.name == 'Custom Formula Result' and 'custom_formula_result' in column_display_names:
+                            trace.name = column_display_names['custom_formula_result']
             
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
@@ -449,6 +468,9 @@ def display_time_series_chart(df, instrument_name):
         **Calculation Method:**
         - **Long Side**: NonComm Long + Spread + Comm Long + NonRep Long = 100%
         - **Short Side**: NonComm Short + Spread + Comm Short + NonRep Short = 100%
+        
+        **Alternative Calculation:**
+        Alternatively, you can calculate Long Side as: NonComm Long + Comm Long + NonRep Long = Total OI Reported - Spreading Total
         """)
         
         # Calculation side selector
@@ -565,6 +587,198 @@ def display_time_series_chart(df, instrument_name):
             fig = create_seasonality_chart(df, seasonality_column, lookback_years, show_previous, zone_type)
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
+
+    with tab4:
+        # Futures Price tab
+        st.markdown("#### Futures Price Chart")
+
+        # Extract COT code from instrument name
+        def extract_cot_code(name):
+            match = re.search(r'\((\w+)\)', name)
+            if match:
+                return match.group(1)
+            return None
+
+        cot_code = extract_cot_code(instrument_name)
+
+        if not cot_code:
+            st.info("No futures price data available for this instrument")
+        else:
+            # Initialize fetcher
+            fetcher = FuturesPriceFetcher()
+
+            # Check if this COT instrument has a matching futures symbol
+            futures_symbol = fetcher.get_futures_symbol_for_cot(cot_code)
+
+            if not futures_symbol:
+                st.info("No futures price data available for this instrument")
+            else:
+                # Get symbol info
+                symbol_info = fetcher.futures_mapping['futures_symbols'].get(futures_symbol, {})
+
+                # Display symbol info
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Symbol", futures_symbol)
+                with col2:
+                    st.metric("Exchange", symbol_info.get('exchange', 'N/A'))
+                with col3:
+                    st.metric("Category", symbol_info.get('category', 'N/A'))
+
+                # Options for the chart
+                col1, col2 = st.columns([2, 1])
+
+                with col1:
+                    show_stats = st.checkbox("Show Price Statistics", value=False, key="futures_show_stats")
+
+                with col2:
+                    adjustment_method = st.selectbox(
+                        "Adjustment Method",
+                        ["REV", "RAD", "NON"],
+                        index=0,
+                        help="REV: Reverse (Back Adjusted), RAD: Ratio Adjusted, NON: Non-Adjusted"
+                    )
+
+                # Date range for price data
+                end_date = datetime.now()
+                start_date = datetime(2000, 1, 1)
+
+                # Fetch price data
+                price_df = fetcher.fetch_weekly_prices(
+                    futures_symbol,
+                    start_date.strftime('%Y-%m-%d'),
+                    end_date.strftime('%Y-%m-%d'),
+                    adjustment_method
+                )
+
+                if price_df.empty:
+                    st.warning("No price data available for the selected parameters")
+                else:
+                    # Show stats if requested
+                    if show_stats:
+                        stats = fetcher.get_price_change_stats(price_df)
+
+                        st.markdown("##### Price Statistics")
+                        col1, col2, col3, col4 = st.columns(4)
+
+                        with col1:
+                            st.metric("Latest Close", f"{stats['latest_close']:.2f}")
+                            st.metric("52W High", f"{stats['high_52w']:.2f}")
+
+                        with col2:
+                            st.metric("Week Change", f"{stats['week_change']:.2f}%")
+                            st.metric("52W Low", f"{stats['low_52w']:.2f}")
+
+                        with col3:
+                            st.metric("Month Change", f"{stats['month_change']:.2f}%")
+                            st.metric("Avg Volume", f"{stats['avg_volume']:,.0f}")
+
+                        with col4:
+                            st.metric("Year Change", f"{stats['year_change']:.2f}%")
+                            st.metric("Latest OI", f"{stats['latest_oi']:,.0f}")
+
+                    # Create lightweight chart with Bloomberg terminal styling
+                    ohlc_data = []
+                    oi_data = []
+
+                    for _, row in price_df.iterrows():
+                        time_str = row['date'].strftime('%Y-%m-%d')
+                        ohlc_data.append({
+                            'time': time_str,
+                            'open': float(row['open']),
+                            'high': float(row['high']),
+                            'low': float(row['low']),
+                            'close': float(row['close'])
+                        })
+                        oi_data.append({
+                            'time': time_str,
+                            'value': float(row['open_interest'])
+                        })
+
+                    # Use Bar series for OHLC bars (not candlesticks)
+                    price_series = {
+                        "type": 'Bar',
+                        "data": ohlc_data,
+                        "options": {
+                            "upColor": '#FFA500',      # Amber/orange like Bloomberg
+                            "downColor": '#FFA500',    # Same color for consistency
+                            "openVisible": True,       # Show open tick
+                            "thinBars": False          # Make bars visible
+                        }
+                    }
+
+                    # Open Interest as histogram at bottom
+                    oi_series = {
+                        "type": 'Histogram',
+                        "data": oi_data,
+                        "options": {
+                            "color": '#FFA500',
+                            "priceScaleId": 'volume',  # Use separate scale
+                            "priceFormat": {
+                                "type": 'volume'
+                            }
+                        },
+                        "priceScale": {
+                            "scaleMargins": {
+                                "top": 0.7,    # Push to bottom 30% of chart
+                                "bottom": 0
+                            }
+                        }
+                    }
+
+                    # Vintage Bloomberg terminal styling
+                    chart_options = {
+                        "layout": {
+                            "background": {
+                                "type": 'solid',
+                                "color": '#000000'     # Pure black like Bloomberg
+                            },
+                            "textColor": '#FFA500',    # Amber text
+                            "fontFamily": "'Courier New', monospace"
+                        },
+                        "grid": {
+                            "vertLines": {
+                                "color": '#1a1a1a',    # Very subtle grid
+                                "style": 1             # Dotted
+                            },
+                            "horzLines": {
+                                "color": '#1a1a1a',
+                                "style": 1
+                            }
+                        },
+                        "crosshair": {
+                            "mode": 1,                 # Magnet mode
+                            "vertLine": {
+                                "color": '#FFA500',
+                                "width": 1,
+                                "style": 2             # Dashed
+                            },
+                            "horzLine": {
+                                "color": '#FFA500',
+                                "width": 1,
+                                "style": 2
+                            }
+                        },
+                        "priceScale": {
+                            "borderColor": '#FFA500'
+                        },
+                        "timeScale": {
+                            "borderColor": '#FFA500',
+                            "timeVisible": True
+                        }
+                    }
+
+                    # Create a unique key for this chart
+                    chart_key = f'lwc_chart_timeseries_{futures_symbol}'
+
+                    # Create the chart configuration with both price and OI
+                    chart_config = {
+                        "chart": chart_options,
+                        "series": [price_series, oi_series]
+                    }
+
+                    # Render the chart
+                    renderLightweightCharts([chart_config], key=chart_key)
 
 
 def display_percentile_chart(df, instrument_name):
