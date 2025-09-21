@@ -529,9 +529,22 @@ def display_share_of_oi(df, instrument_name):
     The spread positions are counted on both long and short sides.
     """)
 
-    # Get instrument symbol mapping
-    from data_fetcher import get_symbol_from_instrument_name
-    symbol = get_symbol_from_instrument_name(instrument_name)
+    # Extract instrument name without COT code
+    instrument_clean = re.sub(r'\s*\(\d+\)$', '', instrument_name).strip()
+
+    # Find the futures symbol for this COT instrument
+    symbol = None
+    with open('/Users/makson/Desktop/COT-Analysis/instrument_management/futures_symbols_enhanced.json', 'r') as f:
+        mapping = json.load(f)
+        for fut_symbol, info in mapping['futures_symbols'].items():
+            if info['cot_mapping']['matched']:
+                if instrument_clean in info['cot_mapping']['instruments']:
+                    symbol = fut_symbol
+                    break
+
+    if not symbol:
+        st.warning("No futures price data available for this instrument")
+        return
 
     # Price adjustment options
     col1, col2 = st.columns(2)
