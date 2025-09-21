@@ -869,18 +869,6 @@ def display_cot_only_charts(df, selected_columns):
             "series": cotSeries
         }], 'cot_only_chart')
 
-def display_share_of_oi(df, instrument_name):
-    """Display Share of Open Interest analysis"""
-    try:
-        from charts.share_of_oi import create_share_of_oi_chart
-        import plotly.graph_objects as go
-        # The function requires a chart_title parameter
-        chart_title = f"{instrument_name} - Share of Open Interest"
-        fig = create_share_of_oi_chart(df, instrument_name, chart_title)
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
-    except Exception as e:
-        st.error(f"Error displaying Share of OI chart: {str(e)}")
 
 def display_seasonality(df, instrument_name):
     """Display Seasonality analysis"""
