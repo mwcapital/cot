@@ -151,13 +151,13 @@ def handle_single_instrument_flow(chart_type, instruments_db, api_token):
         # Display chart based on pre-selected chart type
         if chart_type == "Time Series":
             display_time_series_chart(df, selected_instrument)
-            
+
         elif chart_type == "Percentile":
             display_percentile_chart(df, selected_instrument)
-            
+
         elif chart_type == "Momentum":
             display_momentum_chart(df, selected_instrument)
-            
+
         elif chart_type == "Trader Participation":
             display_trader_participation_chart(df, selected_instrument)
 

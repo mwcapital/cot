@@ -111,7 +111,7 @@ def create_share_of_oi_chart(df, calculation_side, chart_title):
         
         # Update layout
         fig.update_layout(
-            title=f"{chart_title} - Share of Open Interest ({calculation_side})",
+            title=f"{chart_title} ({calculation_side})",
             xaxis_title="Date",
             yaxis=dict(
                 title="Share of Open Interest (%)",
