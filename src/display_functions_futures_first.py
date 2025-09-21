@@ -8,6 +8,7 @@ import json
 import re
 from datetime import datetime
 from streamlit_lightweight_charts import renderLightweightCharts
+from display_synchronized_unified import display_synchronized_charts_unified
 from futures_price_fetcher import FuturesPriceFetcher
 
 def display_time_series_chart(df, instrument_name):
@@ -169,6 +170,15 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
             display_cot_only_charts(df, selected_columns)
         return
 
+    # USE THE UNIFIED VERSION FOR PERFECT ALIGNMENT
+    use_unified = st.checkbox("Use unified chart (single container)", value=False, key="use_unified_chart")
+
+    if use_unified:
+        # Call the new unified implementation
+        return display_synchronized_charts_unified(df, instrument_name, symbol, selected_columns, selected_formulas, price_adjustment)
+
+    # Otherwise continue with the panel implementation below...
+
     # Fetch futures price data
     fetcher = FuturesPriceFetcher()
     start_date = df['report_date_as_yyyy_mm_dd'].min().strftime('%Y-%m-%d')
@@ -215,6 +225,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                 "color": 'white'
             },
             "textColor": '#333',
+            "fontSize": 12,
         },
         "grid": {
             "vertLines": {
@@ -234,13 +245,17 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                 "top": 0.1,
                 "bottom": 0.2,
             },
-            "minimumWidth": 100,
+            "width": 90,  # Fixed width for all charts
         },
         "timeScale": {
             "borderColor": 'rgba(197, 203, 206, 0.8)',
             "timeVisible": True,
+            "visible": True,  # Always show time axis
             "secondsVisible": False,
-            "sharedTimeScale": True,
+            "rightOffset": 5,
+            "barSpacing": 6,
+            "fixLeftEdge": True,
+            "lockVisibleTimeRangeOnResize": True,
         },
         "watermark": {
             "color": 'rgba(0, 0, 0, 0.1)',
@@ -320,6 +335,9 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                         'value': float(cot_row[col_name])
                     })
 
+        # Determine if COT chart is the last chart (no formulas selected)
+        is_last_chart = not selected_formulas
+
         # Create COT subplot
         cotChart = {
             "height": 350,
@@ -329,6 +347,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                     "color": 'white'
                 },
                 "textColor": '#333',
+                "fontSize": 12,
             },
             "grid": {
                 "vertLines": {
@@ -348,12 +367,17 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                     "top": 0.1,
                     "bottom": 0.1,
                 },
+                "width": 90,  # Fixed width for all charts
             },
             "timeScale": {
                 "borderColor": 'rgba(197, 203, 206, 0.8)',
-                "timeVisible": False,
-                "visible": True,
-                "sharedTimeScale": True,
+                "timeVisible": True,
+                "visible": True,  # Show time axis on all charts
+                "secondsVisible": False,
+                "rightOffset": 5,
+                "barSpacing": 6,
+                "fixLeftEdge": True,
+                "lockVisibleTimeRangeOnResize": True,
             }
         }
 
@@ -369,6 +393,11 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                         "title": display_name,
                         "priceLineVisible": False,
                         "lastValueVisible": True,
+                        "priceFormat": {
+                            "type": 'price',
+                            "precision": 0,
+                            "minMove": 1,
+                        }
                     }
                 })
 
@@ -424,6 +453,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                     "color": 'white'
                 },
                 "textColor": '#333',
+                "fontSize": 12,
             },
             "grid": {
                 "vertLines": {
@@ -439,12 +469,21 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
             "rightPriceScale": {
                 "borderColor": 'rgba(197, 203, 206, 0.8)',
                 "visible": True,
+                "scaleMargins": {
+                    "top": 0.1,
+                    "bottom": 0.1,
+                },
+                "width": 90,  # Fixed width for all charts
             },
             "timeScale": {
                 "borderColor": 'rgba(197, 203, 206, 0.8)',
-                "timeVisible": False,
-                "visible": True,
-                "sharedTimeScale": True,
+                "timeVisible": True,
+                "secondsVisible": False,
+                "visible": True,  # Show time axis on all charts
+                "rightOffset": 5,
+                "barSpacing": 6,
+                "fixLeftEdge": True,
+                "lockVisibleTimeRangeOnResize": True,
             }
         }
 
@@ -460,6 +499,11 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                         "title": display_name,
                         "priceLineVisible": False,
                         "lastValueVisible": True,
+                        "priceFormat": {
+                            "type": 'price',
+                            "precision": 2,
+                            "minMove": 0.01,
+                        }
                     }
                 })
 
