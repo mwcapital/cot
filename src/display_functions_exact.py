@@ -26,8 +26,6 @@ from charts.participant_behavior_clusters import create_participant_behavior_clu
 from charts.regime_detection import create_regime_detection_dashboard
 from charts.market_microstructure import create_market_microstructure_analysis
 from futures_price_fetcher import FuturesPriceFetcher
-from streamlit_lightweight_charts import renderLightweightCharts
-from display_functions_lwc_sync import display_time_series_chart_lwc
 
 
 def calculate_percentiles_for_column(df, column, lookback_days):
@@ -224,9 +222,9 @@ def create_participation_density_dashboard_original(df, instrument_name, percent
 
 
 def display_time_series_chart(df, instrument_name):
-    """Display time series analysis using unified Lightweight Charts implementation"""
-    # Use the new unified Lightweight Charts implementation
-    display_time_series_chart_lwc(df, instrument_name)
+    """Display time series analysis with futures first approach"""
+    from display_functions_futures_first import display_time_series_chart as display_futures_first
+    display_futures_first(df, instrument_name)
 
 
 def display_time_series_chart_old(df, instrument_name):
