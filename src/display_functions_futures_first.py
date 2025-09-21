@@ -91,15 +91,15 @@ def display_cot_time_series_with_price(df, instrument_name):
         # Place checkbox in appropriate column
         if i < items_per_column:
             with col1:
-                if st.checkbox(display_name, value=(col_name == "open_interest_all"), key=f"ts_{col_name}"):
+                if st.checkbox(display_name, key=f"ts_{col_name}_{instrument_name}"):
                     selected_columns.append((col_name, display_name))
         elif i < 2 * items_per_column:
             with col2:
-                if st.checkbox(display_name, key=f"ts_{col_name}"):
+                if st.checkbox(display_name, key=f"ts_{col_name}_{instrument_name}"):
                     selected_columns.append((col_name, display_name))
         else:
             with col3:
-                if st.checkbox(display_name, key=f"ts_{col_name}"):
+                if st.checkbox(display_name, key=f"ts_{col_name}_{instrument_name}"):
                     selected_columns.append((col_name, display_name))
 
     # Add separator before formula options
@@ -112,15 +112,15 @@ def display_cot_time_series_with_price(df, instrument_name):
     selected_formulas = []
 
     with col1_formula:
-        if st.checkbox("NC_NET / OI × 100", key="formula_nc_oi"):
+        if st.checkbox("NC_NET / OI × 100", key=f"formula_nc_oi_{instrument_name}"):
             selected_formulas.append(("nc_net_oi_ratio", "NC_NET/OI%"))
-        if st.checkbox("NC_LONG / NC_SHORT", key="formula_nc_ratio"):
+        if st.checkbox("NC_LONG / NC_SHORT", key=f"formula_nc_ratio_{instrument_name}"):
             selected_formulas.append(("nc_long_short_ratio", "NC L/S Ratio"))
 
     with col2_formula:
-        if st.checkbox("C_NET / OI × 100", key="formula_c_oi"):
+        if st.checkbox("C_NET / OI × 100", key=f"formula_c_oi_{instrument_name}"):
             selected_formulas.append(("c_net_oi_ratio", "C_NET/OI%"))
-        if st.checkbox("NC_NET / C_NET", key="formula_nc_c"):
+        if st.checkbox("NC_NET / C_NET", key=f"formula_nc_c_{instrument_name}"):
             selected_formulas.append(("nc_c_net_ratio", "NC/C NET"))
 
     # Calculate formula values if needed
@@ -234,11 +234,13 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                 "top": 0.1,
                 "bottom": 0.2,
             },
+            "minimumWidth": 100,
         },
         "timeScale": {
             "borderColor": 'rgba(197, 203, 206, 0.8)',
             "timeVisible": True,
             "secondsVisible": False,
+            "sharedTimeScale": True,
         },
         "watermark": {
             "color": 'rgba(0, 0, 0, 0.1)',
@@ -320,7 +322,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
 
         # Create COT subplot
         cotChart = {
-            "height": 200,
+            "height": 350,
             "layout": {
                 "background": {
                     "type": 'solid',
@@ -351,6 +353,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                 "borderColor": 'rgba(197, 203, 206, 0.8)',
                 "timeVisible": False,
                 "visible": True,
+                "sharedTimeScale": True,
             }
         }
 
@@ -382,13 +385,27 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
         for formula_col, display_name in selected_formulas:
             formulaData[formula_col] = []
 
-            # Use COT data dates for formulas
-            for _, row in df.iterrows():
-                if pd.notna(row[formula_col]) and not np.isinf(row[formula_col]):
-                    formulaData[formula_col].append({
-                        'time': row['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'),
-                        'value': float(row[formula_col])
-                    })
+            # Align formula data with price dates for proper synchronization
+            if not price_df.empty:
+                # Use price dates and align COT data - same as COT subplot
+                for _, price_row in price_df.iterrows():
+                    date = price_row['date']
+                    # Find matching COT data for this date
+                    cot_row = df[df['report_date_as_yyyy_mm_dd'] <= date].iloc[-1] if not df[df['report_date_as_yyyy_mm_dd'] <= date].empty else None
+
+                    if cot_row is not None and pd.notna(cot_row[formula_col]) and not np.isinf(cot_row[formula_col]):
+                        formulaData[formula_col].append({
+                            'time': date.strftime('%Y-%m-%d'),
+                            'value': float(cot_row[formula_col])
+                        })
+            else:
+                # Fallback to COT dates if no price data
+                for _, row in df.iterrows():
+                    if pd.notna(row[formula_col]) and not np.isinf(row[formula_col]):
+                        formulaData[formula_col].append({
+                            'time': row['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'),
+                            'value': float(row[formula_col])
+                        })
 
         # Define colors for formulas
         formula_colors = {
@@ -400,7 +417,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
 
         # Create formula subplot
         formulaChart = {
-            "height": 200,
+            "height": 350,
             "layout": {
                 "background": {
                     "type": 'solid',
@@ -427,6 +444,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                 "borderColor": 'rgba(197, 203, 206, 0.8)',
                 "timeVisible": False,
                 "visible": True,
+                "sharedTimeScale": True,
             }
         }
 
