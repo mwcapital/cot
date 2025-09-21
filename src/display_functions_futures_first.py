@@ -572,9 +572,9 @@ def display_share_of_oi(df, instrument_name):
     if side_selection == "Long Positions":
         # Calculate long side percentages
         df_oi['noncomm_pct'] = (df['noncomm_positions_long_all'] / df['open_interest_all']) * 100
-        df_oi['spread_pct'] = (df['noncomm_postions_spread_all'] / df['open_interest_all']) * 100
+        df_oi['spread_pct'] = (df['noncomm_positions_spread_all'] / df['open_interest_all']) * 100
         df_oi['comm_pct'] = (df['comm_positions_long_all'] / df['open_interest_all']) * 100
-        df_oi['nonrep_pct'] = (df['nonrep_positions_long_all'] / df['open_interest_all']) * 100
+        df_oi['nonrep_pct'] = (df['nonrept_positions_long_all'] / df['open_interest_all']) * 100
 
         title_suffix = "Long Positions"
         colors = {
@@ -586,9 +586,9 @@ def display_share_of_oi(df, instrument_name):
     else:
         # Calculate short side percentages
         df_oi['noncomm_pct'] = (df['noncomm_positions_short_all'] / df['open_interest_all']) * 100
-        df_oi['spread_pct'] = (df['noncomm_postions_spread_all'] / df['open_interest_all']) * 100
+        df_oi['spread_pct'] = (df['noncomm_positions_spread_all'] / df['open_interest_all']) * 100
         df_oi['comm_pct'] = (df['comm_positions_short_all'] / df['open_interest_all']) * 100
-        df_oi['nonrep_pct'] = (df['nonrep_positions_short_all'] / df['open_interest_all']) * 100
+        df_oi['nonrep_pct'] = (df['nonrept_positions_short_all'] / df['open_interest_all']) * 100
 
         title_suffix = "Short Positions"
         colors = {
