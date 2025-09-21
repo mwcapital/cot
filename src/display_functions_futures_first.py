@@ -102,13 +102,51 @@ def display_cot_time_series_with_price(df, instrument_name):
                 if st.checkbox(display_name, key=f"ts_{col_name}"):
                     selected_columns.append((col_name, display_name))
 
+    # Add separator before formula options
+    st.markdown("---")
+
+    # Add third category - Custom Formulas
+    st.markdown("#### Select custom formulas to plot:")
+
+    col1_formula, col2_formula = st.columns(2)
+    selected_formulas = []
+
+    with col1_formula:
+        if st.checkbox("NC_NET / OI × 100", key="formula_nc_oi"):
+            selected_formulas.append(("nc_net_oi_ratio", "NC_NET/OI%"))
+        if st.checkbox("NC_LONG / NC_SHORT", key="formula_nc_ratio"):
+            selected_formulas.append(("nc_long_short_ratio", "NC L/S Ratio"))
+
+    with col2_formula:
+        if st.checkbox("C_NET / OI × 100", key="formula_c_oi"):
+            selected_formulas.append(("c_net_oi_ratio", "C_NET/OI%"))
+        if st.checkbox("NC_NET / C_NET", key="formula_nc_c"):
+            selected_formulas.append(("nc_c_net_ratio", "NC/C NET"))
+
+    # Calculate formula values if needed
+    if selected_formulas:
+        # Calculate net positions first
+        df['net_noncommercial'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
+        df['net_commercial'] = df['comm_positions_long_all'] - df['comm_positions_short_all']
+
+        # Calculate each formula
+        for formula_col, _ in selected_formulas:
+            if formula_col == "nc_net_oi_ratio":
+                df[formula_col] = (df['net_noncommercial'] / df['open_interest_all']) * 100
+            elif formula_col == "c_net_oi_ratio":
+                df[formula_col] = (df['net_commercial'] / df['open_interest_all']) * 100
+            elif formula_col == "nc_long_short_ratio":
+                df[formula_col] = df['noncomm_positions_long_all'] / df['noncomm_positions_short_all'].replace(0, np.nan)
+            elif formula_col == "nc_c_net_ratio":
+                df[formula_col] = df['net_noncommercial'] / df['net_commercial'].replace(0, np.nan)
+
     # Add separator before charts
     st.markdown("---")
 
     # Display synchronized multi-pane chart
-    display_synchronized_charts(df, instrument_name, price_adjustment_code, selected_columns)
+    display_synchronized_charts(df, instrument_name, price_adjustment_code, selected_columns, selected_formulas)
 
-def display_synchronized_charts(df, instrument_name, price_adjustment, selected_columns):
+def display_synchronized_charts(df, instrument_name, price_adjustment, selected_columns, selected_formulas=None):
     """Display price chart with synchronized COT data subplots"""
 
     # Extract instrument name without COT code
@@ -192,6 +230,10 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
         "rightPriceScale": {
             "borderColor": 'rgba(197, 203, 206, 0.8)',
             "visible": True,
+            "scaleMargins": {
+                "top": 0.1,
+                "bottom": 0.2,
+            },
         },
         "timeScale": {
             "borderColor": 'rgba(197, 203, 206, 0.8)',
@@ -300,6 +342,10 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
             "rightPriceScale": {
                 "borderColor": 'rgba(197, 203, 206, 0.8)',
                 "visible": True,
+                "scaleMargins": {
+                    "top": 0.1,
+                    "bottom": 0.1,
+                },
             },
             "timeScale": {
                 "borderColor": 'rgba(197, 203, 206, 0.8)',
@@ -327,6 +373,82 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
             charts.append({
                 "chart": cotChart,
                 "series": cotSeries
+            })
+
+    # Add third subplot for custom formulas if selected
+    if selected_formulas:
+        formulaData = {}
+
+        for formula_col, display_name in selected_formulas:
+            formulaData[formula_col] = []
+
+            # Use COT data dates for formulas
+            for _, row in df.iterrows():
+                if pd.notna(row[formula_col]) and not np.isinf(row[formula_col]):
+                    formulaData[formula_col].append({
+                        'time': row['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'),
+                        'value': float(row[formula_col])
+                    })
+
+        # Define colors for formulas
+        formula_colors = {
+            "nc_net_oi_ratio": "#FF69B4",
+            "c_net_oi_ratio": "#DDA0DD",
+            "nc_long_short_ratio": "#DA70D6",
+            "nc_c_net_ratio": "#FF1493"
+        }
+
+        # Create formula subplot
+        formulaChart = {
+            "height": 200,
+            "layout": {
+                "background": {
+                    "type": 'solid',
+                    "color": 'white'
+                },
+                "textColor": '#333',
+            },
+            "grid": {
+                "vertLines": {
+                    "color": 'rgba(197, 203, 206, 0.5)',
+                },
+                "horzLines": {
+                    "color": 'rgba(197, 203, 206, 0.5)',
+                }
+            },
+            "crosshair": {
+                "mode": 1
+            },
+            "rightPriceScale": {
+                "borderColor": 'rgba(197, 203, 206, 0.8)',
+                "visible": True,
+            },
+            "timeScale": {
+                "borderColor": 'rgba(197, 203, 206, 0.8)',
+                "timeVisible": False,
+                "visible": True,
+            }
+        }
+
+        formulaSeries = []
+        for formula_col, display_name in selected_formulas:
+            if formulaData[formula_col]:
+                formulaSeries.append({
+                    "type": 'Line',
+                    "data": formulaData[formula_col],
+                    "options": {
+                        "color": formula_colors.get(formula_col, '#000000'),
+                        "lineWidth": 2,
+                        "title": display_name,
+                        "priceLineVisible": False,
+                        "lastValueVisible": True,
+                    }
+                })
+
+        if formulaSeries:
+            charts.append({
+                "chart": formulaChart,
+                "series": formulaSeries
             })
 
     # Render all charts with synchronization
