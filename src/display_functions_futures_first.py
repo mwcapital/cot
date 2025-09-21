@@ -170,6 +170,9 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
             display_cot_only_charts(df, selected_columns)
         return
 
+    # Display the full instrument name as title above charts
+    st.markdown(f"### {instrument_name} - {symbol} ({price_adjustment})")
+
     # USE THE UNIFIED VERSION FOR PERFECT ALIGNMENT
     use_unified = st.checkbox("Use unified chart (single container)", value=False, key="use_unified_chart")
 
@@ -258,12 +261,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
             "lockVisibleTimeRangeOnResize": True,
         },
         "watermark": {
-            "color": 'rgba(0, 0, 0, 0.1)',
-            "visible": True,
-            "text": f'{symbol} {price_adjustment}',
-            "fontSize": 24,
-            "horzAlign": 'center',
-            "vertAlign": 'center',
+            "visible": False,  # Hide watermark since title is shown above
         }
     }
 
