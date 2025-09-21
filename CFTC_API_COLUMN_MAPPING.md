@@ -2,174 +2,210 @@
 
 ## CRITICAL: Use these EXACT column names from the CFTC API
 
-### Core Position Columns
-```json
-{
-  "positions": {
-    "noncommercial_long": "noncomm_positions_long_all",
-    "noncommercial_short": "noncomm_positions_short_all",
-    "noncommercial_spreading": "noncomm_positions_spread_all",
-    "commercial_long": "comm_positions_long_all",
-    "commercial_short": "comm_positions_short_all",
-    "nonreportable_long": "nonrept_positions_long_all",
-    "nonreportable_short": "nonrept_positions_short_all",
-    "total_reportable_long": "tot_rept_positions_long_all",
-    "total_reportable_short": "tot_rept_positions_short_all"
-  }
-}
+### Complete Column Mapping
+This is the authoritative list of all CFTC API column names with their actual API field names (left) and display names (right).
+
+```
+id                                  ID
+market_and_exchange_names           Market_and_Exchange_Names
+report_date_as_yyyy_mm_dd          Report_Date_as_YYYY_MM_DD
+yyyy_report_week_ww                YYYY Report Week WW
+contract_market_name               CONTRACT_MARKET_NAME
+cftc_contract_market_code          CFTC_Contract_Market_Code
+cftc_market_code                   CFTC_Market_Code
+cftc_region_code                   CFTC_Region_Code
+cftc_commodity_code                CFTC_Commodity_Code
+commodity_name                     Commodity Name
 ```
 
-### Open Interest
-```json
-{
-  "open_interest": {
-    "total": "open_interest_all",
-    "old": "open_interest_old",
-    "other": "open_interest_other"
-  }
-}
+### Core Position Columns
+```
+open_interest_all                  Open_Interest_All
+noncomm_positions_long_all         NonComm_Positions_Long_All
+noncomm_positions_short_all        NonComm_Positions_Short_All
+noncomm_postions_spread_all        NonComm_Postions_Spread_All        # Note: API has typo "postions"
+comm_positions_long_all            Comm_Positions_Long_All
+comm_positions_short_all           Comm_Positions_Short_All
+tot_rept_positions_long_all        Tot_Rept_Positions_Long_All
+tot_rept_positions_short            Tot_Rept_Positions_Short_All
+nonrept_positions_long_all         NonRept_Positions_Long_All
+nonrept_positions_short_all        NonRept_Positions_Short_All
+```
+
+### Old Positions
+```
+open_interest_old                  Open_Interest_Old
+noncomm_positions_long_old         NonComm_Positions_Long_Old
+noncomm_positions_short_old        NonComm_Positions_Short_Old
+noncomm_positions_spread           NonComm_Positions_Spread_Old
+comm_positions_long_old            Comm_Positions_Long_Old
+comm_positions_short_old           Comm_Positions_Short_Old
+tot_rept_positions_long_old        Tot_Rept_Positions_Long_Old
+tot_rept_positions_short_1         Tot_Rept_Positions_Short_Old
+nonrept_positions_long_old         NonRept_Positions_Long_Old
+nonrept_positions_short_old        NonRept_Positions_Short_Old
+```
+
+### Other Positions
+```
+open_interest_other                Open_Interest_Other
+noncomm_positions_long_other       NonComm_Positions_Long_Other
+noncomm_positions_short_other      NonComm_Positions_Short_Other
+noncomm_positions_spread_1         NonComm_Positions_Spread_Other
+comm_positions_long_other          Comm_Positions_Long_Other
+comm_positions_short_other         Comm_Positions_Short_Other
+tot_rept_positions_long_other      Tot_Rept_Positions_Long_Other
+tot_rept_positions_short_2         Tot_Rept_Positions_Short_Other
+nonrept_positions_long_other       NonRept_Positions_Long_Other
+nonrept_positions_short_other      NonRept_Positions_Short_Other
 ```
 
 ### Change Columns
-```json
-{
-  "changes": {
-    "open_interest": "change_in_open_interest_all",
-    "noncomm_long": "change_in_noncomm_long_all",
-    "noncomm_short": "change_in_noncomm_short_all",
-    "noncomm_spread": "change_in_noncomm_spead_all",
-    "comm_long": "change_in_comm_long_all",
-    "comm_short": "change_in_comm_short_all",
-    "tot_rept_long": "change_in_tot_rept_long_all",
-    "tot_rept_short": "change_in_tot_rept_short",
-    "nonrept_long": "change_in_nonrept_long_all",
-    "nonrept_short": "change_in_nonrept_short_all"
-  }
-}
+```
+change_in_open_interest_all        Change_in_Open_Interest_All
+change_in_noncomm_long_all         Change_in_NonComm_Long_All
+change_in_noncomm_short_all        Change_in_NonComm_Short_All
+change_in_noncomm_spead_all        Change_in_NonComm_Spead_All        # Note: API has typo "spead"
+change_in_comm_long_all            Change_in_Comm_Long_All
+change_in_comm_short_all           Change_in_Comm_Short_All
+change_in_tot_rept_long_all        Change_in_Tot_Rept_Long_All
+change_in_tot_rept_short           Change_in_Tot_Rept_Short_All
+change_in_nonrept_long_all         Change_in_NonRept_Long_All
+change_in_nonrept_short_all        Change_in_NonRept_Short_All
 ```
 
-### Percentage of Open Interest
-```json
-{
-  "pct_of_oi": {
-    "noncomm_long": "pct_of_oi_noncomm_long_all",
-    "noncomm_short": "pct_of_oi_noncomm_short_all",
-    "noncomm_spread": "pct_of_oi_noncomm_spread",
-    "comm_long": "pct_of_oi_comm_long_all",
-    "comm_short": "pct_of_oi_comm_short_all",
-    "tot_rept_long": "pct_of_oi_tot_rept_long_all",
-    "tot_rept_short": "pct_of_oi_tot_rept_short",
-    "nonrept_long": "pct_of_oi_nonrept_long_all",
-    "nonrept_short": "pct_of_oi_nonrept_short_all"
-  }
-}
+### Percentage of Open Interest - All
+```
+pct_of_open_interest_all           Pct_of_Open_Interest_All
+pct_of_oi_noncomm_long_all         Pct_of_OI_NonComm_Long_All
+pct_of_oi_noncomm_short_all        Pct_of_OI_NonComm_Short_All
+pct_of_oi_noncomm_spread           Pct_of_OI_NonComm_Spread_All
+pct_of_oi_comm_long_all            Pct_of_OI_Comm_Long_All
+pct_of_oi_comm_short_all           Pct_of_OI_Comm_Short_All
+pct_of_oi_tot_rept_long_all        Pct_of_OI_Tot_Rept_Long_All
+pct_of_oi_tot_rept_short           Pct_of_OI_Tot_Rept_Short_All
+pct_of_oi_nonrept_long_all         Pct_of_OI_NonRept_Long_All
+pct_of_oi_nonrept_short_all        Pct_of_OI_NonRept_Short_All
 ```
 
-### Trader Counts
-```json
-{
-  "traders": {
-    "total_all": "traders_tot_all",
-    "noncomm_long": "traders_noncomm_long_all",
-    "noncomm_short": "traders_noncomm_short_all",
-    "noncomm_spread": "traders_noncomm_spread_all",
-    "comm_long": "traders_comm_long_all",
-    "comm_short": "traders_comm_short_all",
-    "tot_rept_long": "traders_tot_rept_long_all",
-    "tot_rept_short": "traders_tot_rept_short_all"
-  }
-}
+### Percentage of Open Interest - Old
+```
+pct_of_open_interest_old           Pct_of_Open_Interest_Old
+pct_of_oi_noncomm_long_old         Pct_of_OI_NonComm_Long_Old
+pct_of_oi_noncomm_short_old        Pct_of_OI_NonComm_Short_Old
+pct_of_oi_noncomm_spread_1         Pct_of_OI_NonComm_Spread_Old
+pct_of_oi_comm_long_old            Pct_of_OI_Comm_Long_Old
+pct_of_oi_comm_short_old           Pct_of_OI_Comm_Short_Old
+pct_of_oi_tot_rept_long_old        Pct_of_OI_Tot_Rept_Long_Old
+pct_of_oi_tot_rept_short_1         Pct_of_OI_Tot_Rept_Short_Old
+pct_of_oi_nonrept_long_old         Pct_of_OI_NonRept_Long_Old
+pct_of_oi_nonrept_short_old        Pct_of_OI_NonRept_Short_Old
 ```
 
-### Concentration Ratios
-```json
-{
-  "concentration": {
-    "gross_le_4_long": "conc_gross_le_4_tdr_long",
-    "gross_le_4_short": "conc_gross_le_4_tdr_short",
-    "gross_le_8_long": "conc_gross_le_8_tdr_long",
-    "gross_le_8_short": "conc_gross_le_8_tdr_short",
-    "net_le_4_long": "conc_net_le_4_tdr_long_all",
-    "net_le_4_short": "conc_net_le_4_tdr_short_all",
-    "net_le_8_long": "conc_net_le_8_tdr_long_all",
-    "net_le_8_short": "conc_net_le_8_tdr_short_all"
-  }
-}
+### Percentage of Open Interest - Other
+```
+pct_of_open_interest_other         Pct_of_Open_Interest_Other
+pct_of_oi_noncomm_long_other       Pct_of_OI_NonComm_Long_Other
+pct_of_oi_noncomm_short_other      Pct_of_OI_NonComm_Short_Other
+pct_of_oi_noncomm_spread_2         Pct_of_OI_NonComm_Spread_Other
+pct_of_oi_comm_long_other          Pct_of_OI_Comm_Long_Other
+pct_of_oi_comm_short_other         Pct_of_OI_Comm_Short_Other
+pct_of_oi_tot_rept_long_other      Pct_of_OI_Tot_Rept_Long_Other
+pct_of_oi_tot_rept_short_2         Pct_of_OI_Tot_Rept_Short_Other
+pct_of_oi_nonrept_long_other       Pct_of_OI_NonRept_Long_Other
+pct_of_oi_nonrept_short_other      Pct_of_OI_NonRept_Short_Other
+```
+
+### Trader Counts - All
+```
+traders_tot_all                    Traders_Tot_All
+traders_noncomm_long_all           Traders_NonComm_Long_All
+traders_noncomm_short_all          Traders_NonComm_Short_All
+traders_noncomm_spread_all         Traders_NonComm_Spread_All
+traders_comm_long_all              Traders_Comm_Long_All
+traders_comm_short_all             Traders_Comm_Short_All
+traders_tot_rept_long_all          Traders_Tot_Rept_Long_All
+traders_tot_rept_short_all         Traders_Tot_Rept_Short_All
+```
+
+### Trader Counts - Old
+```
+traders_tot_old                    Traders_Tot_Old
+traders_noncomm_long_old           Traders_NonComm_Long_Old
+traders_noncomm_short_old          Traders_NonComm_Short_Old
+traders_noncomm_spead_old          Traders_NonComm_Spead_Old          # Note: API has typo "spead"
+traders_comm_long_old              Traders_Comm_Long_Old
+traders_comm_short_old             Traders_Comm_Short_Old
+traders_tot_rept_long_old          Traders_Tot_Rept_Long_Old
+traders_tot_rept_short_old         Traders_Tot_Rept_Short_Old
+```
+
+### Trader Counts - Other
+```
+traders_tot_other                  Traders_Tot_Other
+traders_noncomm_long_other         Traders_NonComm_Long_Other
+traders_noncomm_short_other        Traders_NonComm_Short_Other
+traders_noncomm_spread_other       Traders_NonComm_Spread_Other
+traders_comm_long_other            Traders_Comm_Long_Other
+traders_comm_short_other           Traders_Comm_Short_Other
+traders_tot_rept_long_other        Traders_Tot_Rept_Long_Other
+traders_tot_rept_short_other       Traders_Tot_Rept_Short_Other
+```
+
+### Concentration Ratios - All
+```
+conc_gross_le_4_tdr_long           Conc_Gross_LE_4_TDR_Long_All
+conc_gross_le_4_tdr_short          Conc_Gross_LE_4_TDR_Short_All
+conc_gross_le_8_tdr_long           Conc_Gross_LE_8_TDR_Long_All
+conc_gross_le_8_tdr_short          Conc_Gross_LE_8_TDR_Short_All
+conc_net_le_4_tdr_long_all         Conc_Net_LE_4_TDR_Long_All
+conc_net_le_4_tdr_short_all        Conc_Net_LE_4_TDR_Short_All
+conc_net_le_8_tdr_long_all         Conc_Net_LE_8_TDR_Long_All
+conc_net_le_8_tdr_short_all        Conc_Net_LE_8_TDR_Short_All
+```
+
+### Concentration Ratios - Old
+```
+conc_gross_le_4_tdr_long_1         Conc_Gross_LE_4_TDR_Long_Old
+conc_gross_le_4_tdr_short_1        Conc_Gross_LE_4_TDR_Short_Old
+conc_gross_le_8_tdr_long_1         Conc_Gross_LE_8_TDR_Long_Old
+conc_gross_le_8_tdr_short_1        Conc_Gross_LE_8_TDR_Short_Old
+conc_net_le_4_tdr_long_old         Conc_Net_LE_4_TDR_Long_Old
+conc_net_le_4_tdr_short_old        Conc_Net_LE_4_TDR_Short_Old
+conc_net_le_8_tdr_long_old         Conc_Net_LE_8_TDR_Long_Old
+conc_net_le_8_tdr_short_old        Conc_Net_LE_8_TDR_Short_Old
+```
+
+### Concentration Ratios - Other
+```
+conc_gross_le_4_tdr_long_2         Conc_Gross_LE_4_TDR_Long_Other
+conc_gross_le_4_tdr_short_2        Conc_Gross_LE_4_TDR_Short_Other
+conc_gross_le_8_tdr_long_2         Conc_Gross_LE_8_TDR_Long_Other
+conc_gross_le_8_tdr_short_2        Conc_Gross_LE_8_TDR_Short_Other
+conc_net_le_4_tdr_long_other       Conc_Net_LE_4_TDR_Long_Other
+conc_net_le_4_tdr_short_other      Conc_Net_LE_4_TDR_Short_Other
+conc_net_le_8_tdr_long_other       Conc_Net_LE_8_TDR_Long_Other
+conc_net_le_8_tdr_short_other      Conc_Net_LE_8_TDR_Short_Other
 ```
 
 ### Metadata Columns
-```json
-{
-  "metadata": {
-    "market_name": "market_and_exchange_names",
-    "report_date": "report_date_as_yyyy_mm_dd",
-    "report_week": "yyyy_report_week_ww",
-    "contract_market": "contract_market_name",
-    "contract_code": "cftc_contract_market_code",
-    "market_code": "cftc_market_code",
-    "region_code": "cftc_region_code",
-    "commodity_code": "cftc_commodity_code",
-    "commodity_name": "commodity_name",
-    "commodity_subgroup": "commodity_subgroup_name",
-    "commodity_group": "commodity_group_name",
-    "contract_units": "contract_units",
-    "futures_only_or_combined": "futonly_or_combined"
-  }
-}
+```
+contract_units                     Contract_Units
+commodity                          COMMODITY_NAME
+commodity_subgroup_name            COMMODITY_SUBGROUP_NAME
+commodity_group_name               COMMODITY_GROUP_NAME
+futonly_or_combined               FutOnly_or_Combined
 ```
 
-## CALCULATED FIELDS (Not in API, must be computed)
-```json
-{
-  "calculated": {
-    "net_commercial": "comm_positions_long_all - comm_positions_short_all",
-    "net_noncommercial": "noncomm_positions_long_all - noncomm_positions_short_all",
-    "net_nonreportable": "nonrept_positions_long_all - nonrept_positions_short_all"
-  }
-}
-```
+## Important Notes
 
-## Common Mistakes to AVOID
-❌ WRONG: `noncommercial_positions_long_all`
-✅ CORRECT: `noncomm_positions_long_all`
+1. **API Typos**: The CFTC API contains several typos that must be used exactly as they appear:
+   - `noncomm_postions_spread_all` (missing 'i' in positions)
+   - `change_in_noncomm_spead_all` (typo: "spead" instead of "spread")
+   - `traders_noncomm_spead_old` (typo: "spead" instead of "spread")
 
-❌ WRONG: `commercial_positions_long_all`
-✅ CORRECT: `comm_positions_long_all`
+2. **Numeric Suffixes**: Some columns have numeric suffixes (_1, _2) instead of descriptive names for old/other categories
 
-❌ WRONG: `nonreportable_positions_long_all`
-✅ CORRECT: `nonrept_positions_long_all`
+3. **Inconsistent Naming**: Some "short" columns are missing "_all" suffix (e.g., `tot_rept_positions_short` instead of `tot_rept_positions_short_all`)
 
-❌ WRONG: `noncommercial_positions_spreading_all`
-✅ CORRECT: `noncomm_positions_spread_all` (no 'ing')
-
-❌ WRONG: `change_in_noncomm_spread_all`
-✅ CORRECT: `change_in_noncomm_spead_all` (yes, 'spead' is the actual API typo!)
-
-## Usage in Code
-```python
-# For checkbox selections in UI
-selected_series = []
-if st.checkbox("Non-Commercial Long"):
-    selected_series.append("noncomm_positions_long_all")  # NOT "noncommercial_..."
-
-if st.checkbox("Commercial Long"):
-    selected_series.append("comm_positions_long_all")  # NOT "commercial_..."
-
-# For calculated net positions
-df['net_commercial'] = df['comm_positions_long_all'] - df['comm_positions_short_all']
-df['net_noncommercial'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
-```
-
-## Quick Reference for Display Functions
-| UI Display Name | API Column Name | Type |
-|-----------------|-----------------|------|
-| Non-Commercial Long | noncomm_positions_long_all | Direct |
-| Non-Commercial Short | noncomm_positions_short_all | Direct |
-| Commercial Long | comm_positions_long_all | Direct |
-| Commercial Short | comm_positions_short_all | Direct |
-| Non-Commercial Net | net_noncommercial | Calculated |
-| Commercial Net | net_commercial | Calculated |
-| Open Interest (COT) | open_interest_all | Direct |
-| Non-Reportable Long | nonrept_positions_long_all | Direct |
-| Non-Reportable Short | nonrept_positions_short_all | Direct |
-| Non-Commercial Spreading | noncomm_positions_spread_all | Direct |
+4. **Always use the left column (API field name) in your code**, not the display name on the right
