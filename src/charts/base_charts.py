@@ -198,21 +198,70 @@ def create_plotly_chart(df, selected_columns, chart_title):
             showlegend=True
         )
 
-        # Add range selector
+        # Add range selector with fixed date ranges
+        from datetime import datetime, timedelta
+        
+        # Get actual data date range
+        latest_date = df['report_date_as_yyyy_mm_dd'].max()
+        earliest_date = df['report_date_as_yyyy_mm_dd'].min()
+        
+        # Calculate YTD start date
+        ytd_start = pd.Timestamp(datetime(latest_date.year, 1, 1))
+        if ytd_start < earliest_date:
+            ytd_start = earliest_date
+            
+        # Calculate 1Y, 2Y, 5Y ago from latest date
+        one_year_ago = latest_date - pd.DateOffset(years=1)
+        if one_year_ago < earliest_date:
+            one_year_ago = earliest_date
+            
+        two_years_ago = latest_date - pd.DateOffset(years=2)
+        if two_years_ago < earliest_date:
+            two_years_ago = earliest_date
+            
+        five_years_ago = latest_date - pd.DateOffset(years=5)
+        if five_years_ago < earliest_date:
+            five_years_ago = earliest_date
+        
         fig.update_layout(
             xaxis=dict(
                 rangeselector=dict(
                     buttons=list([
-                        dict(count=1, label="YTD", step="year", stepmode="todate"),
-                        dict(count=1, label="1Y", step="year", stepmode="backward"),
-                        dict(count=2, label="2Y", step="year", stepmode="backward"),
-                        dict(count=5, label="5Y", step="year", stepmode="backward"),
-                        dict(step="all", label="All")
+                        dict(count=6,
+                             label="6M",
+                             step="month",
+                             stepmode="backward"),
+                        dict(count=1,
+                             label="YTD",
+                             step="year",
+                             stepmode="todate"),
+                        dict(count=1,
+                             label="1Y",
+                             step="year",
+                             stepmode="backward"),
+                        dict(count=2,
+                             label="2Y",
+                             step="year",
+                             stepmode="backward"),
+                        dict(count=5,
+                             label="5Y",
+                             step="year",
+                             stepmode="backward"),
+                        dict(step="all",
+                             label="All")
                     ])
                 ),
                 rangeslider=dict(visible=True),
-                type="date"
+                type="date",
+                # Constrain to actual data range
+                range=[earliest_date, latest_date]
             )
+        )
+        
+        # Ensure the chart doesn't show future dates
+        fig.update_xaxes(
+            range=[earliest_date, latest_date],
+            rangemode="normal"
         )
 
         # Enable dynamic y-axis scaling

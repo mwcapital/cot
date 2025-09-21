@@ -147,7 +147,7 @@ def handle_single_instrument_flow(chart_type, instruments_db, api_token):
     if st.session_state.data_fetched and st.session_state.fetched_data is not None:
         df = st.session_state.fetched_data
         st.markdown("---")
-        
+
         # Display chart based on pre-selected chart type
         if chart_type == "Time Series":
             display_time_series_chart(df, selected_instrument)
@@ -174,8 +174,42 @@ def main():
     if 'fetched_instruments_multi' not in st.session_state:
         st.session_state.fetched_instruments_multi = []
     
-    st.title("📊 CFTC Commitments of Traders Dashboard")
+    st.title("CFTC Commitments of Traders Dashboard")
     st.markdown("Interactive analysis of CFTC COT data")
+    
+    # Add Stephen Briese quote
+    st.markdown("""
+    <div style="
+        background-color: #f0f2f6;
+        padding: 20px;
+        border-left: 4px solid #1f77b4;
+        margin: 20px 0;
+        border-radius: 5px;
+    ">
+        <p style="
+            font-style: italic;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #333;
+            margin: 0 0 10px 0;
+        ">
+            "In a letter to the Commission dated August 26, 2006, the International Swap and Derivatives Association objected 
+            on behalf of its '725 member institutions,' noting that 'Market participants, including speculators, with such 
+            information on non-traditional commercial trends, would gain a competitive advantage allowing them to trade ahead 
+            of the swap dealers.' If the largest derivative traders in the world are afraid of your having access to this 
+            intelligence, you had better take notice."
+        </p>
+        <p style="
+            text-align: right;
+            font-size: 14px;
+            color: #666;
+            margin: 0;
+            font-weight: 600;
+        ">
+            — Stephen Briese, <em>The Commitments of Traders Bible</em>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Load instruments database
     instruments_db = load_instruments_database()
@@ -183,7 +217,7 @@ def main():
         st.stop()
 
     # API Token Configuration
-    with st.expander("🔧 API Configuration", expanded=False):
+    with st.expander("API Configuration", expanded=False):
         api_token = st.text_input(
             "API Token (optional):",
             value="3CKjkFN6jIIHgSkIJH19i7VhK",  # Pre-filled for testing
@@ -192,14 +226,14 @@ def main():
         )
 
     st.markdown("---")
-    
+
     # Display Dashboard Overview
     display_dashboard(api_token)
-    
+
     st.markdown("---")
 
     # Chart Type Selection FIRST
-    st.header("📈 Select Analysis Type")
+    st.header("Select Analysis Type")
     
     col_single, col_multi = st.columns(2)
     

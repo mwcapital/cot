@@ -292,52 +292,56 @@ def display_time_series_chart_lwc(df, instrument_name, custom_formulas=None):
 
     # Render all charts with synchronization
     if charts_data:
-        # Add unique keys and sync options
-        for i, chart_data in enumerate(charts_data):
-            # Create container with specific styling
-            with st.container():
-                renderLightweightCharts(
-                    chart_data,
-                    f'chart_{i}_{instrument_name}'
-                )
+        # Combine all series into a single multi-series chart
+        all_chart_series = []
 
-        # JavaScript for synchronization
-        st.markdown("""
-        <script>
-        // Synchronize chart crosshairs and time scales
-        document.addEventListener('DOMContentLoaded', function() {
-            const charts = window.tvCharts || [];
-            if (charts.length > 1) {
-                let isSyncing = false;
+        for chart in charts_data:
+            all_chart_series.extend(chart.get('series', []))
 
-                charts.forEach((chart, index) => {
-                    // Sync crosshair position
-                    chart.subscribeCrosshairMove((param) => {
-                        if (!isSyncing) {
-                            isSyncing = true;
-                            charts.forEach((otherChart, otherIndex) => {
-                                if (otherIndex !== index) {
-                                    otherChart.setCrosshairPosition(param.point, param.time);
-                                }
-                            });
-                            isSyncing = false;
-                        }
-                    });
-
-                    // Sync visible range
-                    chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-                        if (!isSyncing) {
-                            isSyncing = true;
-                            charts.forEach((otherChart, otherIndex) => {
-                                if (otherIndex !== index) {
-                                    otherChart.timeScale().setVisibleLogicalRange(range);
-                                }
-                            });
-                            isSyncing = false;
-                        }
-                    });
-                });
+        if all_chart_series:
+            # Create a single combined chart configuration
+            combined_chart = {
+                'chart': {
+                    'height': 750,  # Total height for all panes
+                    'layout': {
+                        'background': {'color': 'transparent'},
+                        'textColor': '#DDD'
+                    },
+                    'grid': {
+                        'vertLines': {'color': '#444'},
+                        'horzLines': {'color': '#444'}
+                    },
+                    'crosshair': {
+                        'mode': 0
+                    },
+                    'rightPriceScale': {
+                        'borderColor': '#71649C'
+                    },
+                    'leftPriceScale': {
+                        'visible': True,
+                        'borderColor': '#71649C'
+                    },
+                    'timeScale': {
+                        'borderColor': '#71649C',
+                        'timeVisible': True
+                    }
+                },
+                'series': all_chart_series
             }
-        });
-        </script>
-        """, unsafe_allow_html=True)
+
+            # Debug: Show what we're trying to render
+            with st.expander("Debug Chart Data", expanded=False):
+                st.json({
+                    "num_series": len(all_chart_series),
+                    "series_types": [s.get('type') for s in all_chart_series],
+                    "data_points": [len(s.get('data', [])) for s in all_chart_series]
+                })
+
+            try:
+                renderLightweightCharts(
+                    combined_chart,
+                    f'chart_{instrument_name}'
+                )
+            except Exception as e:
+                st.error(f"Chart rendering error: {str(e)}")
+                st.write("Chart data structure:", combined_chart)

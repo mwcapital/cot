@@ -9,34 +9,39 @@ from data_fetcher import fetch_cftc_data_ytd_only
 import plotly.graph_objects as go
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Define key instruments for dashboard
+# Define key instruments for dashboard with color groups
 KEY_INSTRUMENTS = {
     "Energy": [
-        "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE (067651)",
-        "HENRY HUB - NEW YORK MERCANTILE EXCHANGE (03565B)",
-        "GASOLINE RBOB - NEW YORK MERCANTILE EXCHANGE (111659)",
-        "MARINE FUEL OIL 0.5% FOB USGC - ICE FUTURES ENERGY DIV (021397)",
-        "ETHANOL - NEW YORK MERCANTILE EXCHANGE (025651)",
-        "FUEL OIL USGC HSFO PLATTS BALM - ICE FUTURES ENERGY DIV (021391)",
+        "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE (067651)",  # CL - WTI Oil
+        "HENRY HUB - NEW YORK MERCANTILE EXCHANGE (03565B)",  # NG - Natural Gas
+        "GASOLINE RBOB - NEW YORK MERCANTILE EXCHANGE (111659)",  # RBE - Gasoline
+        # Note: Heating Oil and TTF Dutch not found in available instruments
+        # Note: Brent futures may be under different contract code
     ],
-    "Precious Metals": [
-        "GOLD - COMMODITY EXCHANGE INC. (088691)",
-        "SILVER - COMMODITY EXCHANGE INC. (084691)",
-        "PLATINUM - NEW YORK MERCANTILE EXCHANGE (076651)",
-    ],
-    "Base Metals": [
-        "COPPER- #1 - COMMODITY EXCHANGE INC. (085692)",
-        "ALUMINUM - COMMODITY EXCHANGE INC. (191691)",
+    "Metals": [
+        "GOLD - COMMODITY EXCHANGE INC. (088691)",  # GC - Gold
+        "SILVER - COMMODITY EXCHANGE INC. (084691)",  # SI - Silver
+        "COPPER- #1 - COMMODITY EXCHANGE INC. (085692)",  # HG - High Grade Copper
+        "PLATINUM - NEW YORK MERCANTILE EXCHANGE (076651)",  # PL - Platinum
+        "PALLADIUM - NEW YORK MERCANTILE EXCHANGE (075651)",  # PA - Palladium
     ],
     "Agriculture": [
-        "CORN - CHICAGO BOARD OF TRADE (002602)",
-        "SOYBEANS - CHICAGO BOARD OF TRADE (005602)",
-        "WHEAT-HRSpring - MIAX FUTURES EXCHANGE (001626)",
+        "COFFEE C - ICE FUTURES U.S. (083731)",  # KC - Coffee
+        "COCOA - ICE FUTURES U.S. (073732)",  # CC - Cocoa
+        "CORN - CHICAGO BOARD OF TRADE (002602)",  # ZC - Corn
+        "SUGAR NO. 11 - ICE FUTURES U.S. (080732)",  # SB - Sugar No.11
+        "WHEAT-SRW - CHICAGO BOARD OF TRADE (001602)",  # ZW - Wheat (Soft Red Winter)
+        "SOYBEANS - CHICAGO BOARD OF TRADE (005602)",  # ZS - Soybeans
+        "SOYBEAN OIL - CHICAGO BOARD OF TRADE (007601)",  # ZL - Soybean Oil
+        "SOYBEAN MEAL - CHICAGO BOARD OF TRADE (026603)",  # ZM - Soybean Meal
     ],
-    "Softs": [
-        "COFFEE C - ICE FUTURES U.S. (083731)",
-        "SUGAR NO. 11 - ICE FUTURES U.S. (080732)",
-    ],
+}
+
+# Color mapping for each category
+CATEGORY_COLORS = {
+    "Energy": "#FF6B6B",  # Red
+    "Metals": "#4ECDC4",  # Teal
+    "Agriculture": "#95E77E",  # Green
 }
 
 
@@ -116,9 +121,33 @@ def fetch_single_instrument_data(category, instrument, api_token):
                 ytd_sparkline = ytd_sorted['net_noncomm_positions'].fillna(0).tolist()
             
             # Calculate metrics
+            # Extract ticker symbol from comments or use simplified name
+            ticker_map = {
+                "WTI-PHYSICAL": "CL",
+                "HENRY HUB": "NG",
+                "GASOLINE RBOB": "RB",
+                "GOLD": "GC",
+                "SILVER": "SI",
+                "COPPER- #1": "HG",
+                "PLATINUM": "PL",
+                "PALLADIUM": "PA",
+                "COFFEE C": "KC",
+                "COCOA": "CC",
+                "CORN": "ZC",
+                "SUGAR NO. 11": "SB",
+                "WHEAT-SRW": "ZW",
+                "SOYBEANS": "ZS",
+                "SOYBEAN OIL": "ZL",
+                "SOYBEAN MEAL": "ZM",
+            }
+            
+            instrument_name = instrument.split(' - ')[0]
+            ticker = ticker_map.get(instrument_name, instrument_name[:2].upper())
+            
             row_data = {
                 'Category': category,
-                'Instrument': instrument.split(' - ')[0],  # Simplified name
+                'Ticker': ticker,
+                'Instrument': instrument_name,  # Simplified name
                 
                 # Non-Commercial Net Positions
                 'NC Net Position': latest.get('net_noncomm_positions', np.nan),
@@ -207,7 +236,7 @@ def fetch_dashboard_data(api_token):
 
 def display_dashboard(api_token):
     """Display the main dashboard overview"""
-    st.header("📊 Commodity Markets Overview")
+    st.header("Commodity Markets Overview")
     
     # Fetch dashboard data
     with st.spinner("Loading market data..."):
@@ -241,6 +270,7 @@ def display_dashboard(api_token):
     # Configure column display with LineChartColumn for sparklines
     column_config = {
         "Category": st.column_config.TextColumn("Category", width="small"),
+        "Ticker": st.column_config.TextColumn("Ticker", width="small"),
         "Instrument": st.column_config.TextColumn("Instrument", width="medium"),
         "NC Net Position": st.column_config.TextColumn("NC Net", help="Non-Commercial Net Position"),
         "NC Net YTD %ile": st.column_config.TextColumn("YTD %", help="YTD Percentile"),
@@ -263,9 +293,22 @@ def display_dashboard(api_token):
         "Last Update": st.column_config.TextColumn("Updated", width="small"),
     }
     
-    # Display the dataframe with inline sparklines
+    # Sort by category to group them visually
+    display_df = display_df.sort_values('Category', ascending=True)
+    
+    # Apply row coloring based on category using pandas styler
+    def color_rows(row):
+        """Apply background color based on category"""
+        category = row['Category']
+        color = CATEGORY_COLORS.get(category, '#FFFFFF')
+        # Use light version of color with transparency
+        return [f'background-color: {color}20' for _ in row]
+    
+    # Use pandas styler for coloring
+    styled_df = display_df.style.apply(color_rows, axis=1)
+    
     st.dataframe(
-        display_df,
+        styled_df,
         column_config=column_config,
         use_container_width=True,
         hide_index=True,

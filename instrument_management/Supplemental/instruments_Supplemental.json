@@ -1,0 +1,172 @@
+{
+  "exchanges": {
+    "ICE": {
+      "AGRICULTURE": {
+        "FOODSTUFFS/SOFTS": {
+          "SUGAR": [
+            "SUGAR NO. 11 - ICE FUTURES U.S. (080732)"
+          ],
+          "COCOA": [
+            "COCOA - ICE FUTURES U.S. (073732)"
+          ],
+          "COFFEE": [
+            "COFFEE C - ICE FUTURES U.S. (083731)"
+          ]
+        },
+        "FIBER": {
+          "COTTON": [
+            "COTTON NO. 2 - ICE FUTURES U.S. (033661)"
+          ]
+        }
+      }
+    },
+    "CME": {
+      "AGRICULTURE": {
+        "LIVESTOCK/MEAT PRODUCTS": {
+          "LEAN HOGS": [
+            "LEAN HOGS - CHICAGO MERCANTILE EXCHANGE (054642)"
+          ],
+          "LIVE CATTLE": [
+            "LIVE CATTLE - CHICAGO MERCANTILE EXCHANGE (057642)"
+          ],
+          "FEEDER CATTLE": [
+            "FEEDER CATTLE - CHICAGO MERCANTILE EXCHANGE (061641)"
+          ]
+        }
+      }
+    },
+    "CBT": {
+      "AGRICULTURE": {
+        "GRAINS": {
+          "WHEAT": [
+            "WHEAT-HRW - CHICAGO BOARD OF TRADE (001612)",
+            "WHEAT-SRW - CHICAGO BOARD OF TRADE (001602)"
+          ],
+          "CORN": [
+            "CORN - CHICAGO BOARD OF TRADE (002602)"
+          ]
+        },
+        "OILSEED and PRODUCTS": {
+          "SOYBEANS": [
+            "SOYBEANS - CHICAGO BOARD OF TRADE (005602)"
+          ],
+          "SOYBEAN MEAL": [
+            "SOYBEAN MEAL - CHICAGO BOARD OF TRADE (026603)"
+          ],
+          "SOYBEAN OIL": [
+            "SOYBEAN OIL - CHICAGO BOARD OF TRADE (007601)"
+          ]
+        }
+      }
+    }
+  },
+  "commodity_groups": {
+    "AGRICULTURE": [
+      "COCOA - ICE FUTURES U.S. (073732)",
+      "COFFEE C - ICE FUTURES U.S. (083731)",
+      "CORN - CHICAGO BOARD OF TRADE (002602)",
+      "COTTON NO. 2 - ICE FUTURES U.S. (033661)",
+      "FEEDER CATTLE - CHICAGO MERCANTILE EXCHANGE (061641)",
+      "LEAN HOGS - CHICAGO MERCANTILE EXCHANGE (054642)",
+      "LIVE CATTLE - CHICAGO MERCANTILE EXCHANGE (057642)",
+      "SOYBEAN MEAL - CHICAGO BOARD OF TRADE (026603)",
+      "SOYBEAN OIL - CHICAGO BOARD OF TRADE (007601)",
+      "SOYBEANS - CHICAGO BOARD OF TRADE (005602)",
+      "SUGAR NO. 11 - ICE FUTURES U.S. (080732)",
+      "WHEAT-HRW - CHICAGO BOARD OF TRADE (001612)",
+      "WHEAT-SRW - CHICAGO BOARD OF TRADE (001602)"
+    ]
+  },
+  "commodity_subgroups": {
+    "FOODSTUFFS/SOFTS": [
+      "COCOA - ICE FUTURES U.S. (073732)",
+      "COFFEE C - ICE FUTURES U.S. (083731)",
+      "SUGAR NO. 11 - ICE FUTURES U.S. (080732)"
+    ],
+    "LIVESTOCK/MEAT PRODUCTS": [
+      "FEEDER CATTLE - CHICAGO MERCANTILE EXCHANGE (061641)",
+      "LEAN HOGS - CHICAGO MERCANTILE EXCHANGE (054642)",
+      "LIVE CATTLE - CHICAGO MERCANTILE EXCHANGE (057642)"
+    ],
+    "GRAINS": [
+      "CORN - CHICAGO BOARD OF TRADE (002602)",
+      "WHEAT-HRW - CHICAGO BOARD OF TRADE (001612)",
+      "WHEAT-SRW - CHICAGO BOARD OF TRADE (001602)"
+    ],
+    "FIBER": [
+      "COTTON NO. 2 - ICE FUTURES U.S. (033661)"
+    ],
+    "OILSEED and PRODUCTS": [
+      "SOYBEAN MEAL - CHICAGO BOARD OF TRADE (026603)",
+      "SOYBEAN OIL - CHICAGO BOARD OF TRADE (007601)",
+      "SOYBEANS - CHICAGO BOARD OF TRADE (005602)"
+    ]
+  },
+  "commodities": {
+    "SUGAR": [
+      "SUGAR NO. 11 - ICE FUTURES U.S. (080732)"
+    ],
+    "LEAN HOGS": [
+      "LEAN HOGS - CHICAGO MERCANTILE EXCHANGE (054642)"
+    ],
+    "LIVE CATTLE": [
+      "LIVE CATTLE - CHICAGO MERCANTILE EXCHANGE (057642)"
+    ],
+    "WHEAT": [
+      "WHEAT-HRW - CHICAGO BOARD OF TRADE (001612)",
+      "WHEAT-SRW - CHICAGO BOARD OF TRADE (001602)"
+    ],
+    "FEEDER CATTLE": [
+      "FEEDER CATTLE - CHICAGO MERCANTILE EXCHANGE (061641)"
+    ],
+    "COTTON": [
+      "COTTON NO. 2 - ICE FUTURES U.S. (033661)"
+    ],
+    "SOYBEANS": [
+      "SOYBEANS - CHICAGO BOARD OF TRADE (005602)"
+    ],
+    "SOYBEAN MEAL": [
+      "SOYBEAN MEAL - CHICAGO BOARD OF TRADE (026603)"
+    ],
+    "CORN": [
+      "CORN - CHICAGO BOARD OF TRADE (002602)"
+    ],
+    "COCOA": [
+      "COCOA - ICE FUTURES U.S. (073732)"
+    ],
+    "SOYBEAN OIL": [
+      "SOYBEAN OIL - CHICAGO BOARD OF TRADE (007601)"
+    ],
+    "COFFEE": [
+      "COFFEE C - ICE FUTURES U.S. (083731)"
+    ]
+  },
+  "all_instruments": [
+    "COCOA - ICE FUTURES U.S. (073732)",
+    "COFFEE C - ICE FUTURES U.S. (083731)",
+    "CORN - CHICAGO BOARD OF TRADE (002602)",
+    "COTTON NO. 2 - ICE FUTURES U.S. (033661)",
+    "FEEDER CATTLE - CHICAGO MERCANTILE EXCHANGE (061641)",
+    "LEAN HOGS - CHICAGO MERCANTILE EXCHANGE (054642)",
+    "LIVE CATTLE - CHICAGO MERCANTILE EXCHANGE (057642)",
+    "SOYBEAN MEAL - CHICAGO BOARD OF TRADE (026603)",
+    "SOYBEAN OIL - CHICAGO BOARD OF TRADE (007601)",
+    "SOYBEANS - CHICAGO BOARD OF TRADE (005602)",
+    "SUGAR NO. 11 - ICE FUTURES U.S. (080732)",
+    "WHEAT-HRW - CHICAGO BOARD OF TRADE (001612)",
+    "WHEAT-SRW - CHICAGO BOARD OF TRADE (001602)"
+  ],
+  "total_count": 13,
+  "exchanges_count": 3,
+  "groups_count": 1,
+  "subgroups_count": 5,
+  "commodities_count": 12,
+  "last_updated": "2025-09-09T21:22:21.156171",
+  "dataset_type": "Supplemental COT",
+  "api_info": {
+    "source": "CFTC Public Reporting",
+    "dataset": "4zgm-a668",
+    "dataset_name": "Supplemental Commitments of Traders",
+    "api_base": "publicreporting.cftc.gov"
+  }
+}

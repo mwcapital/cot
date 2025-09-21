@@ -15,9 +15,9 @@ def load_instruments_database():
     try:
         # Try multiple locations for backward compatibility
         json_paths = [
-            'data/instruments_LegacyF.json',  # New location
+            'instrument_management/LegacyF/instruments_LegacyF.json',  # New organized location
             'instruments_LegacyF.json',        # Legacy location
-            '../data/instruments_LegacyF.json' # Alternative path
+            '../instrument_management/LegacyF/instruments_LegacyF.json' # Alternative path
         ]
         
         for path in json_paths:

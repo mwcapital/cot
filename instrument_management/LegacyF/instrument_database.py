@@ -10,7 +10,7 @@ from datetime import datetime
 from collections import defaultdict
 from sodapy import Socrata
 
-# API Configur1ation
+# API Configuration
 CFTC_API_BASE = "publicreporting.cftc.gov"
 DATASET_CODE = "6dca-aqww"
 API_TOKEN = "3CKjkFN6jIIHgSkIJH19i7VhK"
@@ -213,7 +213,7 @@ def main():
     final_data = {**organized_data, **stats}
     
     # Save to JSON file - using _new suffix to not overwrite original
-    output_file = "instrument_management/instruments_LegacyF_new.json"
+    output_file = "instruments_LegacyF_new.json"
     print(f"\nSaving to {output_file}...")
     with open(output_file, 'w') as f:
         json.dump(final_data, f, indent=2, sort_keys=False)

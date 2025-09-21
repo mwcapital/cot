@@ -1,0 +1,777 @@
+{
+  "futures_symbols": {
+    "AN": {
+      "name": "Australian Dollar (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency",
+      "cot_mapping": {
+        "instruments": [
+          "AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "232741"
+        ],
+        "matched": true
+      }
+    },
+    "AP": {
+      "name": "Australian Price Index",
+      "exchange": "ASE",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "AX": {
+      "name": "German DAX Index",
+      "exchange": "EUREX",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "BG": {
+      "name": "Brent Gasoil",
+      "exchange": "ICE",
+      "category": "Energy",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "BN": {
+      "name": "British Pound (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency",
+      "cot_mapping": {
+        "instruments": [
+          "BRITISH POUND - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "096742"
+        ],
+        "matched": true
+      }
+    },
+    "CA": {
+      "name": "CAC40 Index",
+      "exchange": "MATIF",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "CB": {
+      "name": "Canadian 10 Year Bond",
+      "exchange": "Montreal Exchange",
+      "category": "Financial",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "CC": {
+      "name": "Cocoa",
+      "exchange": "CSC",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "COCOA - ICE FUTURES U.S."
+        ],
+        "codes": [
+          "073732"
+        ],
+        "matched": true
+      }
+    },
+    "CN": {
+      "name": "Canadian Dollar (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency",
+      "cot_mapping": {
+        "instruments": [
+          "CANADIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "090741"
+        ],
+        "matched": true
+      }
+    },
+    "CT": {
+      "name": "Cotton #2",
+      "exchange": "NYBOT",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "COTTON NO. 2 - ICE FUTURES U.S."
+        ],
+        "codes": [
+          "033661"
+        ],
+        "matched": true
+      }
+    },
+    "DA": {
+      "name": "Milk Class III",
+      "exchange": "CME",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "DT": {
+      "name": "Euro Bond (BUND)",
+      "exchange": "EUREX",
+      "category": "Financial",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "DX": {
+      "name": "US Dollar Index",
+      "exchange": "NYBOT",
+      "category": "Currency",
+      "cot_mapping": {
+        "instruments": [
+          "USD INDEX - ICE FUTURES U.S."
+        ],
+        "codes": [
+          "098662"
+        ],
+        "matched": true
+      }
+    },
+    "EN": {
+      "name": "NASDAQ Mini",
+      "exchange": "IMM(CME)",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "ER": {
+      "name": "Russell 2000 Mini",
+      "exchange": "ICE",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "ES": {
+      "name": "S&P 500 Mini",
+      "exchange": "IOM(CME)",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [
+          "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE",
+          "MICRO E-MINI S&P 500 INDEX - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "13874A",
+          "13874U"
+        ],
+        "matched": true
+      }
+    },
+    "FB": {
+      "name": "T-Note 5yr (Composite)",
+      "exchange": "CBOT",
+      "category": "Financial",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "FF": {
+      "name": "Fed Funds",
+      "exchange": "CBOT",
+      "category": "Financial",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "FN": {
+      "name": "Euro (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency",
+      "cot_mapping": {
+        "instruments": [
+          "EURO FX - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "099741"
+        ],
+        "matched": true
+      }
+    },
+    "FX": {
+      "name": "Euro (Day Session)",
+      "exchange": "IMM(CME)",
+      "category": "Currency",
+      "cot_mapping": {
+        "instruments": [
+          "EURO FX - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "099741"
+        ],
+        "matched": true
+      }
+    },
+    "GI": {
+      "name": "Goldman Sachs Commodity Index",
+      "exchange": "IOM(CME)",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "GS": {
+      "name": "Gilt Long Bond",
+      "exchange": "LIFFE",
+      "category": "Financial",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "HS": {
+      "name": "Hang Seng",
+      "exchange": "HKFE",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "JN": {
+      "name": "Japanese Yen (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency",
+      "cot_mapping": {
+        "instruments": [
+          "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "097741"
+        ],
+        "matched": true
+      }
+    },
+    "JO": {
+      "name": "Frozen Orange Juice",
+      "exchange": "CEC",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "FRZN CONCENTRATED ORANGE JUICE - ICE FUTURES U.S."
+        ],
+        "codes": [
+          "040701"
+        ],
+        "matched": true
+      }
+    },
+    "KC": {
+      "name": "Coffee",
+      "exchange": "CSC",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "COFFEE C - ICE FUTURES U.S."
+        ],
+        "codes": [
+          "083731"
+        ],
+        "matched": true
+      }
+    },
+    "KW": {
+      "name": "Wheat (Kansas City)",
+      "exchange": "KCBT",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "WHEAT-HRW - CHICAGO BOARD OF TRADE"
+        ],
+        "codes": [
+          "001612"
+        ],
+        "matched": true
+      }
+    },
+    "LB": {
+      "name": "Lumber",
+      "exchange": "CME",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "LUMBER - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "058644"
+        ],
+        "matched": true
+      }
+    },
+    "LX": {
+      "name": "FTSE 100 Index",
+      "exchange": "LIFFE",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "MD": {
+      "name": "S&P 400 Mini",
+      "exchange": "IOM(CME)",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "MP": {
+      "name": "Mexican Peso",
+      "exchange": "IMM(CME)",
+      "category": "Currency",
+      "cot_mapping": {
+        "instruments": [
+          "MEXICAN PESO - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "095741"
+        ],
+        "matched": true
+      }
+    },
+    "MW": {
+      "name": "Wheat (Minneapolis)",
+      "exchange": "MGE",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "WHEAT-HRSpring - MIAX FUTURES EXCHANGE"
+        ],
+        "codes": [
+          "001626"
+        ],
+        "matched": true
+      }
+    },
+    "NK": {
+      "name": "Nikkei Index",
+      "exchange": "IOM(CME)",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "SB": {
+      "name": "Sugar #11",
+      "exchange": "CSC",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "SUGAR NO. 11 - ICE FUTURES U.S."
+        ],
+        "codes": [
+          "080732"
+        ],
+        "matched": true
+      }
+    },
+    "SN": {
+      "name": "Swiss Franc (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency",
+      "cot_mapping": {
+        "instruments": [
+          "SWISS FRANC - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "092741"
+        ],
+        "matched": true
+      }
+    },
+    "TU": {
+      "name": "T-Notes 2yr (Composite)",
+      "exchange": "CBOT",
+      "category": "Financial",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "TY": {
+      "name": "T-Note 10yr (Composite)",
+      "exchange": "CBOT",
+      "category": "Financial",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "UB": {
+      "name": "Euro BOBL",
+      "exchange": "EUREX",
+      "category": "Financial",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "US": {
+      "name": "T-Bonds (Composite)",
+      "exchange": "CBOT",
+      "category": "Financial",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "UZ": {
+      "name": "Euro SCHATZ",
+      "exchange": "EUREX",
+      "category": "Financial",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "W": {
+      "name": "Wheat (Chicago)",
+      "exchange": "CBOT",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "WHEAT-SRW - CHICAGO BOARD OF TRADE"
+        ],
+        "codes": [
+          "001602"
+        ],
+        "matched": true
+      }
+    },
+    "XU": {
+      "name": "Dow Jones EUROSTOXX50",
+      "exchange": "EUREX",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "YM": {
+      "name": "Mini Dow Jones",
+      "exchange": "CBOT",
+      "category": "Index",
+      "cot_mapping": {
+        "instruments": [
+          "DJIA x $5 - CHICAGO BOARD OF TRADE"
+        ],
+        "codes": [
+          "124603"
+        ],
+        "matched": true
+      }
+    },
+    "ZA": {
+      "name": "Palladium Electronic",
+      "exchange": "NYMEX",
+      "category": "Metals",
+      "cot_mapping": {
+        "instruments": [
+          "PALLADIUM - NEW YORK MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "075651"
+        ],
+        "matched": true
+      }
+    },
+    "ZB": {
+      "name": "RBOB Electronic",
+      "exchange": "NYMEX",
+      "category": "Energy",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "ZC": {
+      "name": "Corn Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "CORN - CHICAGO BOARD OF TRADE"
+        ],
+        "codes": [
+          "002602"
+        ],
+        "matched": true
+      }
+    },
+    "ZF": {
+      "name": "Feeder Cattle Electronic",
+      "exchange": "CME",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "FEEDER CATTLE - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "061641"
+        ],
+        "matched": true
+      }
+    },
+    "ZG": {
+      "name": "Gold Electronic",
+      "exchange": "COMEX",
+      "category": "Metals",
+      "cot_mapping": {
+        "instruments": [
+          "GOLD - COMMODITY EXCHANGE INC.",
+          "MICRO GOLD - COMMODITY EXCHANGE INC."
+        ],
+        "codes": [
+          "088691",
+          "088695"
+        ],
+        "matched": true
+      }
+    },
+    "ZH": {
+      "name": "Heating Oil Electronic",
+      "exchange": "NYMEX",
+      "category": "Energy",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "ZI": {
+      "name": "Silver Electronic",
+      "exchange": "COMEX",
+      "category": "Metals",
+      "cot_mapping": {
+        "instruments": [
+          "SILVER - COMMODITY EXCHANGE INC."
+        ],
+        "codes": [
+          "084691"
+        ],
+        "matched": true
+      }
+    },
+    "ZK": {
+      "name": "Copper Electronic",
+      "exchange": "COMEX",
+      "category": "Metals",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "ZL": {
+      "name": "Soybean Oil Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "SOYBEAN OIL - CHICAGO BOARD OF TRADE"
+        ],
+        "codes": [
+          "007601"
+        ],
+        "matched": true
+      }
+    },
+    "ZM": {
+      "name": "Soybean Meal Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "SOYBEAN MEAL - CHICAGO BOARD OF TRADE"
+        ],
+        "codes": [
+          "026603"
+        ],
+        "matched": true
+      }
+    },
+    "ZN": {
+      "name": "Natural Gas Electronic",
+      "exchange": "NYMEX",
+      "category": "Energy",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "ZO": {
+      "name": "Oats Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [],
+        "codes": [],
+        "matched": false
+      }
+    },
+    "ZP": {
+      "name": "Platinum Electronic",
+      "exchange": "NYMEX",
+      "category": "Metals",
+      "cot_mapping": {
+        "instruments": [
+          "PLATINUM - NEW YORK MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "076651"
+        ],
+        "matched": true
+      }
+    },
+    "ZR": {
+      "name": "Rough Rice Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "ROUGH RICE - CHICAGO BOARD OF TRADE"
+        ],
+        "codes": [
+          "039601"
+        ],
+        "matched": true
+      }
+    },
+    "ZS": {
+      "name": "Soybeans Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "SOYBEANS - CHICAGO BOARD OF TRADE"
+        ],
+        "codes": [
+          "005602"
+        ],
+        "matched": true
+      }
+    },
+    "ZT": {
+      "name": "Live Cattle Electronic",
+      "exchange": "CME",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "LIVE CATTLE - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "057642"
+        ],
+        "matched": true
+      }
+    },
+    "ZU": {
+      "name": "Crude Oil Electronic",
+      "exchange": "NYMEX",
+      "category": "Energy",
+      "cot_mapping": {
+        "instruments": [
+          "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE",
+          "CRUDE OIL, LIGHT SWEET-WTI - ICE FUTURES EUROPE"
+        ],
+        "codes": [
+          "067651",
+          "067411"
+        ],
+        "matched": true
+      }
+    },
+    "ZW": {
+      "name": "Wheat Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "WHEAT-SRW - CHICAGO BOARD OF TRADE"
+        ],
+        "codes": [
+          "001602"
+        ],
+        "matched": true
+      }
+    },
+    "ZZ": {
+      "name": "Lean Hogs Electronic",
+      "exchange": "CME",
+      "category": "Agricultural",
+      "cot_mapping": {
+        "instruments": [
+          "LEAN HOGS - CHICAGO MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "054642"
+        ],
+        "matched": true
+      }
+    }
+  },
+  "summary": {
+    "total_symbols": 62,
+    "categories": {
+      "Agricultural": 21,
+      "Currency": 10,
+      "Index": 12,
+      "Financial": 8,
+      "Energy": 5,
+      "Metals": 7
+    }
+  }
+}

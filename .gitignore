@@ -36,9 +36,18 @@ legacy/
 # data/*.csv
 # data/*.json
 
-# Environment variables
+# Environment variables and secrets
 .env
-.env.local
+.env.*
+*.env
+config.json
+secrets.json
+*.key
+*.pem
+*.crt
+*.cer
+.mcp.json
+mcp.json
 
 # Testing
 .pytest_cache/

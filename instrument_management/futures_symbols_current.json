@@ -1,0 +1,325 @@
+{
+  "futures_symbols": {
+    "AN": {
+      "name": "Australian Dollar (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency"
+    },
+    "AP": {
+      "name": "Australian Price Index",
+      "exchange": "ASE",
+      "category": "Index"
+    },
+    "AX": {
+      "name": "German DAX Index",
+      "exchange": "EUREX",
+      "category": "Index"
+    },
+    "BG": {
+      "name": "Brent Gasoil",
+      "exchange": "ICE",
+      "category": "Energy"
+    },
+    "BN": {
+      "name": "British Pound (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency"
+    },
+    "CA": {
+      "name": "CAC40 Index",
+      "exchange": "MATIF",
+      "category": "Index"
+    },
+    "CB": {
+      "name": "Canadian 10 Year Bond",
+      "exchange": "Montreal Exchange",
+      "category": "Financial"
+    },
+    "CC": {
+      "name": "Cocoa",
+      "exchange": "CSC",
+      "category": "Agricultural"
+    },
+    "CN": {
+      "name": "Canadian Dollar (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency"
+    },
+    "CT": {
+      "name": "Cotton #2",
+      "exchange": "NYBOT",
+      "category": "Agricultural"
+    },
+    "DA": {
+      "name": "Milk Class III",
+      "exchange": "CME",
+      "category": "Agricultural"
+    },
+    "DT": {
+      "name": "Euro Bond (BUND)",
+      "exchange": "EUREX",
+      "category": "Financial"
+    },
+    "DX": {
+      "name": "US Dollar Index",
+      "exchange": "NYBOT",
+      "category": "Currency"
+    },
+    "EN": {
+      "name": "NASDAQ Mini",
+      "exchange": "IMM(CME)",
+      "category": "Index"
+    },
+    "ER": {
+      "name": "Russell 2000 Mini",
+      "exchange": "ICE",
+      "category": "Index"
+    },
+    "ES": {
+      "name": "S&P 500 Mini",
+      "exchange": "IOM(CME)",
+      "category": "Index"
+    },
+    "FB": {
+      "name": "T-Note 5yr (Composite)",
+      "exchange": "CBOT",
+      "category": "Financial"
+    },
+    "FF": {
+      "name": "Fed Funds",
+      "exchange": "CBOT",
+      "category": "Financial"
+    },
+    "FN": {
+      "name": "Euro (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency"
+    },
+    "FX": {
+      "name": "Euro (Day Session)",
+      "exchange": "IMM(CME)",
+      "category": "Currency"
+    },
+    "GI": {
+      "name": "Goldman Sachs Commodity Index",
+      "exchange": "IOM(CME)",
+      "category": "Index"
+    },
+    "GS": {
+      "name": "Gilt Long Bond",
+      "exchange": "LIFFE",
+      "category": "Financial"
+    },
+    "HS": {
+      "name": "Hang Seng",
+      "exchange": "HKFE",
+      "category": "Index"
+    },
+    "JN": {
+      "name": "Japanese Yen (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency"
+    },
+    "JO": {
+      "name": "Frozen Orange Juice",
+      "exchange": "CEC",
+      "category": "Agricultural"
+    },
+    "KC": {
+      "name": "Coffee",
+      "exchange": "CSC",
+      "category": "Agricultural"
+    },
+    "KW": {
+      "name": "Wheat (Kansas City)",
+      "exchange": "KCBT",
+      "category": "Agricultural"
+    },
+    "LB": {
+      "name": "Lumber",
+      "exchange": "CME",
+      "category": "Agricultural"
+    },
+    "LX": {
+      "name": "FTSE 100 Index",
+      "exchange": "LIFFE",
+      "category": "Index"
+    },
+    "MD": {
+      "name": "S&P 400 Mini",
+      "exchange": "IOM(CME)",
+      "category": "Index"
+    },
+    "MP": {
+      "name": "Mexican Peso",
+      "exchange": "IMM(CME)",
+      "category": "Currency"
+    },
+    "MW": {
+      "name": "Wheat (Minneapolis)",
+      "exchange": "MGE",
+      "category": "Agricultural"
+    },
+    "NK": {
+      "name": "Nikkei Index",
+      "exchange": "IOM(CME)",
+      "category": "Index"
+    },
+    "SB": {
+      "name": "Sugar #11",
+      "exchange": "CSC",
+      "category": "Agricultural"
+    },
+    "SN": {
+      "name": "Swiss Franc (Composite)",
+      "exchange": "IMM(CME)",
+      "category": "Currency"
+    },
+    "TU": {
+      "name": "T-Notes 2yr (Composite)",
+      "exchange": "CBOT",
+      "category": "Financial"
+    },
+    "TY": {
+      "name": "T-Note 10yr (Composite)",
+      "exchange": "CBOT",
+      "category": "Financial"
+    },
+    "UB": {
+      "name": "Euro BOBL",
+      "exchange": "EUREX",
+      "category": "Financial"
+    },
+    "US": {
+      "name": "T-Bonds (Composite)",
+      "exchange": "CBOT",
+      "category": "Financial"
+    },
+    "UZ": {
+      "name": "Euro SCHATZ",
+      "exchange": "EUREX",
+      "category": "Financial"
+    },
+    "W": {
+      "name": "Wheat (Chicago)",
+      "exchange": "CBOT",
+      "category": "Agricultural"
+    },
+    "XU": {
+      "name": "Dow Jones EUROSTOXX50",
+      "exchange": "EUREX",
+      "category": "Index"
+    },
+    "YM": {
+      "name": "Mini Dow Jones",
+      "exchange": "CBOT",
+      "category": "Index"
+    },
+    "ZA": {
+      "name": "Palladium Electronic",
+      "exchange": "NYMEX",
+      "category": "Metals"
+    },
+    "ZB": {
+      "name": "RBOB Electronic",
+      "exchange": "NYMEX",
+      "category": "Energy"
+    },
+    "ZC": {
+      "name": "Corn Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural"
+    },
+    "ZF": {
+      "name": "Feeder Cattle Electronic",
+      "exchange": "CME",
+      "category": "Agricultural"
+    },
+    "ZG": {
+      "name": "Gold Electronic",
+      "exchange": "COMEX",
+      "category": "Metals"
+    },
+    "ZH": {
+      "name": "Heating Oil Electronic",
+      "exchange": "NYMEX",
+      "category": "Energy"
+    },
+    "ZI": {
+      "name": "Silver Electronic",
+      "exchange": "COMEX",
+      "category": "Metals"
+    },
+    "ZK": {
+      "name": "Copper Electronic",
+      "exchange": "COMEX",
+      "category": "Metals"
+    },
+    "ZL": {
+      "name": "Soybean Oil Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural"
+    },
+    "ZM": {
+      "name": "Soybean Meal Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural"
+    },
+    "ZN": {
+      "name": "Natural Gas Electronic",
+      "exchange": "NYMEX",
+      "category": "Energy"
+    },
+    "ZO": {
+      "name": "Oats Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural"
+    },
+    "ZP": {
+      "name": "Platinum Electronic",
+      "exchange": "NYMEX",
+      "category": "Metals"
+    },
+    "ZR": {
+      "name": "Rough Rice Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural"
+    },
+    "ZS": {
+      "name": "Soybeans Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural"
+    },
+    "ZT": {
+      "name": "Live Cattle Electronic",
+      "exchange": "CME",
+      "category": "Agricultural"
+    },
+    "ZU": {
+      "name": "Crude Oil Electronic",
+      "exchange": "NYMEX",
+      "category": "Energy"
+    },
+    "ZW": {
+      "name": "Wheat Electronic",
+      "exchange": "CBOT",
+      "category": "Agricultural"
+    },
+    "ZZ": {
+      "name": "Lean Hogs Electronic",
+      "exchange": "CME",
+      "category": "Agricultural"
+    }
+  },
+  "summary": {
+    "total_symbols": 62,
+    "categories": {
+      "Agricultural": 21,
+      "Currency": 10,
+      "Index": 12,
+      "Financial": 8,
+      "Energy": 5,
+      "Metals": 7
+    }
+  }
+}
