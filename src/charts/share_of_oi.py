@@ -45,9 +45,9 @@ def create_share_of_oi_chart(df, calculation_side, chart_title):
             if calculation_side == "Long Side":
                 # Long side total: NonComm Long + Spread + Comm Long + NonRep Long
                 df_calc['total_side'] = (
-                    df_calc['noncomm_positions_long_all'] + 
-                    df_calc['noncomm_postions_spread_all'] +
-                    df_calc['comm_positions_long_all'] + 
+                    df_calc['noncomm_positions_long_all'] +
+                    df_calc['noncomm_postions_spread_all'] +  # Note: API typo "postions"
+                    df_calc['comm_positions_long_all'] +
                     df_calc['nonrept_positions_long_all']
                 )
                 
@@ -58,9 +58,9 @@ def create_share_of_oi_chart(df, calculation_side, chart_title):
             else:  # Short Side
                 # Short side total: NonComm Short + Spread + Comm Short + NonRep Short
                 df_calc['total_side'] = (
-                    df_calc['noncomm_positions_short_all'] + 
-                    df_calc['noncomm_postions_spread_all'] +
-                    df_calc['comm_positions_short_all'] + 
+                    df_calc['noncomm_positions_short_all'] +
+                    df_calc['noncomm_postions_spread_all'] +  # Note: API typo "postions"
+                    df_calc['comm_positions_short_all'] +
                     df_calc['nonrept_positions_short_all']
                 )
                 
@@ -70,7 +70,7 @@ def create_share_of_oi_chart(df, calculation_side, chart_title):
                 df_calc['nonrept_pct'] = (df_calc['nonrept_positions_short_all'] / df_calc['total_side']) * 100
             
             # Spread percentage is same for both sides
-            df_calc['spread_pct'] = (df_calc['noncomm_postions_spread_all'] / df_calc['total_side']) * 100
+            df_calc['spread_pct'] = (df_calc['noncomm_postions_spread_all'] / df_calc['total_side']) * 100  # Note: API typo "postions"
         
         # Add traces
         fig.add_trace(go.Scatter(

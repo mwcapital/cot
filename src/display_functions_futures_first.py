@@ -10,6 +10,9 @@ from datetime import datetime
 from streamlit_lightweight_charts import renderLightweightCharts
 from display_synchronized_unified import display_synchronized_charts_unified
 from futures_price_fetcher import FuturesPriceFetcher
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from scipy import stats
 
 def display_time_series_chart(df, instrument_name):
     """Display time series analysis with futures price/OI base layer"""
@@ -267,7 +270,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
 
     priceSeries = [
         {
-            "type": 'Candlestick',
+            "type": 'Bar',
             "data": priceData,
             "options": {
                 "upColor": 'rgb(38,166,154)',
@@ -520,13 +523,11 @@ def display_share_of_oi(df, instrument_name):
 
     # Information box
     st.info("""
-    This chart shows how open interest is distributed among different trader categories as a percentage of total.
+    This chart shows how open interest is distributed among different trader categories.
 
     **Calculation Method:**
-    - **Long Side:** NonComm Long % + Spread % + Comm Long % + NonRep Long % = 100%
-    - **Short Side:** NonComm Short % + Spread % + Comm Short % + NonRep Short % = 100%
-
-    The spread positions are counted on both long and short sides.
+    - **Long Side:** NonComm Long + Spread + Comm Long + NonRep Long = Total Open Interest
+    - **Short Side:** NonComm Short + Spread + Comm Short + NonRep Short = Total Open Interest
     """)
 
     # Extract instrument name without COT code
@@ -566,15 +567,16 @@ def display_share_of_oi(df, instrument_name):
         )
         price_adjustment_code = price_adjustment.split(" ")[0]
 
-    # Calculate OI percentages
+    # Calculate OI raw contract counts
     df_oi = df.copy()
 
     if side_selection == "Long Positions":
-        # Calculate long side percentages
-        df_oi['noncomm_pct'] = (df['noncomm_positions_long_all'] / df['open_interest_all']) * 100
-        df_oi['spread_pct'] = (df['noncomm_postions_spread_all'] / df['open_interest_all']) * 100  # Note: API has typo in column name
-        df_oi['comm_pct'] = (df['comm_positions_long_all'] / df['open_interest_all']) * 100
-        df_oi['nonrep_pct'] = (df['nonrept_positions_long_all'] / df['open_interest_all']) * 100
+        # Use raw contract counts for long side
+        df_oi['noncomm'] = df['noncomm_positions_long_all']
+        df_oi['spread'] = df['noncomm_postions_spread_all']  # Note: API has typo in column name
+        df_oi['comm'] = df['comm_positions_long_all']
+        df_oi['nonrep'] = df['nonrept_positions_long_all']
+        df_oi['total_oi'] = df['open_interest_all']
 
         title_suffix = "Long Positions"
         colors = {
@@ -584,11 +586,12 @@ def display_share_of_oi(df, instrument_name):
             'nonrep': 'rgba(128, 128, 128, 0.8)'     # Gray for non-reportable long
         }
     else:
-        # Calculate short side percentages
-        df_oi['noncomm_pct'] = (df['noncomm_positions_short_all'] / df['open_interest_all']) * 100
-        df_oi['spread_pct'] = (df['noncomm_postions_spread_all'] / df['open_interest_all']) * 100  # Note: API has typo in column name
-        df_oi['comm_pct'] = (df['comm_positions_short_all'] / df['open_interest_all']) * 100
-        df_oi['nonrep_pct'] = (df['nonrept_positions_short_all'] / df['open_interest_all']) * 100
+        # Use raw contract counts for short side
+        df_oi['noncomm'] = df['noncomm_positions_short_all']
+        df_oi['spread'] = df['noncomm_postions_spread_all']  # Note: API has typo in column name
+        df_oi['comm'] = df['comm_positions_short_all']
+        df_oi['nonrep'] = df['nonrept_positions_short_all']
+        df_oi['total_oi'] = df['open_interest_all']
 
         title_suffix = "Short Positions"
         colors = {
@@ -662,7 +665,7 @@ def display_share_of_oi(df, instrument_name):
         charts.append({
             "chart": priceChart,
             "series": [{
-                "type": 'Candlestick',
+                "type": 'Bar',
                 "data": priceData,
                 "options": {
                     "upColor": 'rgb(38,166,154)',
@@ -674,34 +677,55 @@ def display_share_of_oi(df, instrument_name):
             }]
         })
 
-    # OI distribution chart (stacked area)
-    oiData = {
-        'noncomm': [],
-        'spread': [],
-        'comm': [],
-        'nonrep': []
-    }
+    # OI distribution chart (stacked histogram)
+    oiData = []
 
-    # Align with price dates if available, otherwise use COT dates
+    # Align OI data with price dates if available
     if not price_df.empty:
+        # Create OI data aligned with price dates
         for _, price_row in price_df.iterrows():
             date = price_row['date']
-            # Find matching COT data
-            cot_row = df_oi[df_oi['report_date_as_yyyy_mm_dd'] <= date].iloc[-1] if not df_oi[df_oi['report_date_as_yyyy_mm_dd'] <= date].empty else None
+            date_str = date.strftime('%Y-%m-%d')
 
-            if cot_row is not None:
-                date_str = date.strftime('%Y-%m-%d')
-                oiData['noncomm'].append({'time': date_str, 'value': float(cot_row['noncomm_pct']) if pd.notna(cot_row['noncomm_pct']) else 0})
-                oiData['spread'].append({'time': date_str, 'value': float(cot_row['spread_pct']) if pd.notna(cot_row['spread_pct']) else 0})
-                oiData['comm'].append({'time': date_str, 'value': float(cot_row['comm_pct']) if pd.notna(cot_row['comm_pct']) else 0})
-                oiData['nonrep'].append({'time': date_str, 'value': float(cot_row['nonrep_pct']) if pd.notna(cot_row['nonrep_pct']) else 0})
+            # Find the most recent COT data for this date
+            cot_rows = df_oi[df_oi['report_date_as_yyyy_mm_dd'] <= date]
+            if not cot_rows.empty:
+                row = cot_rows.iloc[-1]
+
+                # Calculate cumulative values for stacking
+                noncomm_val = float(row['noncomm']) if pd.notna(row['noncomm']) else 0
+                spread_val = float(row['spread']) if pd.notna(row['spread']) else 0
+                comm_val = float(row['comm']) if pd.notna(row['comm']) else 0
+                nonrep_val = float(row['nonrep']) if pd.notna(row['nonrep']) else 0
+
+                oiData.append({
+                    'time': date_str,
+                    'noncomm': noncomm_val,
+                    'spread': noncomm_val + spread_val,
+                    'comm': noncomm_val + spread_val + comm_val,
+                    'nonrep': noncomm_val + spread_val + comm_val + nonrep_val,
+                    'total': float(row['total_oi']) if pd.notna(row['total_oi']) else 0
+                })
     else:
+        # Fallback to COT dates if no price data
         for _, row in df_oi.iterrows():
             date_str = row['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d')
-            oiData['noncomm'].append({'time': date_str, 'value': float(row['noncomm_pct']) if pd.notna(row['noncomm_pct']) else 0})
-            oiData['spread'].append({'time': date_str, 'value': float(row['spread_pct']) if pd.notna(row['spread_pct']) else 0})
-            oiData['comm'].append({'time': date_str, 'value': float(row['comm_pct']) if pd.notna(row['comm_pct']) else 0})
-            oiData['nonrep'].append({'time': date_str, 'value': float(row['nonrep_pct']) if pd.notna(row['nonrep_pct']) else 0})
+
+            # Calculate cumulative values for stacking
+            noncomm_val = float(row['noncomm']) if pd.notna(row['noncomm']) else 0
+            spread_val = float(row['spread']) if pd.notna(row['spread']) else 0
+            comm_val = float(row['comm']) if pd.notna(row['comm']) else 0
+            nonrep_val = float(row['nonrep']) if pd.notna(row['nonrep']) else 0
+
+            # Create stacked values
+            oiData.append({
+                'time': date_str,
+                'noncomm': noncomm_val,
+                'spread': noncomm_val + spread_val,
+                'comm': noncomm_val + spread_val + comm_val,
+                'nonrep': noncomm_val + spread_val + comm_val + nonrep_val,
+                'total': float(row['total_oi']) if pd.notna(row['total_oi']) else 0
+            })
 
     # Create OI distribution chart
     oiChart = {
@@ -734,7 +758,7 @@ def display_share_of_oi(df, instrument_name):
         },
         "watermark": {
             "visible": True,
-            "text": f'OI Distribution - {title_suffix}',
+            "text": f'Share of Open Interest - {title_suffix}',
             "fontSize": 24,
             "color": 'rgba(0, 0, 0, 0.1)',
             "horzAlign": 'center',
@@ -742,67 +766,495 @@ def display_share_of_oi(df, instrument_name):
         }
     }
 
-    # Add OI series as stacked areas
+    # Create histogram series for stacked bars
     oiSeries = []
 
-    # Add in order so they stack properly
-    cumulative = []
-    categories = [
-        ('noncomm', 'Non-Commercial' if side_selection == "Long Positions" else 'Non-Commercial'),
-        ('spread', 'Spread'),
-        ('comm', 'Commercial' if side_selection == "Long Positions" else 'Commercial'),
-        ('nonrep', 'Non-Reportable' if side_selection == "Long Positions" else 'Non-Reportable')
-    ]
+    # Add Non-Reportable (top layer)
+    nonrepData = [{'time': d['time'], 'value': d['nonrep']} for d in oiData]
+    oiSeries.append({
+        "type": 'Histogram',
+        "data": nonrepData,
+        "options": {
+            "color": colors['nonrep'],
+            "priceLineVisible": False,
+            "lastValueVisible": True,
+            "title": "Non-Reportable"
+        }
+    })
 
-    for cat_key, cat_name in categories:
-        if oiData[cat_key]:
-            # Calculate cumulative values for stacking
-            if not cumulative:
-                cumulative = [{**d} for d in oiData[cat_key]]
-            else:
-                for i in range(len(cumulative)):
-                    cumulative[i]['value'] += oiData[cat_key][i]['value']
+    # Add Commercial
+    commData = [{'time': d['time'], 'value': d['comm']} for d in oiData]
+    oiSeries.append({
+        "type": 'Histogram',
+        "data": commData,
+        "options": {
+            "color": colors['comm'],
+            "priceLineVisible": False,
+            "lastValueVisible": False,
+            "title": "Commercial"
+        }
+    })
 
-            oiSeries.append({
-                "type": 'Area',
-                "data": [{**d} for d in cumulative],
-                "options": {
-                    "topColor": colors[cat_key],
-                    "bottomColor": 'rgba(255, 255, 255, 0)',
-                    "lineColor": colors[cat_key],
-                    "lineWidth": 2,
-                    "title": f"{cat_name} %",
-                    "priceLineVisible": False,
-                    "lastValueVisible": True,
-                }
-            })
+    # Add Spread
+    spreadData = [{'time': d['time'], 'value': d['spread']} for d in oiData]
+    oiSeries.append({
+        "type": 'Histogram',
+        "data": spreadData,
+        "options": {
+            "color": colors['spread'],
+            "priceLineVisible": False,
+            "lastValueVisible": False,
+            "title": "Spread"
+        }
+    })
 
-    # Reverse the series so they display correctly
-    oiSeries.reverse()
+    # Add Non-Commercial (bottom layer)
+    noncommData = [{'time': d['time'], 'value': d['noncomm']} for d in oiData]
+    oiSeries.append({
+        "type": 'Histogram',
+        "data": noncommData,
+        "options": {
+            "color": colors['noncomm'],
+            "priceLineVisible": False,
+            "lastValueVisible": False,
+            "title": "Non-Commercial"
+        }
+    })
 
+    # Add total open interest line for reference
+    totalOiData = [{'time': d['time'], 'value': d['total']} for d in oiData]
+    oiSeries.append({
+        "type": 'Line',
+        "data": totalOiData,
+        "options": {
+            "color": 'rgba(0, 0, 0, 0.5)',
+            "lineWidth": 2,
+            "lineStyle": 2,  # Dashed
+            "priceLineVisible": False,
+            "lastValueVisible": True,
+            "title": "Total OI"
+        }
+    })
+
+    # Add the OI chart to the charts array for synchronized rendering
     charts.append({
         "chart": oiChart,
         "series": oiSeries
     })
 
-    # Add 100% reference line
-    if oiData['noncomm']:
-        hundred_line = [{'time': point['time'], 'value': 100} for point in oiData['noncomm']]
-        charts[-1]['series'].append({
-            "type": 'Line',
-            "data": hundred_line,
-            "options": {
-                "color": 'rgba(0, 0, 0, 0.3)',
-                "lineWidth": 1,
-                "lineStyle": 2,  # Dashed
-                "priceLineVisible": False,
-                "lastValueVisible": False,
-                "title": "100%"
-            }
-        })
-
     # Render all charts with synchronization
     renderLightweightCharts(charts, 'share_of_oi_charts')
+
+
+def display_seasonality(df, instrument_name):
+    """Display seasonality analysis for the instrument"""
+    st.markdown("### Seasonality Analysis")
+
+    # Check if data is available
+    if df is None or df.empty:
+        st.info("📊 Please fetch data first using the 'Fetch Data' button above to view seasonality analysis.")
+        return
+
+    # Create columns for controls
+    col1, col2, col3 = st.columns([2, 2, 1])
+
+    with col1:
+        # Select column to analyze with cleaner naming
+        column_display_names = {
+            "net_noncomm_positions": "Net Positioning → Net Non-Commercial",
+            "net_comm_positions": "Net Positioning → Net Commercial",
+            "open_interest_all": "Open Interest",
+            "noncomm_positions_long_all": "Non-Commercial Long",
+            "noncomm_positions_short_all": "Non-Commercial Short",
+            "comm_positions_long_all": "Commercial Long",
+            "comm_positions_short_all": "Commercial Short",
+            "nonrept_positions_long_all": "Non-Reportable Long",
+            "nonrept_positions_short_all": "Non-Reportable Short",
+            "net_reportable_positions": "Net Reportable",
+            "traders_tot_all": "Total Traders"
+        }
+
+        numeric_columns = [col for col in df.columns if df[col].dtype in ['float64', 'int64']
+                          and col not in ['report_date_as_yyyy_mm_dd', 'day_of_year', 'year']]
+
+        # Create display options
+        display_options = []
+        for col in numeric_columns:
+            if col in column_display_names:
+                display_options.append(column_display_names[col])
+            else:
+                display_options.append(col.replace('_', ' ').title())
+
+        # Default to Net Non-Commercial if available
+        default_idx = 0
+        if 'net_noncomm_positions' in numeric_columns:
+            default_idx = numeric_columns.index('net_noncomm_positions')
+        elif 'open_interest_all' in numeric_columns:
+            default_idx = numeric_columns.index('open_interest_all')
+
+        selected_display = st.selectbox(
+            "Select metric:",
+            options=display_options,
+            index=default_idx,
+            key=f"seasonality_column_{instrument_name}",
+            label_visibility="visible"
+        )
+
+        # Map back to actual column name
+        selected_column = numeric_columns[display_options.index(selected_display)]
+
+    with col2:
+        # Lookback period selection with simpler options
+        lookback_options = {
+            "5 Years": 5,
+            "10 Years": 10,
+            "15 Years": 15,
+            "All Data": 'all'
+        }
+
+        lookback_label = st.selectbox(
+            "Lookback period:",
+            options=list(lookback_options.keys()),
+            index=0,
+            key=f"seasonality_lookback_{instrument_name}",
+            label_visibility="visible"
+        )
+        lookback_years = lookback_options[lookback_label]
+
+    with col3:
+        # Zone type as radio buttons
+        zone_type = st.radio(
+            "Zone type:",
+            options=['Percentile', 'Std Dev'],
+            index=0,
+            key=f"seasonality_zone_{instrument_name}",
+            label_visibility="visible"
+        )
+        zone_type_value = 'percentile' if zone_type == 'Percentile' else 'std'
+
+    # Show previous year checkbox below
+    show_previous_year = st.checkbox(
+        "Show previous year",
+        value=True,
+        key=f"seasonality_prev_year_{instrument_name}"
+    )
+
+    # Create and display the seasonality chart
+    fig = create_seasonality_chart(
+        df,
+        selected_column,
+        lookback_years,
+        show_previous_year,
+        zone_type_value
+    )
+
+    if fig:
+        st.plotly_chart(fig, use_container_width=True)
+
+
+def create_seasonality_chart(df, column, lookback_years=5, show_previous_year=True, zone_type='percentile'):
+    """Create seasonality chart showing historical patterns with smooth zones"""
+    try:
+        # Add day of year column
+        df_season = df.copy()
+        df_season['day_of_year'] = df_season['report_date_as_yyyy_mm_dd'].dt.dayofyear
+        df_season['year'] = df_season['report_date_as_yyyy_mm_dd'].dt.year
+
+        # Determine lookback period
+        if lookback_years == 'all':
+            start_year = df_season['year'].min()
+        else:
+            start_year = df_season['year'].max() - lookback_years + 1
+
+        # Filter for lookback period
+        df_lookback = df_season[df_season['year'] >= start_year]
+
+        # Create figure
+        fig = go.Figure()
+
+        # If lookback is 5 years and not 'all', just plot the raw data for each year
+        if lookback_years == 5:
+            # Create a reference year for x-axis (using current year for display)
+            current_year = pd.Timestamp.now().year
+
+            # Plot each year's data overlaid on the same annual timeline
+            colors = ['blue', 'green', 'red', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
+            for idx, year in enumerate(sorted(df_lookback['year'].unique(), reverse=True)):
+                df_year = df_lookback[df_lookback['year'] == year].copy()
+                if not df_year.empty:
+                    # Create display dates using a common year for overlay
+                    df_year['display_date'] = pd.to_datetime(
+                        df_year['day_of_year'].astype(str) + f'-{current_year}',
+                        format='%j-%Y'
+                    )
+
+                    # Use different styling for current year
+                    is_current_year = (year == df_lookback['year'].max())
+
+                    fig.add_trace(go.Scatter(
+                        x=df_year['display_date'],
+                        y=df_year[column],
+                        mode='lines+markers' if is_current_year else 'lines',
+                        name=str(year),
+                        line=dict(
+                            width=3 if is_current_year else 2,
+                            color=colors[idx % len(colors)]
+                        ),
+                        marker=dict(size=4) if is_current_year else None
+                    ))
+
+            # Update layout for seasonality view
+            fig.update_layout(
+                title=f'{column.replace("_", " ").title()} - Last {lookback_years} Years Seasonal Comparison',
+                xaxis_title='Month',
+                yaxis_title=column.replace('_', ' ').title(),
+                hovermode='x unified',
+                height=600,
+                showlegend=True,
+                legend=dict(
+                    orientation="v",
+                    yanchor="top",
+                    y=0.99,
+                    xanchor="left",
+                    x=1.02
+                )
+            )
+
+            # Format x-axis to show months
+            fig.update_xaxes(
+                tickformat="%b",
+                dtick="M1",
+                ticklabelmode="period",
+                rangeslider_visible=True,
+                rangeslider_thickness=0.05
+            )
+
+            return fig
+
+        # Otherwise, continue with the original statistical analysis
+        # Instead of grouping by exact day, use all historical data within a rolling window
+        # This gives us more data points for percentile calculation
+        all_days = range(1, 367)  # Include leap year day
+        daily_stats = []
+
+        for day in all_days:
+            # Get data within a 15-day window centered on this day
+            window_start = day - 15
+            window_end = day + 15
+
+            # Handle year boundary wrapping
+            if window_start < 1:
+                mask = (df_lookback['day_of_year'] >= (365 + window_start)) | (df_lookback['day_of_year'] <= window_end)
+            elif window_end > 365:
+                mask = (df_lookback['day_of_year'] >= window_start) | (df_lookback['day_of_year'] <= (window_end - 365))
+            else:
+                mask = (df_lookback['day_of_year'] >= window_start) & (df_lookback['day_of_year'] <= window_end)
+
+            window_data = df_lookback[mask][column].dropna()
+
+            if len(window_data) > 0:
+                daily_stats.append({
+                    'day_of_year': day,
+                    'mean': window_data.mean(),
+                    'std': window_data.std(),
+                    'count': len(window_data),
+                    'q10': window_data.quantile(0.1),
+                    'q25': window_data.quantile(0.25),
+                    'q50': window_data.quantile(0.5),
+                    'q75': window_data.quantile(0.75),
+                    'q90': window_data.quantile(0.9)
+                })
+
+        daily_stats = pd.DataFrame(daily_stats)
+
+        # Sort by day of year
+        daily_stats = daily_stats.sort_values('day_of_year')
+
+        # Apply smoothing to make cleaner zones
+        from scipy.signal import savgol_filter
+        window_length = min(31, len(daily_stats) // 2 * 2 - 1)  # Must be odd
+        if window_length >= 5:  # Only smooth if we have enough data
+            for col in ['mean', 'q10', 'q25', 'q50', 'q75', 'q90']:
+                if col in daily_stats.columns:
+                    daily_stats[f'{col}_smooth'] = savgol_filter(
+                        daily_stats[col].ffill().bfill(),
+                        window_length=window_length,
+                        polyorder=3
+                    )
+        else:
+            # If not enough data for smoothing, use original values
+            for col in ['mean', 'q10', 'q25', 'q50', 'q75', 'q90']:
+                if col in daily_stats.columns:
+                    daily_stats[f'{col}_smooth'] = daily_stats[col]
+
+        # Determine which smoothed columns to use based on zone_type
+        if zone_type == 'percentile':
+            upper_col = 'q90_smooth'
+            lower_col = 'q10_smooth'
+            upper_mid_col = 'q75_smooth'
+            lower_mid_col = 'q25_smooth'
+            zone_label = 'Percentile Zones'
+        else:  # standard deviation
+            daily_stats['upper_2std'] = daily_stats['mean'] + 2 * daily_stats['std']
+            daily_stats['lower_2std'] = daily_stats['mean'] - 2 * daily_stats['std']
+            daily_stats['upper_1std'] = daily_stats['mean'] + daily_stats['std']
+            daily_stats['lower_1std'] = daily_stats['mean'] - daily_stats['std']
+
+            # Smooth std-based zones
+            if window_length >= 5:
+                for col in ['upper_2std', 'lower_2std', 'upper_1std', 'lower_1std']:
+                    daily_stats[f'{col}_smooth'] = savgol_filter(
+                        daily_stats[col].ffill().bfill(),
+                        window_length=window_length,
+                        polyorder=3
+                    )
+            else:
+                for col in ['upper_2std', 'lower_2std', 'upper_1std', 'lower_1std']:
+                    daily_stats[f'{col}_smooth'] = daily_stats[col]
+
+            upper_col = 'upper_2std_smooth'
+            lower_col = 'lower_2std_smooth'
+            upper_mid_col = 'upper_1std_smooth'
+            lower_mid_col = 'lower_1std_smooth'
+            zone_label = 'Standard Deviation Zones'
+
+        # Create x-axis with dates for better display
+        current_year = pd.Timestamp.now().year
+        daily_stats['display_date'] = pd.to_datetime(
+            daily_stats['day_of_year'].astype(str) + f'-{current_year}',
+            format='%j-%Y'
+        )
+
+        # Add shaded zones
+        # Outer zone (90-10 percentiles or ±2 std)
+        fig.add_trace(go.Scatter(
+            x=daily_stats['display_date'],
+            y=daily_stats[upper_col],
+            mode='lines',
+            line=dict(width=0),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=daily_stats['display_date'],
+            y=daily_stats[lower_col],
+            mode='lines',
+            line=dict(width=0),
+            name=zone_label,
+            fill='tonexty',
+            fillcolor='rgba(128, 128, 255, 0.1)',
+            hoverinfo='skip'
+        ))
+
+        # Inner zone (75-25 percentiles or ±1 std)
+        fig.add_trace(go.Scatter(
+            x=daily_stats['display_date'],
+            y=daily_stats[upper_mid_col],
+            mode='lines',
+            line=dict(width=0),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=daily_stats['display_date'],
+            y=daily_stats[lower_mid_col],
+            mode='lines',
+            line=dict(width=0),
+            showlegend=False,
+            fill='tonexty',
+            fillcolor='rgba(128, 128, 255, 0.2)',
+            hoverinfo='skip'
+        ))
+
+        # Add mean/median line
+        center_col = 'q50_smooth' if zone_type == 'percentile' else 'mean_smooth'
+        fig.add_trace(go.Scatter(
+            x=daily_stats['display_date'],
+            y=daily_stats[center_col],
+            mode='lines',
+            name='Historical Average' if zone_type == 'std' else 'Historical Median',
+            line=dict(color='blue', width=2, dash='dash')
+        ))
+
+        # Get current year data
+        current_year_actual = df_season['year'].max()
+        df_current = df_season[df_season['year'] == current_year_actual].copy()
+
+        if not df_current.empty:
+            # Create display dates for current year
+            df_current['display_date'] = pd.to_datetime(
+                df_current['day_of_year'].astype(str) + f'-{current_year}',
+                format='%j-%Y'
+            )
+
+            # Add current year line
+            fig.add_trace(go.Scatter(
+                x=df_current['display_date'],
+                y=df_current[column],
+                mode='lines+markers',
+                name=f'Current Year ({current_year_actual})',
+                line=dict(color='red', width=3),
+                marker=dict(size=4)
+            ))
+
+        # Add previous year if requested
+        if show_previous_year and current_year_actual > start_year:
+            df_previous = df_season[df_season['year'] == current_year_actual - 1].copy()
+            if not df_previous.empty:
+                df_previous['display_date'] = pd.to_datetime(
+                    df_previous['day_of_year'].astype(str) + f'-{current_year}',
+                    format='%j-%Y'
+                )
+
+                fig.add_trace(go.Scatter(
+                    x=df_previous['display_date'],
+                    y=df_previous[column],
+                    mode='lines',
+                    name=f'Previous Year ({current_year_actual - 1})',
+                    line=dict(color='orange', width=2, dash='dot'),
+                    opacity=0.7
+                ))
+
+        # Update layout
+        lookback_text = "All Years" if lookback_years == 'all' else f"{lookback_years} Year"
+        fig.update_layout(
+            title=f'Seasonality Analysis: {column.replace("_", " ").title()} ({lookback_text} Lookback)',
+            xaxis_title='Month',
+            yaxis_title=column.replace('_', ' ').title(),
+            hovermode='x unified',
+            height=600,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+
+        # Format x-axis to show months
+        fig.update_xaxes(
+            tickformat="%b",
+            dtick="M1",
+            ticklabelmode="period"
+        )
+
+        # Add range slider
+        fig.update_xaxes(
+            rangeslider_visible=True,
+            rangeslider_thickness=0.05
+        )
+
+        return fig
+
+    except Exception as e:
+        import traceback
+        st.error(f"Error creating seasonality chart: {str(e)}")
+        st.text(f"Full error trace:\n{traceback.format_exc()}")
+        return None
 
 
 def display_cot_only_charts(df, selected_columns):
@@ -883,13 +1335,6 @@ def display_cot_only_charts(df, selected_columns):
         }], 'cot_only_chart')
 
 
-def display_seasonality(df, instrument_name):
-    """Display Seasonality analysis"""
-    from charts.seasonality_charts import create_seasonality_chart
-    import plotly.graph_objects as go
-    fig = create_seasonality_chart(df, instrument_name)
-    if fig:
-        st.plotly_chart(fig, use_container_width=True)
 
 def display_oi_split_chart(df, price_df, instrument_name):
     """Display Open Interest Split chart using lightweight charts"""
