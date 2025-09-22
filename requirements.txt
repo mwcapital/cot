@@ -8,3 +8,4 @@ scikit-learn
 statsmodels
 supabase
 python-dotenv
+streamlit-lightweight-charts
