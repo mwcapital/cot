@@ -261,7 +261,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
             "visible": True,  # Always show time axis
             "secondsVisible": False,
             "rightOffset": 5,
-            "barSpacing": 6,
+            "barSpacing": 3,  # Reduced spacing for thicker bars
             "fixLeftEdge": True,
             "lockVisibleTimeRangeOnResize": True,
         },
@@ -280,6 +280,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                 "wickUpColor": 'rgb(38,166,154)',
                 "wickDownColor": 'rgb(255,82,82)',
                 "borderVisible": False,
+                "thinBars": False,  # Make bars thicker
             }
         }
     ]
@@ -378,7 +379,7 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                 "visible": True,  # Show time axis on all charts
                 "secondsVisible": False,
                 "rightOffset": 5,
-                "barSpacing": 6,
+                "barSpacing": 3,  # Reduced spacing for thicker bars
                 "fixLeftEdge": True,
                 "lockVisibleTimeRangeOnResize": True,
             }

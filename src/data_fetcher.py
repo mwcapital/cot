@@ -169,6 +169,58 @@ def fetch_cftc_data(instrument_name, api_token):
 
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour
+def fetch_cftc_data_2year(instrument_name, api_token):
+    """Fetch exactly 2 years of CFTC data for a specific instrument (optimized)"""
+    try:
+        # Strip the contract code if present
+        if ' (' in instrument_name and instrument_name.endswith(')'):
+            instrument_name_clean = instrument_name.rsplit(' (', 1)[0]
+        else:
+            instrument_name_clean = instrument_name
+
+        client = Socrata(CFTC_API_BASE, api_token)
+
+        # Calculate 2 years ago date
+        from datetime import datetime, timedelta
+        two_years_ago = (datetime.now() - timedelta(days=730)).strftime('%Y-%m-%d')
+
+        # Fetch only 2 years of data using WHERE clause for date filtering
+        where_clause = f"market_and_exchange_names='{instrument_name_clean}' AND report_date_as_yyyy_mm_dd >= '{two_years_ago}'"
+
+        results = client.get(
+            DATASET_CODE,
+            where=where_clause,
+            select=",".join(CFTC_COLUMNS),
+            order="report_date_as_yyyy_mm_dd ASC",
+            limit=200  # ~104 weekly reports in 2 years, 200 is safe
+        )
+
+        client.close()
+
+        if not results:
+            return None
+
+        # Convert to DataFrame
+        df = pd.DataFrame(results)
+
+        # Convert date column
+        df['report_date_as_yyyy_mm_dd'] = pd.to_datetime(df['report_date_as_yyyy_mm_dd'])
+
+        # Convert numeric columns
+        numeric_columns = [col for col in CFTC_COLUMNS if
+                           col != "report_date_as_yyyy_mm_dd" and col != "market_and_exchange_names"]
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        return df
+
+    except Exception as e:
+        st.error(f"❌ Error fetching data: {e}")
+        return None
+
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def fetch_cftc_data_ytd_only(instrument_name, api_token):
     """Optimized fetch for dashboard - only gets YTD data plus latest record"""
     try:
