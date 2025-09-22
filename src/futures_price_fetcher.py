@@ -30,7 +30,8 @@ class FuturesPriceFetcher:
         self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
 
         # Load futures to COT mapping
-        mapping_path = '/Users/makson/Desktop/COT-Analysis/instrument_management/futures_symbols_enhanced.json'
+        mapping_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                    'instrument_management', 'futures', 'futures_symbols_enhanced.json')
         with open(mapping_path, 'r') as f:
             self.futures_mapping = json.load(f)
 
