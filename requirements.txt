@@ -8,4 +8,3 @@ scikit-learn
 statsmodels
 supabase
 python-dotenv
-lightweightcharts
