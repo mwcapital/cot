@@ -83,3 +83,7 @@ uv.lock
 
 # Large data files (excluding LFS tracked files)
 # FUT86_16.txt is tracked by Git LFS
+
+# Streamlit secrets template
+streamlit_secrets_template.toml
+*.toml
