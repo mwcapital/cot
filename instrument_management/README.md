@@ -1,44 +1,62 @@
 # Instrument Management
 
-This folder contains all tools and files related to managing the CFTC instruments database.
+This directory organizes all instrument-related data and tools for the CFTC COT Dashboard.
 
-## Files
+## Directory Structure
 
-### Data Files
-- `instruments_LegacyF_original.json` - The original/current instruments database used by the app
-- `instruments_LegacyF_new.json` - Newly generated database from CFTC API
+### 📁 LegacyF/
+Contains all data and tools specific to the Legacy Futures COT report:
+- `instruments_LegacyF.json` - Main instruments database for Legacy Futures
+- `CFTC_API_COLUMN_MAPPING.md` - Complete CFTC API column name reference
+- `FUT86_16.txt` - Historical COT data file (1986-2016)
+- `instrument_database.py` - Script to fetch and update instruments from CFTC API
+- `compare_json_files.py` - Tool to compare JSON database versions
 
-### Scripts
-- `instrument_database.py` - Fetches all instruments from CFTC API and generates the JSON database
-- `compare_json_files.py` - Compares two JSON files to identify differences
+### 📁 futures/
+Contains futures price-related data and mapping files:
+- `futures_symbols_current.json` - Current futures symbols mapping
+- `futures_symbols_enhanced.json` - Enhanced futures symbols with additional metadata
+- `futures_cot_mapping.py` - COT to futures symbol mapping utility
+
+### 📁 Supplemental/
+Contains data and tools for the Supplemental COT report:
+- `instrument_database_supplemental.py` - Script to fetch and update Supplemental report instruments
+- `instruments_Supplemental.json` - Instruments database for Supplemental COT report
 
 ## Usage
 
-### Generate New Instruments Database
+### Update Legacy Futures Instruments Database
 ```bash
-cd instrument_management
-source ../venv_new/bin/activate
+cd LegacyF
 python instrument_database.py
 ```
-This creates `instruments_LegacyF_new.json` with the latest instruments from CFTC.
+This fetches the latest instruments from CFTC API and updates the database.
 
-### Compare Original vs New
+### Compare Database Versions
 ```bash
+cd LegacyF
 python compare_json_files.py
 ```
-This compares the original and new JSON files to show what's changed.
+Compare original and new JSON files to identify changes.
 
-### Deploy New Database
-If satisfied with the new database:
-```bash
-# Backup current
-cp ../instruments_LegacyF.json ./instruments_LegacyF_backup_$(date +%Y%m%d).json
+### Working with Futures Data
+The `futures/` directory contains mapping files that link COT instruments to their corresponding futures symbols for price data integration.
 
-# Deploy new
-cp instruments_LegacyF_new.json ../instruments_LegacyF.json
-```
+## Data Flow
 
-## Notes
-- The app expects `instruments_LegacyF.json` in the root directory
-- Always backup before replacing the production database
-- New instruments are added regularly to CFTC, so periodic updates are recommended
+1. **COT Data**: Fetched via CFTC API using instrument codes from `LegacyF/instruments_LegacyF.json`
+2. **Futures Prices**: Mapped using files in `futures/` directory
+3. **Display**: Combined in the dashboard application
+
+## Important Notes
+
+- The application loads `instruments_LegacyF.json` from the LegacyF folder
+- Always backup databases before updating
+- CFTC adds new instruments regularly - periodic updates recommended
+- Use the column mapping reference in LegacyF for correct API field names
+
+## File Paths Used by Application
+
+- Primary database: `instrument_management/LegacyF/instruments_LegacyF.json`
+- Column mapping: `instrument_management/LegacyF/CFTC_API_COLUMN_MAPPING.md`
+- Futures mappings: `instrument_management/futures/futures_symbols_*.json`
