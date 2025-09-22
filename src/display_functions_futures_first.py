@@ -158,7 +158,9 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
 
     # Find the futures symbol for this COT instrument
     symbol = None
-    with open('/Users/makson/Desktop/COT-Analysis/instrument_management/futures_symbols_enhanced.json', 'r') as f:
+    import os
+    json_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instrument_management', 'futures', 'futures_symbols_enhanced.json')
+    with open(json_path, 'r') as f:
         mapping = json.load(f)
         for fut_symbol, info in mapping['futures_symbols'].items():
             if info['cot_mapping']['matched']:
@@ -535,7 +537,9 @@ def display_share_of_oi(df, instrument_name):
 
     # Find the futures symbol for this COT instrument
     symbol = None
-    with open('/Users/makson/Desktop/COT-Analysis/instrument_management/futures_symbols_enhanced.json', 'r') as f:
+    import os
+    json_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instrument_management', 'futures', 'futures_symbols_enhanced.json')
+    with open(json_path, 'r') as f:
         mapping = json.load(f)
         for fut_symbol, info in mapping['futures_symbols'].items():
             if info['cot_mapping']['matched']:
