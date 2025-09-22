@@ -217,13 +217,19 @@ def main():
         st.stop()
 
     # API Token Configuration
+    # Use session state to persist the API token
+    if 'api_token' not in st.session_state:
+        st.session_state.api_token = "3CKjkFN6jIIHgSkIJH19i7VhK"  # Default token
+
     with st.expander("API Configuration", expanded=False):
         api_token = st.text_input(
             "API Token (optional):",
-            value="3CKjkFN6jIIHgSkIJH19i7VhK",  # Pre-filled for testing
+            value=st.session_state.api_token,
             type="password",
-            help="Enter your CFTC API token for higher rate limits. Leave empty to use default limits."
+            help="Enter your CFTC API token for higher rate limits. Leave empty to use default limits.",
+            key="api_token_input"
         )
+        st.session_state.api_token = api_token
 
     st.markdown("---")
 

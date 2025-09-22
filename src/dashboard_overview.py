@@ -230,8 +230,8 @@ def fetch_dashboard_data(api_token):
     # Flatten instrument list
     all_instruments = []
     for category, instruments in KEY_INSTRUMENTS.items():
-        for instrument in instruments:
-            all_instruments.append((category, instrument))
+        for ticker, cot_name in instruments.items():
+            all_instruments.append((category, cot_name))
     
     # Progress bar
     progress_bar = st.progress(0)
