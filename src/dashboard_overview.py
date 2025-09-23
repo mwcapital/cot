@@ -534,7 +534,7 @@ def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
     fig.add_hline(y=1, line_dash="dot", line_color="gray", line_width=1)
     fig.add_hline(y=-1, line_dash="dot", line_color="gray", line_width=1)
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour
@@ -748,7 +748,7 @@ def display_wow_changes(api_token, trader_category, display_mode="Raw"):
         title=title,
         xaxis_title="",
         yaxis_title=y_title,
-        height=500,
+        height=700,
         showlegend=False,
         hovermode='x unified',
         yaxis=dict(
@@ -758,7 +758,8 @@ def display_wow_changes(api_token, trader_category, display_mode="Raw"):
             gridcolor='lightgray'
         ),
         xaxis=dict(
-            tickangle=-45
+            tickangle=-45,
+            tickfont=dict(size=12)
         ),
         plot_bgcolor='white',
         bargap=0.2
@@ -767,7 +768,7 @@ def display_wow_changes(api_token, trader_category, display_mode="Raw"):
     # Add a zero line for reference
     fig.add_hline(y=0, line_width=2, line_color="black")
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 
 def display_dashboard(api_token):
