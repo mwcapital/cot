@@ -291,6 +291,9 @@ def fetch_zscore_data_parallel(api_token, trader_category):
             df = fetch_cftc_data_2year(instrument, api_token)
 
             if df is not None and not df.empty:
+                # Handle both old and new naming conventions
+                trader_cat = trader_category.replace(" Net", "")  # Remove " Net" suffix if present
+
                 # Define column mappings
                 category_columns = {
                         "Non-Commercial": {
@@ -309,14 +312,14 @@ def fetch_zscore_data_parallel(api_token, trader_category):
                         }
                     }
 
-                cols = category_columns[trader_category]
+                cols = category_columns[trader_cat]
 
                 # Calculate net positions
-                if trader_category == "Non-Commercial":
+                if trader_cat == "Non-Commercial":
                     df['net_noncomm_positions'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
-                elif trader_category == "Commercial":
+                elif trader_cat == "Commercial":
                     df['net_comm_positions'] = df['comm_positions_long_all'] - df['comm_positions_short_all']
-                elif trader_category == "Non-Reportable":
+                elif trader_cat == "Non-Reportable":
                     df['net_nonrept_positions'] = df['nonrept_positions_long_all'] - df['nonrept_positions_short_all']
                     cols['net'] = 'net_nonrept_positions'
 
@@ -510,7 +513,7 @@ def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
         xaxis_title="",
         yaxis_title=y_title,
         height=500,
-        showlegend=True,
+        showlegend=False,
         hovermode='x unified',
         yaxis=dict(
             zeroline=True,
@@ -530,6 +533,239 @@ def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
     fig.add_hline(y=-2, line_dash="dash", line_color="red", line_width=1)
     fig.add_hline(y=1, line_dash="dot", line_color="gray", line_width=1)
     fig.add_hline(y=-1, line_dash="dot", line_color="gray", line_width=1)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def fetch_wow_changes_data(api_token, trader_category):
+    """Fetch week-over-week changes for all dashboard instruments"""
+
+    # Get all instruments from KEY_INSTRUMENTS
+    all_instruments = []
+    ticker_map = {}
+    for category, instruments in KEY_INSTRUMENTS.items():
+        for ticker, cot_name in instruments.items():
+            all_instruments.append(cot_name)
+            ticker_map[cot_name] = ticker
+
+    # Store data for all instruments
+    instrument_data = {}
+
+    def process_single_instrument(instrument):
+        """Process a single instrument and return its WoW change data"""
+        try:
+            # Use optimized 2-year fetch function for consistency
+            df = fetch_cftc_data_2year(instrument, api_token)
+
+            if df is not None and not df.empty and len(df) >= 2:
+                # Define column mappings
+                # Handle both old and new naming conventions
+                trader_cat = trader_category.replace(" Net", "")  # Remove " Net" suffix if present
+
+                category_columns = {
+                    "Non-Commercial": {
+                        "long": "noncomm_positions_long_all",
+                        "short": "noncomm_positions_short_all",
+                        "net": "net_noncomm_positions"
+                    },
+                    "Commercial": {
+                        "long": "comm_positions_long_all",
+                        "short": "comm_positions_short_all",
+                        "net": "net_comm_positions"
+                    },
+                    "Non-Reportable": {
+                        "long": "nonrept_positions_long_all",
+                        "short": "nonrept_positions_short_all"
+                    }
+                }
+
+                cols = category_columns[trader_cat]
+
+                # Calculate net positions
+                if trader_cat == "Non-Commercial":
+                    df['net_noncomm_positions'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
+                elif trader_cat == "Commercial":
+                    df['net_comm_positions'] = df['comm_positions_long_all'] - df['comm_positions_short_all']
+                elif trader_cat == "Non-Reportable":
+                    df['net_nonrept_positions'] = df['nonrept_positions_long_all'] - df['nonrept_positions_short_all']
+                    cols['net'] = 'net_nonrept_positions'
+
+                if cols.get('net') in df.columns:
+                    # Sort by date to ensure proper order
+                    df = df.sort_values('report_date_as_yyyy_mm_dd')
+
+                    # Get latest and previous values
+                    latest_net = df[cols['net']].iloc[-1]
+                    prev_net = df[cols['net']].iloc[-2]
+
+                    # Calculate raw change
+                    raw_change = latest_net - prev_net
+
+                    # Calculate change as % of OI if available
+                    change_pct_oi = None
+                    if 'open_interest_all' in df.columns:
+                        latest_oi = df['open_interest_all'].iloc[-1]
+                        if latest_oi > 0:
+                            change_pct_oi = (raw_change / latest_oi) * 100
+
+                    # Extract ticker from instrument name
+                    ticker = instrument.split(' - ')[0]
+                    # Use the ticker mapping to get short ticker
+                    for inst_name, tick in ticker_map.items():
+                        if inst_name in ticker:
+                            ticker = tick
+                            break
+
+                    return {
+                        'ticker': ticker,
+                        'raw_change': raw_change,
+                        'change_pct_oi': change_pct_oi,
+                        'latest_net': latest_net,
+                        'prev_net': prev_net,
+                        'full_name': instrument
+                    }
+        except Exception as e:
+            return None
+        return None
+
+    # Use ThreadPoolExecutor for parallel processing
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(process_single_instrument, inst) for inst in all_instruments]
+
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                instrument_data[result['ticker']] = result
+
+    return instrument_data
+
+
+def display_wow_changes(api_token, trader_category, display_mode="Raw"):
+    """Display week-over-week changes using dashboard instruments"""
+
+    # Fetch data with caching and parallel processing
+    with st.spinner("Loading week-over-week changes..."):
+        instrument_data = fetch_wow_changes_data(api_token, trader_category)
+
+    if not instrument_data:
+        st.warning("No valid data found for week-over-week changes")
+        return
+
+    # Sort by change value (most positive to most negative)
+    if display_mode == "Raw":
+        # Calculate Z-score of raw changes
+        raw_changes = [v['raw_change'] for v in instrument_data.values() if v['raw_change'] is not None]
+
+        if raw_changes:
+            mean_change = np.mean(raw_changes)
+            std_change = np.std(raw_changes)
+
+            # Calculate Z-scores for each instrument
+            z_scores = {}
+            for ticker, data in instrument_data.items():
+                if data['raw_change'] is not None and std_change > 0:
+                    z_scores[ticker] = (data['raw_change'] - mean_change) / std_change
+                else:
+                    z_scores[ticker] = 0
+
+            # Sort by Z-score
+            sorted_instruments = sorted(z_scores.items(), key=lambda x: x[1], reverse=True)
+            y_values = [item[1] for item in sorted_instruments]
+            y_title = "WoW Change Z-Score"
+            text_format = "{:.2f}"
+        else:
+            sorted_instruments = sorted(instrument_data.items(),
+                                      key=lambda x: x[1]['raw_change'] if x[1]['raw_change'] is not None else 0,
+                                      reverse=True)
+            y_values = [0 for _ in sorted_instruments]
+            y_title = "WoW Change Z-Score"
+            text_format = "{:.2f}"
+    else:  # as % of Open Interest
+        # Sort by change as % of OI
+        sorted_instruments = sorted(instrument_data.items(),
+                                  key=lambda x: x[1]['change_pct_oi'] if x[1]['change_pct_oi'] is not None else -999,
+                                  reverse=True)
+        y_values = [item[1]['change_pct_oi'] if item[1]['change_pct_oi'] is not None else 0 for item in sorted_instruments]
+        y_title = "Change (% of OI)"
+        text_format = "{:.2f}%"
+
+    # Create the chart
+    fig = go.Figure()
+
+    # Prepare data for plotting
+    tickers = [item[0] for item in sorted_instruments]
+
+    # Create a reverse mapping from instrument names to categories
+    instrument_to_category = {}
+    for category, instruments in KEY_INSTRUMENTS.items():
+        for ticker, full_name in instruments.items():
+            instrument_to_category[ticker] = category
+            # Also map the instrument name (first part before " - ")
+            instrument_name = full_name.split(' - ')[0]
+            instrument_to_category[instrument_name] = category
+
+    # Get colors based on category
+    colors = []
+    for item in sorted_instruments:
+        ticker = item[0]
+        category_found = instrument_to_category.get(ticker)
+
+        if not category_found:
+            # Try matching against full instrument names
+            for category, instruments in KEY_INSTRUMENTS.items():
+                for tick, full_name in instruments.items():
+                    if ticker in full_name or full_name.startswith(ticker):
+                        category_found = category
+                        break
+                if category_found:
+                    break
+
+        # Default to Agriculture if not found
+        if not category_found:
+            category_found = "Agriculture"
+
+        color = CATEGORY_COLORS.get(category_found, '#95E77E')
+        colors.append(color)
+
+    # Add bars with category colors
+    fig.add_trace(go.Bar(
+        x=tickers,
+        y=y_values,
+        name='WoW Change',
+        marker=dict(color=colors),
+        text=[text_format.format(y) for y in y_values],
+        textposition='outside',
+        hoverinfo='skip'  # Disable hover tooltip
+    ))
+
+    # Update layout based on display mode
+    title = (f"{trader_category} Week-over-Week Position Changes"
+             if display_mode == "Raw"
+             else f"{trader_category} Week-over-Week Position Changes (% of OI)")
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="",
+        yaxis_title=y_title,
+        height=500,
+        showlegend=False,
+        hovermode='x unified',
+        yaxis=dict(
+            zeroline=True,
+            zerolinewidth=2,
+            zerolinecolor='black',
+            gridcolor='lightgray'
+        ),
+        xaxis=dict(
+            tickangle=-45
+        ),
+        plot_bgcolor='white',
+        bargap=0.2
+    )
+
+    # Add a zero line for reference
+    fig.add_hline(y=0, line_width=2, line_color="black")
 
     st.plotly_chart(fig, use_container_width=True)
 
@@ -625,7 +861,7 @@ def display_dashboard(api_token):
         st.markdown("Select trader category:")
         trader_category = st.selectbox(
             "Trader category",
-            ["Non-Commercial", "Commercial", "Non-Reportable"],
+            ["Non-Commercial Net", "Commercial Net", "Non-Reportable Net"],
             index=0,
             label_visibility="collapsed",
             key="dashboard_trader_category"
@@ -650,6 +886,46 @@ def display_dashboard(api_token):
         """
         <p style='color: #888; font-size: 0.9em; font-style: italic; margin-top: 10px;'>
         Note: Z-scores are calculated using a 2-year lookback period. Values above +2 or below -2 indicate extreme positioning relative to the historical average.
+        </p>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Add Week-over-Week Changes section
+    st.markdown("---")
+    st.subheader("Week-over-Week Position Changes")
+
+    # Controls row for WoW chart
+    col1_wow, col2_wow, col3_wow = st.columns([2, 2, 4])
+    with col1_wow:
+        st.markdown("Select trader category:")
+        wow_trader_category = st.selectbox(
+            "WoW Trader category",
+            ["Non-Commercial Net", "Commercial Net", "Non-Reportable Net"],
+            index=0,
+            label_visibility="collapsed",
+            key="wow_trader_category"
+        )
+
+    with col2_wow:
+        st.markdown("Display mode:")
+        wow_display_mode = st.radio(
+            "WoW Display mode",
+            ["Raw", "as % of Open Interest"],
+            index=0,
+            label_visibility="collapsed",
+            key="wow_display_mode",
+            horizontal=True
+        )
+
+    # Display the WoW changes chart
+    display_wow_changes(api_token, wow_trader_category, wow_display_mode)
+
+    # Add disclaimer about WoW calculation
+    st.markdown(
+        """
+        <p style='color: #888; font-size: 0.9em; font-style: italic; margin-top: 10px;'>
+        Week-over-week changes show the difference in positions from the previous week's report.
         </p>
         """,
         unsafe_allow_html=True
