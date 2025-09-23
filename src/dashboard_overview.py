@@ -320,23 +320,38 @@ def fetch_zscore_data_parallel(api_token, trader_category):
                     df['net_nonrept_positions'] = df['nonrept_positions_long_all'] - df['nonrept_positions_short_all']
                     cols['net'] = 'net_nonrept_positions'
 
-                # Calculate net as % of open interest
-                if 'open_interest_all' in df.columns and cols.get('net') in df.columns:
-                    df['net_pct_oi'] = (df[cols['net']] / df['open_interest_all'] * 100).fillna(0)
+                if cols.get('net') in df.columns:
+                    # Calculate Z-score of raw net positions
+                    net_mean = df[cols['net']].mean()
+                    net_std = df[cols['net']].std()
 
-                    # Calculate z-score
-                    mean_pct = df['net_pct_oi'].mean()
-                    std_pct = df['net_pct_oi'].std()
+                    # Calculate Z-score of net positions as % of OI
+                    net_pct_z = None
+                    net_pct_week_z = None
+                    latest_pct = None
 
-                    if std_pct > 0:
-                        # Get latest and week-ago values
-                        latest_pct = df['net_pct_oi'].iloc[-1] if len(df) > 0 else 0
-                        latest_z = (latest_pct - mean_pct) / std_pct
+                    if 'open_interest_all' in df.columns:
+                        df['net_pct_oi'] = (df[cols['net']] / df['open_interest_all'] * 100).fillna(0)
+                        mean_pct = df['net_pct_oi'].mean()
+                        std_pct = df['net_pct_oi'].std()
 
-                        week_ago_z = None
+                        if std_pct > 0 and len(df) > 0:
+                            latest_pct = df['net_pct_oi'].iloc[-1]
+                            net_pct_z = (latest_pct - mean_pct) / std_pct
+
+                            if len(df) > 1:
+                                week_ago_pct = df['net_pct_oi'].iloc[-2]
+                                net_pct_week_z = (week_ago_pct - mean_pct) / std_pct
+
+                    if net_std > 0 and len(df) > 0:
+                        # Get latest and week-ago values for raw net positions
+                        latest_net = df[cols['net']].iloc[-1]
+                        net_z = (latest_net - net_mean) / net_std
+
+                        week_ago_net_z = None
                         if len(df) > 1:
-                            week_ago_pct = df['net_pct_oi'].iloc[-2]
-                            week_ago_z = (week_ago_pct - mean_pct) / std_pct
+                            week_ago_net = df[cols['net']].iloc[-2]
+                            week_ago_net_z = (week_ago_net - net_mean) / net_std
 
                         # Extract ticker from instrument name
                         ticker = instrument.split(' - ')[0]
@@ -348,11 +363,13 @@ def fetch_zscore_data_parallel(api_token, trader_category):
 
                         return {
                             'ticker': ticker,
-                            'z_score': latest_z,
-                            'week_ago_z': week_ago_z,
-                            'net_pct': latest_pct,
-                            'mean': mean_pct,
-                            'std': std_pct,
+                            'z_score': net_z,  # Z-score of raw net positions
+                            'z_score_pct': net_pct_z,  # Z-score of % of OI
+                            'week_ago_z': week_ago_net_z,  # Week ago Z-score of raw net
+                            'week_ago_z_pct': net_pct_week_z,  # Week ago Z-score of % of OI
+                            'net_pct': latest_pct,  # Latest % of OI
+                            'mean': net_mean,
+                            'std': net_std,
                             'full_name': instrument
                         }
         except Exception as e:
@@ -368,7 +385,9 @@ def fetch_zscore_data_parallel(api_token, trader_category):
             if result:
                 instrument_data[result['ticker']] = {
                     'z_score': result['z_score'],
+                    'z_score_pct': result['z_score_pct'],
                     'week_ago_z': result['week_ago_z'],
+                    'week_ago_z_pct': result['week_ago_z_pct'],
                     'net_pct': result['net_pct'],
                     'mean': result['mean'],
                     'std': result['std'],
@@ -378,8 +397,8 @@ def fetch_zscore_data_parallel(api_token, trader_category):
     return instrument_data
 
 
-def display_cross_asset_zscore(api_token, trader_category):
-    """Display cross-asset Z-score comparison using dashboard instruments"""
+def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
+    """Display cross-asset comparison using dashboard instruments"""
 
     # Fetch data with caching and parallel processing
     with st.spinner("Loading cross-asset analysis..."):
@@ -389,39 +408,81 @@ def display_cross_asset_zscore(api_token, trader_category):
         st.warning("No valid data found for cross-asset comparison")
         return
 
-    # Sort by z-score
-    sorted_instruments = sorted(instrument_data.items(), key=lambda x: x[1]['z_score'], reverse=True)
+    # Sort by z-score from most positive to most negative (left to right)
+    if display_mode == "Raw":
+        # Use Z-score of raw net positions
+        sorted_instruments = sorted(instrument_data.items(),
+                                  key=lambda x: x[1]['z_score'] if x[1]['z_score'] is not None else -999,
+                                  reverse=True)  # Most positive first
+        y_values = [item[1]['z_score'] if item[1]['z_score'] is not None else 0 for item in sorted_instruments]
+        week_ago_values = [item[1]['week_ago_z'] for item in sorted_instruments]
+        y_title = "Z-Score"
+        text_format = "{:.2f}"
+    else:  # as % of Open Interest
+        # Use Z-score of net as % of OI
+        sorted_instruments = sorted(instrument_data.items(),
+                                  key=lambda x: x[1]['z_score_pct'] if x[1]['z_score_pct'] is not None else -999,
+                                  reverse=True)  # Most positive first
+        y_values = [item[1]['z_score_pct'] if item[1]['z_score_pct'] is not None else 0 for item in sorted_instruments]
+        week_ago_values = [item[1]['week_ago_z_pct'] for item in sorted_instruments]
+        y_title = "Z-Score (% of OI)"
+        text_format = "{:.2f}"
 
     # Create the chart
     fig = go.Figure()
 
     # Prepare data for plotting
     tickers = [item[0] for item in sorted_instruments]
-    z_scores = [item[1]['z_score'] for item in sorted_instruments]
 
-    # Nice mint/salad green color
-    bar_color = '#7DCEA0'  # Soft mint green
+    # Create a reverse mapping from instrument names to categories
+    instrument_to_category = {}
+    for category, instruments in KEY_INSTRUMENTS.items():
+        for ticker, full_name in instruments.items():
+            # Map both ticker and the instrument name part (before exchange) to category
+            instrument_to_category[ticker] = category
+            # Also map the instrument name (first part before " - ")
+            instrument_name = full_name.split(' - ')[0]
+            instrument_to_category[instrument_name] = category
 
-    # Add bars
+    # Get colors based on category
+    colors = []
+    for item in sorted_instruments:
+        # The ticker here is actually the displayed name from the chart
+        display_name = item[0]
+
+        # Try to find category by exact match or by instrument name
+        category_found = instrument_to_category.get(display_name)
+
+        if not category_found:
+            # Try matching against full instrument names
+            for category, instruments in KEY_INSTRUMENTS.items():
+                for ticker, full_name in instruments.items():
+                    if display_name in full_name or full_name.startswith(display_name):
+                        category_found = category
+                        break
+                if category_found:
+                    break
+
+        # Default to Agriculture if not found
+        if not category_found:
+            category_found = "Agriculture"
+
+        color = CATEGORY_COLORS.get(category_found, '#95E77E')
+        colors.append(color)
+
+    # Add bars with category colors
     fig.add_trace(go.Bar(
         x=tickers,
-        y=z_scores,
-        name='Current Z-Score',
-        marker=dict(color=bar_color),
-        text=[f"{z:.2f}" for z in z_scores],
+        y=y_values,
+        name='Current',
+        marker=dict(color=colors),
+        text=[text_format.format(y) for y in y_values],
         textposition='outside',
-        hovertemplate='<b>%{customdata[3]}</b><br>' +
-                     'Z-Score: %{y:.2f}<br>' +
-                     'Net %: %{customdata[0]:.1f}%<br>' +
-                     'Mean %: %{customdata[1]:.1f}%<br>' +
-                     'Std %: %{customdata[2]:.1f}%<extra></extra>',
-        customdata=[[item[1]['net_pct'], item[1]['mean'], item[1]['std'], item[1]['full_name'].split(' - ')[0]]
-                   for item in sorted_instruments]
+        hoverinfo='skip'  # Disable hover tooltip
     ))
 
     # Add week-ago markers if available
-    week_ago_zs = [item[1]['week_ago_z'] for item in sorted_instruments]
-    valid_week_ago = [(i, z) for i, z in enumerate(week_ago_zs) if z is not None]
+    valid_week_ago = [(i, z) for i, z in enumerate(week_ago_values) if z is not None]
 
     if valid_week_ago:
         indices, week_z_values = zip(*valid_week_ago)
@@ -436,14 +497,18 @@ def display_cross_asset_zscore(api_token, trader_category):
                 color='purple',
                 line=dict(width=2, color='white')
             ),
-            hovertemplate='Week Ago Z-Score: %{y:.2f}<extra></extra>'
+            hoverinfo='skip'  # Disable hover tooltip
         ))
 
-    # Update layout
+    # Update layout based on display mode
+    title = (f"{trader_category} Net Positioning Z-Scores (2-year lookback)"
+             if display_mode == "Raw"
+             else f"{trader_category} Net Positioning Z-Scores (% of OI basis, 2-year lookback)")
+
     fig.update_layout(
-        title=f"{trader_category} Net Positioning Z-Scores (since 2023)",
+        title=title,
         xaxis_title="",
-        yaxis_title="Z-Score",
+        yaxis_title=y_title,
         height=500,
         showlegend=True,
         hovermode='x unified',
@@ -460,7 +525,7 @@ def display_cross_asset_zscore(api_token, trader_category):
         bargap=0.2
     )
 
-    # Add reference lines
+    # Add reference lines for both modes (both show Z-scores)
     fig.add_hline(y=2, line_dash="dash", line_color="red", line_width=1)
     fig.add_hline(y=-2, line_dash="dash", line_color="red", line_width=1)
     fig.add_hline(y=1, line_dash="dot", line_color="gray", line_width=1)
@@ -552,10 +617,10 @@ def display_dashboard(api_token):
 
     # Add Cross-Asset Z-Score Comparison below the table
     st.markdown("---")
-    st.subheader("🎯 Cross-Asset Comparison")
+    st.subheader("Cross-Asset Futures Positioning")
 
-    # Trader category selector
-    col1, col2 = st.columns([1, 3])
+    # Controls row
+    col1, col2, col3 = st.columns([2, 2, 4])
     with col1:
         st.markdown("Select trader category:")
         trader_category = st.selectbox(
@@ -566,8 +631,29 @@ def display_dashboard(api_token):
             key="dashboard_trader_category"
         )
 
+    with col2:
+        st.markdown("Display mode:")
+        display_mode = st.radio(
+            "Display mode",
+            ["Raw", "as % of Open Interest"],
+            index=0,
+            label_visibility="collapsed",
+            key="dashboard_display_mode",
+            horizontal=True
+        )
+
     # Display the cross-asset Z-score chart
-    display_cross_asset_zscore(api_token, trader_category)
+    display_cross_asset_zscore(api_token, trader_category, display_mode)
+
+    # Add disclaimer about lookback period
+    st.markdown(
+        """
+        <p style='color: #888; font-size: 0.9em; font-style: italic; margin-top: 10px;'>
+        Note: Z-scores are calculated using a 2-year lookback period. Values above +2 or below -2 indicate extreme positioning relative to the historical average.
+        </p>
+        """,
+        unsafe_allow_html=True
+    )
 
     # Add refresh button
     if st.button("🔄 Refresh Dashboard Data"):
