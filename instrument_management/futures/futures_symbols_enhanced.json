@@ -647,9 +647,14 @@
       "exchange": "NYMEX",
       "category": "Energy",
       "cot_mapping": {
-        "instruments": [],
-        "codes": [],
-        "matched": false
+        "instruments": [
+          "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE",
+          "NATURAL GAS - NEW YORK MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "023651"
+        ],
+        "matched": true
       }
     },
     "ZO": {

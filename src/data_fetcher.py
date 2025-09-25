@@ -58,7 +58,7 @@ def fetch_cftc_data(instrument_name, api_token):
                 order="report_date_as_yyyy_mm_dd ASC",
                 limit=DEFAULT_LIMIT
             )
-            
+
             # Then get current data from WTI-PHYSICAL (2022-present)
             current_results = client.get(
                 DATASET_CODE,
@@ -67,7 +67,30 @@ def fetch_cftc_data(instrument_name, api_token):
                 order="report_date_as_yyyy_mm_dd ASC",
                 limit=DEFAULT_LIMIT
             )
-            
+
+            # Merge the results
+            results = historical_results + current_results
+
+        # Special handling for NAT GAS NYME: merge with historical NATURAL GAS data
+        elif instrument_name_clean == "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE":
+            # First, get historical data from NATURAL GAS (up to 2016)
+            historical_results = client.get(
+                DATASET_CODE,
+                where="market_and_exchange_names='NATURAL GAS - NEW YORK MERCANTILE EXCHANGE'",
+                select=",".join(CFTC_COLUMNS),
+                order="report_date_as_yyyy_mm_dd ASC",
+                limit=DEFAULT_LIMIT
+            )
+
+            # Then get current data from NAT GAS NYME (2022-present)
+            current_results = client.get(
+                DATASET_CODE,
+                where="market_and_exchange_names='NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE'",
+                select=",".join(CFTC_COLUMNS),
+                order="report_date_as_yyyy_mm_dd ASC",
+                limit=DEFAULT_LIMIT
+            )
+
             # Merge the results
             results = historical_results + current_results
             
@@ -117,7 +140,7 @@ def fetch_cftc_data(instrument_name, api_token):
         if instrument_name_clean == "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE":
             # Try the pre-2000 name first (with quotes around SWEET)
             historical_df = get_historical_data_for_instrument(
-                "CRUDE OIL, LIGHT 'SWEET' - NEW YORK MERCANTILE EXCHANGE", 
+                "CRUDE OIL, LIGHT 'SWEET' - NEW YORK MERCANTILE EXCHANGE",
                 end_date=api_start_date
             )
             # If not found, try the 2000-2016 name (without quotes)
@@ -126,10 +149,16 @@ def fetch_cftc_data(instrument_name, api_token):
                     "CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE",
                     end_date=api_start_date
                 )
+        elif instrument_name_clean == "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE":
+            # For Natural Gas, try the historical name from FUT86_16.txt
+            historical_df = get_historical_data_for_instrument(
+                "NATURAL GAS - NEW YORK MERCANTILE EXCHANGE",
+                end_date=api_start_date
+            )
         else:
             # For all other instruments, use the clean name
             historical_df = get_historical_data_for_instrument(
-                instrument_name_clean, 
+                instrument_name_clean,
                 end_date=api_start_date
             )
         
