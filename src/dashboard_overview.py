@@ -844,8 +844,15 @@ def create_dashboard_market_matrix(api_token, concentration_metric='conc_gross_l
                 # Filter data for 2-year lookback
                 df_2yr = df[df['report_date_as_yyyy_mm_dd'] >= lookback_date].copy()
 
-                if len(df_2yr) < 10:  # Need sufficient data for percentiles
-                    continue
+                # If insufficient 2-year data, use all available data as fallback
+                if len(df_2yr) < 10:
+                    # Use all available data if we have at least 10 records
+                    if len(df) >= 10:
+                        df_2yr = df.copy()
+                        st.info(f"📊 Using all available data for {instrument} (insufficient 2-year history)")
+                    else:
+                        st.warning(f"⚠️ Skipping {instrument}: insufficient historical data ({len(df)} records)")
+                        continue
 
                 # Get latest data
                 latest_idx = df['report_date_as_yyyy_mm_dd'].idxmax()
@@ -935,6 +942,16 @@ def create_dashboard_market_matrix(api_token, concentration_metric='conc_gross_l
         if not scatter_data:
             st.warning("Insufficient historical data for percentile calculations")
             return None
+
+        # Show summary of included vs excluded instruments
+        total_instruments = len(dashboard_instruments)
+        included_count = len(scatter_data)
+        excluded_count = total_instruments - included_count
+
+        if excluded_count > 0:
+            st.info(f"📊 Market Matrix: Showing {included_count}/{total_instruments} instruments ({excluded_count} excluded due to data limitations)")
+        else:
+            st.success(f"✅ Market Matrix: Showing all {included_count} instruments")
 
         # Create scatter plot
         fig = go.Figure()
