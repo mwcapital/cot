@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from data_fetcher import fetch_cftc_data_ytd_only, fetch_cftc_data_2year
+from data_fetcher import fetch_cftc_data_ytd_only, fetch_cftc_data_2year, fetch_cftc_data
 import plotly.graph_objects as go
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -42,13 +42,13 @@ KEY_INSTRUMENTS = {
         "ZU": "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE (067651)",
         "ZB": "GASOLINE RBOB - NEW YORK MERCANTILE EXCHANGE (111659)",
         "ZH": "GULF JET NY HEAT OIL SPR - NEW YORK MERCANTILE EXCHANGE (86465A)",
-        "ZA": "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE (023651)",
+        "NG": "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE (023651)",
     },
     "Metals": {
         "ZG": "GOLD - COMMODITY EXCHANGE INC. (088691)",
-        "ZN": "SILVER - COMMODITY EXCHANGE INC. (084691)",
-        "ZI": "COPPER- #1 - COMMODITY EXCHANGE INC. (085692)",
-        "ZK": "PALLADIUM - NEW YORK MERCANTILE EXCHANGE (075651)",
+        "ZI": "SILVER - COMMODITY EXCHANGE INC. (084691)",
+        "ZK": "COPPER- #1 - COMMODITY EXCHANGE INC. (085692)",
+        "ZA": "PALLADIUM - NEW YORK MERCANTILE EXCHANGE (075651)",
         "ZP": "PLATINUM - NEW YORK MERCANTILE EXCHANGE (076651)",
     },
 }
@@ -163,7 +163,7 @@ def fetch_single_instrument_data(category, instrument, api_token):
                 "COPPER- #1": "ZK",
                 "SOYBEAN OIL": "ZL",
                 "SOYBEAN MEAL": "ZM",
-                "NAT GAS NYME": "ZN",
+                "NAT GAS NYME": "NG",
                 "SOYBEANS": "ZS",
                 "WTI-PHYSICAL": "ZU",
                 "GASOLINE RBOB": "ZB",
@@ -771,6 +771,353 @@ def display_wow_changes(api_token, trader_category, display_mode="Raw"):
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def fetch_market_matrix_data(api_token, concentration_metric):
+    """Fetch data for Market Matrix using dashboard instruments"""
+
+    # Get all instruments from KEY_INSTRUMENTS
+    all_instruments = []
+    for category, instruments in KEY_INSTRUMENTS.items():
+        for ticker, cot_name in instruments.items():
+            all_instruments.append(cot_name)
+
+    # Store data for all instruments
+    all_instruments_data = {}
+
+    def process_single_instrument(instrument):
+        """Process a single instrument and return its data"""
+        try:
+            # Use full historical data fetch for 5-year percentile calculations
+            df = fetch_cftc_data(instrument, api_token)
+            if df is not None and not df.empty:
+                return {instrument: df}
+        except Exception as e:
+            return None
+        return None
+
+    # Use ThreadPoolExecutor for parallel processing
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(process_single_instrument, inst) for inst in all_instruments]
+
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                all_instruments_data.update(result)
+
+    return all_instruments_data
+
+
+def create_dashboard_market_matrix(api_token, concentration_metric='conc_gross_le_4_tdr_long'):
+    """Create market structure matrix for dashboard instruments"""
+    try:
+        # Fetch data for all dashboard instruments
+        with st.spinner("Loading market structure data..."):
+            all_instruments_data = fetch_market_matrix_data(api_token, concentration_metric)
+
+        if not all_instruments_data:
+            st.warning("No data available for market matrix")
+            return None
+
+        # Prepare data for all selected instruments
+        scatter_data = []
+
+        # Calculate 2-year lookback date
+        lookback_date = pd.Timestamp.now() - pd.DateOffset(years=2)
+
+        # Get all instruments list
+        dashboard_instruments = []
+        for category, instruments in KEY_INSTRUMENTS.items():
+            for ticker, cot_name in instruments.items():
+                dashboard_instruments.append(cot_name)
+
+        # Progress tracking
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        for idx, instrument in enumerate(dashboard_instruments):
+            status_text.text(f"Calculating percentiles for {instrument}...")
+            progress_bar.progress((idx + 1) / len(dashboard_instruments))
+
+            if instrument in all_instruments_data:
+                df = all_instruments_data[instrument]
+
+                # Filter data for 2-year lookback
+                df_2yr = df[df['report_date_as_yyyy_mm_dd'] >= lookback_date].copy()
+
+                if len(df_2yr) < 10:  # Need sufficient data for percentiles
+                    continue
+
+                # Get latest data
+                latest_idx = df['report_date_as_yyyy_mm_dd'].idxmax()
+                latest_data = df.loc[latest_idx]
+
+                # Get raw values
+                trader_count = latest_data.get('traders_tot_all', 0)
+                open_interest = latest_data.get('open_interest_all', 0)
+
+                # Get concentration based on selected metric
+                concentration = latest_data.get(concentration_metric, 0)
+
+                # Calculate percentiles for trader count
+                trader_percentile = (df_2yr['traders_tot_all'] <= trader_count).sum() / len(df_2yr) * 100
+
+                # Calculate percentiles for concentration metric
+                if concentration_metric in df_2yr.columns:
+                    conc_percentile = (df_2yr[concentration_metric] <= concentration).sum() / len(df_2yr) * 100
+                else:
+                    conc_percentile = 50  # Default if column not found
+
+                # Get category and ticker for coloring
+                category = None
+                ticker = None
+                for cat, instruments in KEY_INSTRUMENTS.items():
+                    for tick, cot_name in instruments.items():
+                        if cot_name == instrument:
+                            category = cat
+                            ticker = tick
+                            break
+                    if category:
+                        break
+
+                # Create commodity name mapping from instrument names
+                commodity_name_mapping = {
+                    "COTTON NO. 2": "Cotton",
+                    "BRITISH POUND": "GBP",
+                    "COCOA": "Cocoa",
+                    "USD INDEX": "DXY",
+                    "E-MINI S&P 500": "S&P 500",
+                    "NASDAQ MINI": "Nasdaq",
+                    "RUSSELL E-MINI": "Russell",
+                    "EURO FX": "EUR",
+                    "JAPANESE YEN": "JPY",
+                    "FRZN CONCENTRATED ORANGE JUICE": "Orange Juice",
+                    "COFFEE C": "Coffee",
+                    "LUMBER": "Lumber",
+                    "WHEAT-HRSpring": "Wheat (HRS)",
+                    "SUGAR NO. 11": "Sugar",
+                    "WHEAT-SRW": "Wheat (SRW)",
+                    "CORN": "Corn",
+                    "FEEDER CATTLE": "Feeder Cattle",
+                    "GOLD": "Gold",
+                    "SILVER": "Silver",
+                    "COPPER- #1": "Copper",
+                    "SOYBEAN OIL": "Soybean Oil",
+                    "SOYBEAN MEAL": "Soybean Meal",
+                    "NAT GAS NYME": "Natural Gas",
+                    "SOYBEANS": "Soybeans",
+                    "WTI-PHYSICAL": "Crude Oil",
+                    "GASOLINE RBOB": "Gasoline",
+                    "GULF JET NY HEAT OIL SPR": "Heating Oil",
+                    "LEAN HOGS": "Lean Hogs",
+                    "PALLADIUM": "Palladium",
+                    "PLATINUM": "Platinum",
+                }
+
+                # Get the commodity name from the instrument
+                instrument_base = instrument.split(' - ')[0]
+                commodity_name = commodity_name_mapping.get(instrument_base, instrument_base)
+
+                # Add to scatter data
+                scatter_data.append({
+                    'instrument': instrument,
+                    'trader_count': trader_count,
+                    'concentration': concentration,
+                    'trader_percentile': trader_percentile,
+                    'conc_percentile': conc_percentile,
+                    'open_interest': open_interest,
+                    'short_name': commodity_name,
+                    'category': category or 'Unknown'
+                })
+
+        progress_bar.empty()
+        status_text.empty()
+
+        if not scatter_data:
+            st.warning("Insufficient historical data for percentile calculations")
+            return None
+
+        # Create scatter plot
+        fig = go.Figure()
+
+        # Define quadrant colors based on percentiles (50th percentile as threshold)
+        colors = []
+        for item in scatter_data:
+            # Use category colors from CATEGORY_COLORS
+            category_color = CATEGORY_COLORS.get(item['category'], '#95E77E')
+            colors.append(category_color)
+
+        # Calculate smart text positions to avoid overlaps and edge clipping
+        def get_smart_text_position(x, y, index, data_points):
+            """Determine optimal text position based on bubble location and nearby points"""
+            # Check edges first - avoid clipping at chart boundaries
+            if x < 15:  # Near left edge
+                if y > 85:  # Top-left corner
+                    return 'bottom right'
+                elif y < 15:  # Bottom-left corner
+                    return 'top right'
+                else:  # Left edge
+                    return 'middle right'
+            elif x > 85:  # Near right edge
+                if y > 85:  # Top-right corner
+                    return 'bottom left'
+                elif y < 15:  # Bottom-right corner
+                    return 'top left'
+                else:  # Right edge
+                    return 'middle left'
+            elif y > 85:  # Near top edge
+                return 'bottom center'
+            elif y < 15:  # Near bottom edge
+                return 'top center'
+            else:
+                # Interior points - use quadrant-based positioning with collision avoidance
+                positions = ['top center', 'bottom center', 'middle left', 'middle right',
+                           'top left', 'top right', 'bottom left', 'bottom right']
+
+                # Check for nearby points to avoid overlaps
+                min_distance = float('inf')
+                best_position = 'top center'
+
+                for pos in positions:
+                    # Calculate if this position would overlap with nearby points
+                    overlap_count = 0
+                    for i, other in enumerate(data_points):
+                        if i != index:
+                            other_x = other['trader_percentile']
+                            other_y = other['conc_percentile']
+                            distance = ((x - other_x) ** 2 + (y - other_y) ** 2) ** 0.5
+
+                            # If points are close, consider this position
+                            if distance < 20:  # Within proximity threshold
+                                overlap_count += 1
+
+                    # Prefer positions with fewer overlaps
+                    if overlap_count < min_distance:
+                        min_distance = overlap_count
+                        best_position = pos
+
+                return best_position
+
+        # Calculate text positions for each point
+        text_positions = []
+        for i, d in enumerate(scatter_data):
+            position = get_smart_text_position(d['trader_percentile'], d['conc_percentile'], i, scatter_data)
+            text_positions.append(position)
+
+        # Add scatter points using percentiles with smart text positioning
+        fig.add_trace(go.Scatter(
+            x=[d['trader_percentile'] for d in scatter_data],
+            y=[d['conc_percentile'] for d in scatter_data],
+            mode='markers+text',
+            marker=dict(
+                size=15,  # Uniform size for all bubbles
+                color=colors,
+                line=dict(width=2, color='white')
+            ),
+            text=[d['short_name'] for d in scatter_data],
+            textposition=text_positions,  # Use calculated smart positions
+            hovertemplate='<b>%{customdata[0]}</b><br>' +
+                         'Category: %{customdata[1]}<br>' +
+                         'Trader Count Percentile: %{x:.1f}%<br>' +
+                         'Concentration Percentile: %{y:.1f}%<br>' +
+                         'Actual Traders: %{customdata[2]:,.0f}<br>' +
+                         'Actual Concentration: %{customdata[3]:.1f}%<br>' +
+                         'Open Interest: %{customdata[4]:,.0f}<extra></extra>',
+            customdata=[[d['instrument'], d['category'], d['trader_count'], d['concentration'], d['open_interest']]
+                       for d in scatter_data]
+        ))
+
+        # Add quadrant lines at 50th percentile
+        fig.add_hline(y=50, line_dash="dash", line_color="gray", opacity=0.5)
+        fig.add_vline(x=50, line_dash="dash", line_color="gray", opacity=0.5)
+
+        # Add quadrant labels
+        fig.add_annotation(
+            text="Below Median Concentration<br>Above Median Traders",
+            xref="paper", yref="paper",
+            x=0.75, y=0.25,
+            showarrow=False,
+            font=dict(size=10, color="green"),
+            opacity=0.8
+        )
+
+        fig.add_annotation(
+            text="Above Median Concentration<br>Above Median Traders",
+            xref="paper", yref="paper",
+            x=0.75, y=0.75,
+            showarrow=False,
+            font=dict(size=10, color="orange"),
+            opacity=0.8
+        )
+
+        fig.add_annotation(
+            text="Below Median Concentration<br>Below Median Traders",
+            xref="paper", yref="paper",
+            x=0.25, y=0.25,
+            showarrow=False,
+            font=dict(size=10, color="blue"),
+            opacity=0.8
+        )
+
+        fig.add_annotation(
+            text="Above Median Concentration<br>Below Median Traders",
+            xref="paper", yref="paper",
+            x=0.25, y=0.75,
+            showarrow=False,
+            font=dict(size=10, color="red"),
+            opacity=0.8
+        )
+
+        # Get concentration metric label
+        metric_labels = {
+            'conc_gross_le_4_tdr_long': 'Gross Top 4 Long',
+            'conc_gross_le_4_tdr_short': 'Gross Top 4 Short',
+            'conc_gross_le_8_tdr_long': 'Gross Top 8 Long',
+            'conc_gross_le_8_tdr_short': 'Gross Top 8 Short',
+            'conc_net_le_4_tdr_long_all': 'Net Top 4 Long',
+            'conc_net_le_4_tdr_short_all': 'Net Top 4 Short',
+            'conc_net_le_8_tdr_long_all': 'Net Top 8 Long',
+            'conc_net_le_8_tdr_short_all': 'Net Top 8 Short'
+        }
+        metric_label = metric_labels.get(concentration_metric, concentration_metric)
+
+        # Update layout
+        fig.update_layout(
+            title=f"Market Structure Matrix - {metric_label} (2-Year Percentiles)",
+            xaxis_title="Trader Count Percentile (2-Year)",
+            yaxis_title=f"Concentration Percentile ({metric_label}, 2-Year)",
+            height=700,
+            showlegend=False,
+            xaxis=dict(
+                range=[0, 100],
+                gridcolor='lightgray',
+                zeroline=False,
+                ticksuffix='%'
+            ),
+            yaxis=dict(
+                range=[0, 100],
+                gridcolor='lightgray',
+                zeroline=False,
+                ticksuffix='%'
+            )
+        )
+
+        # Add size legend with more detailed explanation
+        fig.add_annotation(
+            text="Bubble size ∝ Open Interest (larger bubbles = more market activity)<br>Color = Asset Category",
+            xref="paper", yref="paper",
+            x=0.02, y=0.98,
+            showarrow=False,
+            font=dict(size=10),
+            xanchor="left", yanchor="top"
+        )
+
+        return fig
+
+    except Exception as e:
+        st.error(f"Error creating market structure matrix: {str(e)}")
+        return None
+
+
 def display_dashboard(api_token):
     """Display the main dashboard overview"""
     st.header("Commodity Markets Overview")
@@ -927,6 +1274,51 @@ def display_dashboard(api_token):
         """
         <p style='color: #888; font-size: 0.9em; font-style: italic; margin-top: 10px;'>
         Week-over-week changes show the difference in positions from the previous week's report.
+        </p>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Add Market Matrix section
+    st.markdown("---")
+    st.subheader("Market Structure Matrix")
+
+    # Controls row for Market Matrix
+    col1_matrix, col2_matrix, col3_matrix = st.columns([2, 2, 4])
+    with col1_matrix:
+        st.markdown("Select concentration metric:")
+        concentration_options = {
+            'conc_gross_le_4_tdr_long': 'Gross Top 4 Traders Long',
+            'conc_gross_le_4_tdr_short': 'Gross Top 4 Traders Short',
+            'conc_gross_le_8_tdr_long': 'Gross Top 8 Traders Long',
+            'conc_gross_le_8_tdr_short': 'Gross Top 8 Traders Short',
+            'conc_net_le_4_tdr_long_all': 'Net Top 4 Traders Long',
+            'conc_net_le_4_tdr_short_all': 'Net Top 4 Traders Short',
+            'conc_net_le_8_tdr_long_all': 'Net Top 8 Traders Long',
+            'conc_net_le_8_tdr_short_all': 'Net Top 8 Traders Short'
+        }
+
+        matrix_concentration_metric = st.selectbox(
+            "Matrix concentration metric",
+            options=list(concentration_options.keys()),
+            format_func=lambda x: concentration_options[x],
+            index=0,
+            label_visibility="collapsed",
+            key="matrix_concentration_metric"
+        )
+
+    # Display the Market Matrix chart
+    matrix_fig = create_dashboard_market_matrix(api_token, matrix_concentration_metric)
+    if matrix_fig:
+        st.plotly_chart(matrix_fig, use_container_width=True, config={'displayModeBar': False})
+
+    # Add disclaimer about Market Matrix
+    st.markdown(
+        """
+        <p style='color: #888; font-size: 0.9em; font-style: italic; margin-top: 10px;'>
+        Market Structure Matrix shows where each instrument ranks relative to its own 2-year history.
+        Bubble sizes are proportional to Open Interest (market activity level).
+        Percentiles allow fair comparison across different markets with varying scales.
         </p>
         """,
         unsafe_allow_html=True
