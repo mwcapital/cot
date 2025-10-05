@@ -23,9 +23,13 @@ class FuturesPriceFetcher:
                 self.supabase_url = config['supabase_url']
                 self.supabase_key = config['supabase_key']
         else:
-            # Fallback configuration
-            self.supabase_url = "https://rkirpnpjuckcxqllbnxu.supabase.co"
-            self.supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJraXJwbnBqdWNrY3hxbGxibnh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc3OTE5ODYsImV4cCI6MjA3MzM2Nzk4Nn0.HBbU1kCf_PTlKPK9rVf_VH3HFVg7zctGbazi7rvQJmU"
+            # Fallback to environment variables
+            self.supabase_url = os.getenv("SUPABASE_URL")
+            self.supabase_key = os.getenv("SUPABASE_KEY")
+
+            # If no config found, raise error rather than hardcode credentials
+            if not self.supabase_url or not self.supabase_key:
+                raise ValueError("Supabase credentials not found. Please provide config.json or set environment variables.")
 
         self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
 

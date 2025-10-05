@@ -242,6 +242,11 @@ def fetch_cftc_data_2year(instrument_name, api_token):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
+        # Calculate additional metrics (same as in other fetch functions)
+        df['net_noncomm_positions'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
+        df['net_comm_positions'] = df['comm_positions_long_all'] - df['comm_positions_short_all']
+        df['net_reportable_positions'] = df['tot_rept_positions_long_all'] - df['tot_rept_positions_short']
+
         return df
 
     except Exception as e:
@@ -271,6 +276,8 @@ def fetch_cftc_data_ytd_only(instrument_name, api_token):
         # Note: net_noncomm_positions needs to be calculated
         dashboard_columns = [
             "report_date_as_yyyy_mm_dd",
+            "open_interest_all",
+            "change_in_open_interest_all",
             "noncomm_positions_long_all",
             "noncomm_positions_short_all",
             "comm_positions_long_all",

@@ -8,59 +8,595 @@ from datetime import datetime, timedelta
 from data_fetcher import fetch_cftc_data_ytd_only, fetch_cftc_data_2year, fetch_cftc_data
 import plotly.graph_objects as go
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
+import json
+from supabase import create_client, Client
+from dotenv import load_dotenv
 
-# Define key instruments for dashboard with color groups
-KEY_INSTRUMENTS = {
-    "Agriculture": {
-        "CT": "COTTON NO. 2 - ICE FUTURES U.S. (033661)",
-        "CC": "COCOA - ICE FUTURES U.S. (073732)",
-        "JO": "FRZN CONCENTRATED ORANGE JUICE - ICE FUTURES U.S. (040701)",
-        "KC": "COFFEE C - ICE FUTURES U.S. (083731)",
-        "LB": "LUMBER - CHICAGO MERCANTILE EXCHANGE (058643)",
-        "MW": "WHEAT-HRSpring - MIAX FUTURES EXCHANGE (001626)",
-        "SB": "SUGAR NO. 11 - ICE FUTURES U.S. (080732)",
-        "W": "WHEAT-SRW - CHICAGO BOARD OF TRADE (001602)",
-        "ZC": "CORN - CHICAGO BOARD OF TRADE (002602)",
-        "ZF": "FEEDER CATTLE - CHICAGO MERCANTILE EXCHANGE (061641)",
-        "ZL": "SOYBEAN OIL - CHICAGO BOARD OF TRADE (007601)",
-        "ZM": "SOYBEAN MEAL - CHICAGO BOARD OF TRADE (026603)",
-        "ZS": "SOYBEANS - CHICAGO BOARD OF TRADE (005602)",
-        "ZZ": "LEAN HOGS - CHICAGO MERCANTILE EXCHANGE (054642)",
-    },
-    "Currency": {
-        "BN": "BRITISH POUND - CHICAGO MERCANTILE EXCHANGE (096742)",
-        "DX": "USD INDEX - ICE FUTURES U.S. (098662)",
-        "FN": "EURO FX - CHICAGO MERCANTILE EXCHANGE (099741)",
-        "JN": "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE (097741)",
-    },
-    "Equity": {
-        "ES": "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE (13874A)",
-        "EN": "NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE (209742)",
-        "ER": "RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE (239742)",
-    },
-    "Energy": {
-        "ZU": "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE (067651)",
-        "ZB": "GASOLINE RBOB - NEW YORK MERCANTILE EXCHANGE (111659)",
-        "ZH": "GULF JET NY HEAT OIL SPR - NEW YORK MERCANTILE EXCHANGE (86465A)",
-        "NG": "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE (023651)",
-    },
-    "Metals": {
-        "ZG": "GOLD - COMMODITY EXCHANGE INC. (088691)",
-        "ZI": "SILVER - COMMODITY EXCHANGE INC. (084691)",
-        "ZK": "COPPER- #1 - COMMODITY EXCHANGE INC. (085692)",
-        "ZA": "PALLADIUM - NEW YORK MERCANTILE EXCHANGE (075651)",
-        "ZP": "PLATINUM - NEW YORK MERCANTILE EXCHANGE (076651)",
-    },
-}
+# Load environment variables
+load_dotenv()
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def load_futures_instruments():
+    """Load all futures instruments with COT mappings from futures_symbols_enhanced.json"""
+    try:
+        # Load the futures mapping
+        mapping_path = 'instrument_management/futures/futures_symbols_enhanced.json'
+        with open(mapping_path, 'r') as f:
+            mapping_data = json.load(f)
+
+        instruments = {}
+
+        # Process each futures symbol
+        for symbol, symbol_data in mapping_data['futures_symbols'].items():
+            # Only include symbols that have COT mapping
+            if symbol_data.get('cot_mapping', {}).get('matched', False):
+                category = symbol_data.get('category', 'Other')
+
+                # Initialize category if not exists
+                if category not in instruments:
+                    instruments[category] = {}
+
+                # Get the first COT instrument name for this symbol
+                cot_instruments = symbol_data['cot_mapping'].get('instruments', [])
+                if cot_instruments:
+                    # Use the first instrument, or combine if multiple
+                    cot_name = cot_instruments[0]
+                    instruments[category][symbol] = cot_name
+
+        return instruments
+    except Exception as e:
+        st.error(f"Error loading futures instruments: {e}")
+        return {}
+
+# Define key instruments for dashboard - now loaded dynamically
+def get_key_instruments():
+    """Get instruments from futures_symbols_enhanced.json"""
+    return load_futures_instruments()
+
+@st.cache_data(ttl=3600)
+def get_ticker_mapping():
+    """Create a mapping from COT instrument names to futures symbols"""
+    try:
+        mapping_path = 'instrument_management/futures/futures_symbols_enhanced.json'
+        with open(mapping_path, 'r') as f:
+            mapping_data = json.load(f)
+
+        ticker_map = {}
+        for symbol, symbol_data in mapping_data['futures_symbols'].items():
+            if symbol_data.get('cot_mapping', {}).get('matched', False):
+                cot_instruments = symbol_data['cot_mapping'].get('instruments', [])
+                for cot_instrument in cot_instruments:
+                    # Map both full name and shortened name to ticker
+                    ticker_map[cot_instrument] = symbol
+                    # Also map just the instrument name part (before " - ")
+                    instrument_name = cot_instrument.split(' - ')[0]
+                    ticker_map[instrument_name] = symbol
+
+        return ticker_map
+    except Exception as e:
+        return {}
+
+@st.cache_data(ttl=3600)
+def get_ticker_to_name_mapping():
+    """Create a mapping from ticker symbols to display names"""
+    try:
+        mapping_path = 'instrument_management/futures/futures_symbols_enhanced.json'
+        with open(mapping_path, 'r') as f:
+            mapping_data = json.load(f)
+
+        name_map = {}
+        for symbol, symbol_data in mapping_data['futures_symbols'].items():
+            if symbol_data.get('cot_mapping', {}).get('matched', False):
+                # Map ticker to the "name" field
+                name_map[symbol] = symbol_data.get('name', symbol)
+
+        return name_map
+    except Exception as e:
+        return {}
 
 # Color mapping for each category
 CATEGORY_COLORS = {
     "Energy": "#FF6B6B",  # Red
     "Metals": "#4ECDC4",  # Teal
-    "Agriculture": "#95E77E",  # Green
+    "Agricultural": "#95E77E",  # Green (note: changed from "Agriculture" to "Agricultural")
     "Currency": "#FFD93D",  # Yellow
-    "Equity": "#6A7FDB",  # Blue
+    "Index": "#6A7FDB",  # Blue (was "Equity", now "Index")
+    "Financial": "#9B59B6",  # Purple
 }
+
+
+
+
+def get_supabase_client():
+    """Initialize Supabase client using secure configuration"""
+    try:
+        # First try loading from config file (local development)
+        config_path = '/Users/makson/Desktop/futures_supabase_sync/config.json'
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+                url = config.get('supabase_url')
+                key = config.get('supabase_key')
+        else:
+            # Fallback to environment variables (production)
+            url = os.getenv("SUPABASE_URL")
+            key = os.getenv("SUPABASE_KEY")
+
+        if not url or not key:
+            return None
+
+        return create_client(url, key)
+    except Exception as e:
+        return None
+
+
+def get_futures_symbol_for_cot_instrument(instrument_name):
+    """Map COT instrument name to futures symbol using the enhanced mapping"""
+    try:
+        # Load the futures mapping
+        mapping_path = 'instrument_management/futures/futures_symbols_enhanced.json'
+        with open(mapping_path, 'r') as f:
+            mapping_data = json.load(f)
+
+        # Search for the instrument in the COT mappings
+        for symbol, symbol_data in mapping_data['futures_symbols'].items():
+            if 'cot_mapping' in symbol_data and symbol_data['cot_mapping'].get('matched', False):
+                for cot_instrument in symbol_data['cot_mapping'].get('instruments', []):
+                    if instrument_name in cot_instrument:
+                        return symbol
+        return None
+    except Exception as e:
+        return None
+
+
+def calculate_enhanced_correlations(cot_data, futures_symbol, position_type, window_days=730):
+    """
+    Calculate enhanced correlations: Pearson, Spearman, and Lead-Lag between COT position CHANGES and weekly futures returns
+
+    Args:
+        cot_data: DataFrame with COT data
+        futures_symbol: Futures symbol to get price data for
+        position_type: 'net_noncomm', 'comm_long', or 'comm_short'
+        window_days: Rolling window in days (default 730 = ~2 years)
+
+    Returns:
+        dict: {'pearson': float, 'spearman': float, 'lead_lag': float} or NaN values if insufficient data
+    """
+    from scipy.stats import pearsonr, spearmanr
+
+    try:
+        if cot_data.empty or not futures_symbol:
+            return {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+
+        supabase = get_supabase_client()
+        if not supabase:
+            return {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+
+        # Get COT position column name
+        position_columns = {
+            'net_noncomm': 'net_noncomm_positions',
+            'comm_long': 'comm_positions_long_all',
+            'comm_short': 'comm_positions_short_all'
+        }
+
+        if position_type not in position_columns:
+            return {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+
+        position_col = position_columns[position_type]
+
+        if position_col not in cot_data.columns:
+            return {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+
+        # Get 2+ years of futures price data
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=window_days + 100)  # Extra buffer
+
+        response = supabase.from_('futures_prices').select(
+            'date, close'
+        ).eq('symbol', futures_symbol).gte(
+            'date', start_date.strftime('%Y-%m-%d')
+        ).order('date', desc=False).execute()
+
+        if not response.data:
+            return {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+
+        # Convert to DataFrame
+        price_df = pd.DataFrame(response.data)
+        price_df['date'] = pd.to_datetime(price_df['date'])
+        price_df['close'] = pd.to_numeric(price_df['close'], errors='coerce')
+        price_df = price_df.dropna().sort_values('date')
+
+        if len(price_df) < 100:  # Need sufficient price data
+            return {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+
+        # Calculate weekly returns (Tuesday to Tuesday to align with COT reports)
+        # Resample to weekly, ending on Tuesday
+        price_df.set_index('date', inplace=True)
+        weekly_df = price_df.resample('W-TUE').agg({'close': 'last'}).dropna()
+
+        # Calculate weekly returns
+        weekly_df['returns'] = weekly_df['close'].pct_change()
+        weekly_df = weekly_df.dropna()
+
+        if len(weekly_df) < 20:  # Need at least 20 weeks of data
+            return {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+
+        # Prepare COT data
+        cot_df = cot_data.copy()
+        cot_df['report_date_as_yyyy_mm_dd'] = pd.to_datetime(cot_df['report_date_as_yyyy_mm_dd'])
+        cot_df = cot_df.sort_values('report_date_as_yyyy_mm_dd')
+
+        # Calculate position changes (key improvement!)
+        cot_df['position_change'] = cot_df[position_col].diff()
+        cot_df = cot_df.dropna()
+
+        if len(cot_df) < 20:  # Need at least 20 weeks of COT data
+            return {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+
+        # Merge datasets on date (align COT report date with weekly price returns)
+        weekly_df.reset_index(inplace=True)
+        merged = pd.merge_asof(
+            weekly_df.sort_values('date'),
+            cot_df[['report_date_as_yyyy_mm_dd', 'position_change']].sort_values('report_date_as_yyyy_mm_dd'),
+            left_on='date',
+            right_on='report_date_as_yyyy_mm_dd',
+            direction='nearest',
+            tolerance=pd.Timedelta('7 days')
+        ).dropna()
+
+        if len(merged) < 15:  # Need at least 15 overlapping points
+            return {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+
+        returns = merged['returns'].values
+        position_changes = merged['position_change'].values
+
+        # 1. Pearson Correlation (position changes vs returns)
+        try:
+            pearson_corr = pearsonr(position_changes, returns)[0]
+        except:
+            pearson_corr = np.nan
+
+        # 2. Spearman Correlation (position changes vs returns)
+        try:
+            spearman_corr = spearmanr(position_changes, returns)[0]
+        except:
+            spearman_corr = np.nan
+
+        # 3. Lead-Lag Analysis (±2 weeks)
+        best_lead_lag_corr = np.nan
+        try:
+            correlations = []
+
+            # Test different lags: -2, -1, 0, +1, +2 weeks
+            for lag in range(-2, 3):
+                if lag == 0:
+                    # Contemporaneous correlation
+                    corr = pearsonr(position_changes, returns)[0]
+                elif lag > 0:
+                    # Position changes lead returns (position changes predict future returns)
+                    if len(position_changes) > lag and len(returns) > lag:
+                        corr = pearsonr(position_changes[:-lag], returns[lag:])[0]
+                    else:
+                        continue
+                else:  # lag < 0
+                    # Position changes lag returns (returns predict future position changes)
+                    abs_lag = abs(lag)
+                    if len(position_changes) > abs_lag and len(returns) > abs_lag:
+                        corr = pearsonr(position_changes[abs_lag:], returns[:-abs_lag])[0]
+                    else:
+                        continue
+
+                if not np.isnan(corr):
+                    correlations.append(corr)
+
+            if correlations:
+                # Take the correlation with highest absolute value
+                best_lead_lag_corr = max(correlations, key=abs)
+        except:
+            best_lead_lag_corr = np.nan
+
+        return {
+            'pearson': pearson_corr,
+            'spearman': spearman_corr,
+            'lead_lag': best_lead_lag_corr
+        }
+
+    except Exception as e:
+        print(f"Enhanced correlation calculation failed for {futures_symbol}: {e}")
+        return {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+
+
+def calculate_all_enhanced_correlations_optimized(cot_data, futures_symbol, window_days=730):
+    """
+    OPTIMIZED: Calculate all enhanced correlations at once, reusing price data fetch
+
+    Args:
+        cot_data: DataFrame with COT data
+        futures_symbol: Futures symbol to get price data for
+        window_days: Rolling window in days (default 730 = ~2 years)
+
+    Returns:
+        dict: {
+            'nc': {'pearson': float, 'spearman': float, 'lead_lag': float},
+            'cl': {'pearson': float, 'spearman': float, 'lead_lag': float},
+            'cs': {'pearson': float, 'spearman': float, 'lead_lag': float}
+        }
+    """
+    from scipy.stats import pearsonr, spearmanr
+    from concurrent.futures import ThreadPoolExecutor
+
+    # Initialize return structure
+    result = {
+        'nc': {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan},
+        'cl': {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan},
+        'cs': {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+    }
+
+    try:
+        if cot_data.empty or not futures_symbol:
+            return result
+
+        supabase = get_supabase_client()
+        if not supabase:
+            return result
+
+        # OPTIMIZATION 1: Single price data fetch for all correlations
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=window_days + 100)
+
+        response = supabase.from_('futures_prices').select(
+            'date, close'
+        ).eq('symbol', futures_symbol).gte(
+            'date', start_date.strftime('%Y-%m-%d')
+        ).order('date', desc=False).execute()
+
+        if not response.data:
+            return result
+
+        # Convert to DataFrame and calculate weekly returns
+        price_df = pd.DataFrame(response.data)
+        price_df['date'] = pd.to_datetime(price_df['date'])
+        price_df['close'] = pd.to_numeric(price_df['close'], errors='coerce')
+        price_df = price_df.dropna().sort_values('date')
+
+        if len(price_df) < 100:
+            return result
+
+        # Calculate weekly returns (Tuesday to Tuesday)
+        price_df.set_index('date', inplace=True)
+        weekly_df = price_df.resample('W-TUE').agg({'close': 'last'}).dropna()
+        weekly_df['returns'] = weekly_df['close'].pct_change()
+        weekly_df = weekly_df.dropna()
+
+        if len(weekly_df) < 20:
+            return result
+
+        # Prepare COT data with all position columns
+        cot_df = cot_data.copy()
+        cot_df['report_date_as_yyyy_mm_dd'] = pd.to_datetime(cot_df['report_date_as_yyyy_mm_dd'])
+        cot_df = cot_df.sort_values('report_date_as_yyyy_mm_dd')
+
+        # Calculate all position changes at once
+        required_cols = ['net_noncomm_positions', 'comm_positions_long_all', 'comm_positions_short_all']
+        for col in required_cols:
+            if col in cot_df.columns:
+                cot_df[f'{col}_change'] = cot_df[col].diff()
+
+        cot_df = cot_df.dropna()
+
+        if len(cot_df) < 20:
+            return result
+
+        # OPTIMIZATION 2: Single merge for all position types
+        weekly_df.reset_index(inplace=True)
+        merged_base = pd.merge_asof(
+            weekly_df.sort_values('date'),
+            cot_df[['report_date_as_yyyy_mm_dd', 'net_noncomm_positions_change',
+                   'comm_positions_long_all_change', 'comm_positions_short_all_change']].sort_values('report_date_as_yyyy_mm_dd'),
+            left_on='date',
+            right_on='report_date_as_yyyy_mm_dd',
+            direction='nearest',
+            tolerance=pd.Timedelta('7 days')
+        ).dropna()
+
+        if len(merged_base) < 15:
+            return result
+
+        returns = merged_base['returns'].values
+
+        # OPTIMIZATION 3: Calculate all correlations using parallel processing
+        def calculate_correlations_for_position(position_changes, position_type):
+            """Calculate Pearson, Spearman, and Lead-Lag for one position type"""
+            pos_result = {'pearson': np.nan, 'spearman': np.nan, 'lead_lag': np.nan}
+
+            try:
+                # 1. Pearson
+                pos_result['pearson'] = pearsonr(position_changes, returns)[0]
+
+                # 2. Spearman
+                pos_result['spearman'] = spearmanr(position_changes, returns)[0]
+
+                # 3. Lead-Lag (find best correlation across ±2 weeks)
+                correlations = []
+                for lag in range(-2, 3):
+                    if lag == 0:
+                        corr = pearsonr(position_changes, returns)[0]
+                    elif lag > 0:
+                        if len(position_changes) > lag and len(returns) > lag:
+                            corr = pearsonr(position_changes[:-lag], returns[lag:])[0]
+                        else:
+                            continue
+                    else:  # lag < 0
+                        abs_lag = abs(lag)
+                        if len(position_changes) > abs_lag and len(returns) > abs_lag:
+                            corr = pearsonr(position_changes[abs_lag:], returns[:-abs_lag])[0]
+                        else:
+                            continue
+
+                    if not np.isnan(corr):
+                        correlations.append(corr)
+
+                if correlations:
+                    pos_result['lead_lag'] = max(correlations, key=abs)
+
+            except Exception as e:
+                print(f"Correlation calculation failed for {position_type}: {e}")
+
+            return pos_result
+
+        # Run correlation calculations in parallel for all three position types
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {
+                'nc': executor.submit(calculate_correlations_for_position,
+                                    merged_base['net_noncomm_positions_change'].values, 'net_noncomm'),
+                'cl': executor.submit(calculate_correlations_for_position,
+                                    merged_base['comm_positions_long_all_change'].values, 'comm_long'),
+                'cs': executor.submit(calculate_correlations_for_position,
+                                    merged_base['comm_positions_short_all_change'].values, 'comm_short')
+            }
+
+            # Collect results
+            for key, future in futures.items():
+                result[key] = future.result()
+
+        return result
+
+    except Exception as e:
+        print(f"Optimized correlation calculation failed for {futures_symbol}: {e}")
+        return result
+
+
+def calculate_rolling_correlation(cot_data, futures_symbol, position_type, window_days=730):
+    """
+    Legacy function - kept for backward compatibility
+    Calculate rolling 2-year correlation between COT positions and weekly futures returns
+
+    Args:
+        cot_data: DataFrame with COT data
+        futures_symbol: Futures symbol to get price data for
+        position_type: 'net_noncomm', 'comm_long', or 'comm_short'
+        window_days: Rolling window in days (default 730 = ~2 years)
+
+    Returns:
+        float: Latest correlation value, or NaN if insufficient data
+    """
+    try:
+        if cot_data.empty or not futures_symbol:
+            return np.nan
+
+        supabase = get_supabase_client()
+        if not supabase:
+            return np.nan
+
+        # Get COT position column name
+        position_columns = {
+            'net_noncomm': 'net_noncomm_positions',
+            'comm_long': 'comm_positions_long_all',
+            'comm_short': 'comm_positions_short_all'
+        }
+
+        if position_type not in position_columns:
+            return np.nan
+
+        position_col = position_columns[position_type]
+
+        if position_col not in cot_data.columns:
+            return np.nan
+
+        # Get 2+ years of futures price data
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=window_days + 100)  # Extra buffer
+
+        print(f"Querying Supabase for symbol '{futures_symbol}' from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+
+        response = supabase.from_('futures_prices').select(
+            'date, close'
+        ).eq('symbol', futures_symbol).gte(
+            'date', start_date.strftime('%Y-%m-%d')
+        ).order('date', desc=False).execute()
+
+        print(f"Supabase returned {len(response.data) if response.data else 0} price records for {futures_symbol}")
+
+        if not response.data:
+            return np.nan
+
+        # Convert to DataFrame
+        price_df = pd.DataFrame(response.data)
+        price_df['date'] = pd.to_datetime(price_df['date'])
+        price_df['close'] = pd.to_numeric(price_df['close'], errors='coerce')
+        price_df = price_df.dropna().sort_values('date')
+
+        if len(price_df) < 100:  # Need sufficient price data
+            return np.nan
+
+        # Calculate weekly returns (Tuesday to Tuesday to align with COT reports)
+        # COT reports on Tuesday for previous week ending Tuesday
+        price_df['weekday'] = price_df['date'].dt.dayofweek  # 0=Monday, 1=Tuesday
+
+        # Find Tuesdays (weekday=1) or closest day if Tuesday missing
+        weekly_prices = []
+        for week_start in pd.date_range(start=price_df['date'].min(),
+                                      end=price_df['date'].max(),
+                                      freq='W-TUE'):  # Week ending Tuesday
+            week_data = price_df[
+                (price_df['date'] >= week_start - timedelta(days=7)) &
+                (price_df['date'] <= week_start)
+            ]
+            if not week_data.empty:
+                # Get closest to Tuesday or last available price of the week
+                closest_price = week_data.iloc[-1]  # Last price of the week
+                weekly_prices.append({
+                    'week_end': week_start,
+                    'close': closest_price['close']
+                })
+
+        if len(weekly_prices) < 50:  # Need sufficient weekly data
+            return np.nan
+
+        weekly_df = pd.DataFrame(weekly_prices)
+        weekly_df['weekly_return'] = weekly_df['close'].pct_change()
+        weekly_df = weekly_df.dropna()
+
+        # Prepare COT data - ensure it's sorted by date
+        cot_df = cot_data.copy().sort_values('report_date_as_yyyy_mm_dd')
+
+        # Align COT data with weekly returns
+        # COT report date corresponds to the week ending that Tuesday
+        aligned_data = []
+
+        for _, cot_row in cot_df.iterrows():
+            cot_date = pd.to_datetime(cot_row['report_date_as_yyyy_mm_dd'])
+
+            # Find matching weekly return (same week ending date)
+            matching_return = weekly_df[weekly_df['week_end'] == cot_date]
+
+            if not matching_return.empty and not pd.isna(cot_row[position_col]):
+                aligned_data.append({
+                    'date': cot_date,
+                    'position': cot_row[position_col],
+                    'return': matching_return.iloc[0]['weekly_return']
+                })
+
+        if len(aligned_data) < 50:  # Need sufficient aligned data
+            return np.nan
+
+        aligned_df = pd.DataFrame(aligned_data)
+
+        # Calculate rolling correlation (2-year window = ~104 weeks)
+        correlation_window = min(104, len(aligned_df) - 1)
+
+        if correlation_window < 20:  # Need minimum data for meaningful correlation
+            return np.nan
+
+        # Get the most recent correlation
+        recent_data = aligned_df.tail(correlation_window)
+        correlation = recent_data['position'].corr(recent_data['return'])
+
+        return correlation if not pd.isna(correlation) else np.nan
+
+    except Exception as e:
+        return np.nan
 
 
 def calculate_ytd_percentile(series, current_value):
@@ -121,15 +657,18 @@ def create_sparkline(df, column_name):
 def fetch_single_instrument_data(category, instrument, api_token):
     """Helper function to fetch data for a single instrument"""
     try:
-        # Fetch YTD data only (optimized for dashboard)
-        df = fetch_cftc_data_ytd_only(instrument, api_token)
-        
-        if df is not None and not df.empty:
+        # Fetch YTD data for basic dashboard metrics
+        df_ytd = fetch_cftc_data_ytd_only(instrument, api_token)
+
+        # Fetch 2-year data for correlation calculations
+        df_2year = fetch_cftc_data_2year(instrument, api_token)
+
+        if df_ytd is not None and not df_ytd.empty:
             # Get latest data point
-            latest = df.iloc[-1]
-            
+            latest = df_ytd.iloc[-1]
+
             # Data is already YTD only from optimized fetch
-            ytd_df = df
+            ytd_df = df_ytd
             
             # Create sparkline data as a list of values for LineChartColumn
             ytd_sparkline = None
@@ -139,71 +678,90 @@ def fetch_single_instrument_data(category, instrument, api_token):
                 ytd_sparkline = ytd_sorted['net_noncomm_positions'].fillna(0).tolist()
             
             # Calculate metrics
-            # Extract ticker symbol from comments or use simplified name
-            ticker_map = {
-                "COTTON NO. 2": "CT",
-                "BRITISH POUND": "BN",
-                "COCOA": "CC",
-                "USD INDEX": "DX",
-                "E-MINI S&P 500": "ES",
-                "NASDAQ MINI": "EN",
-                "RUSSELL E-MINI": "ER",
-                "EURO FX": "FN",
-                "JAPANESE YEN": "JN",
-                "FRZN CONCENTRATED ORANGE JUICE": "JO",
-                "COFFEE C": "KC",
-                "LUMBER": "LB",
-                "WHEAT-HRSpring": "MW",
-                "SUGAR NO. 11": "SB",
-                "WHEAT-SRW": "W",
-                "CORN": "ZC",
-                "FEEDER CATTLE": "ZF",
-                "GOLD": "ZG",
-                "SILVER": "ZI",
-                "COPPER- #1": "ZK",
-                "SOYBEAN OIL": "ZL",
-                "SOYBEAN MEAL": "ZM",
-                "NAT GAS NYME": "NG",
-                "SOYBEANS": "ZS",
-                "WTI-PHYSICAL": "ZU",
-                "GASOLINE RBOB": "ZB",
-                "GULF JET NY HEAT OIL SPR": "ZH",
-                "LEAN HOGS": "ZZ",
-                "PALLADIUM": "ZA",
-                "PLATINUM": "ZP",
-            }
-            
-            instrument_name = instrument.split(' - ')[0]
-            ticker = ticker_map.get(instrument_name, instrument_name[:2].upper())
-            
+            # Get ticker symbol from dynamic mapping (use same logic as plot)
+            ticker_map = get_ticker_mapping()
+            name_map = get_ticker_to_name_mapping()
+
+            # Try full instrument name first, then short name
+            ticker = ticker_map.get(instrument)
+            if not ticker:
+                instrument_name = instrument.split(' - ')[0]
+                ticker = ticker_map.get(instrument_name, instrument_name[:2].upper())
+
+            # Get display name from the "name" field in JSON
+            display_name = name_map.get(ticker, instrument.split(' - ')[0])
+
+            # Get futures symbol for correlation calculations
+            # The ticker IS the futures symbol we need
+            futures_symbol = ticker
+
+            # Initialize enhanced correlation variables
+            nc_corr_p = nc_corr_s = nc_corr_ll = np.nan
+            comm_long_corr_p = comm_long_corr_s = comm_long_corr_ll = np.nan
+            comm_short_corr_p = comm_short_corr_s = comm_short_corr_ll = np.nan
+
+            # Calculate enhanced correlations using 2-year data (OPTIMIZED - single price fetch)
+            if df_2year is not None and not df_2year.empty and futures_symbol:
+                try:
+                    # OPTIMIZATION: Calculate all correlations at once to reuse price data
+                    all_corrs = calculate_all_enhanced_correlations_optimized(df_2year, futures_symbol)
+
+                    # Non-Commercial Net correlations
+                    nc_corr_p = all_corrs['nc']['pearson']
+                    nc_corr_s = all_corrs['nc']['spearman']
+                    nc_corr_ll = all_corrs['nc']['lead_lag']
+
+                    # Commercial Long correlations
+                    comm_long_corr_p = all_corrs['cl']['pearson']
+                    comm_long_corr_s = all_corrs['cl']['spearman']
+                    comm_long_corr_ll = all_corrs['cl']['lead_lag']
+
+                    # Commercial Short correlations
+                    comm_short_corr_p = all_corrs['cs']['pearson']
+                    comm_short_corr_s = all_corrs['cs']['spearman']
+                    comm_short_corr_ll = all_corrs['cs']['lead_lag']
+
+                except Exception as e:
+                    # Keep correlations as NaN if calculation fails
+                    pass  # Silent fail for performance
+
             row_data = {
                 'Category': category,
-                'Ticker': ticker,
-                'Instrument': instrument_name,  # Simplified name
-                
+                'Instrument': display_name,  # Display name from JSON "name" field
+
+                # Open Interest from COT data (CFTC API)
+                'Open Interest': latest.get('open_interest_all', np.nan),
+                'OI Change': latest.get('change_in_open_interest_all', np.nan),
+
                 # Non-Commercial Net Positions
                 'NC Net Position': latest.get('net_noncomm_positions', np.nan),
                 'NC Net YTD %ile': calculate_ytd_percentile(
                     ytd_df.get('net_noncomm_positions', pd.Series()),
                     latest.get('net_noncomm_positions', np.nan)
                 ),
-                'NC Correlation': '',  # Placeholder for future price correlation
-                
+                'NC Corr_P': nc_corr_p,
+                'NC Corr_S': nc_corr_s,
+                'NC L_L': nc_corr_ll,
+
                 # Commercial Longs
                 'Comm Long': latest.get('comm_positions_long_all', np.nan),
                 'Comm Long YTD %ile': calculate_ytd_percentile(
                     ytd_df.get('comm_positions_long_all', pd.Series()),
                     latest.get('comm_positions_long_all', np.nan)
                 ),
-                'Comm Long Corr': '',  # Placeholder
-                
+                'CL Corr_P': comm_long_corr_p,
+                'CL Corr_S': comm_long_corr_s,
+                'CL L_L': comm_long_corr_ll,
+
                 # Commercial Shorts
                 'Comm Short': latest.get('comm_positions_short_all', np.nan),
                 'Comm Short YTD %ile': calculate_ytd_percentile(
                     ytd_df.get('comm_positions_short_all', pd.Series()),
                     latest.get('comm_positions_short_all', np.nan)
                 ),
-                'Comm Short Corr': '',  # Placeholder
+                'CS Corr_P': comm_short_corr_p,
+                'CS Corr_S': comm_short_corr_s,
+                'CS L_L': comm_short_corr_ll,
                 
                 # Concentration (4 traders)
                 'Conc Long 4T': latest.get('conc_net_le_4_tdr_long_all', np.nan),
@@ -226,23 +784,25 @@ def fetch_single_instrument_data(category, instrument, api_token):
 def fetch_dashboard_data(api_token):
     """Fetch YTD-only data for all dashboard instruments (optimized with parallel fetching)"""
     dashboard_data = []
-    
+    # Get instruments dynamically from futures file
+    key_instruments = get_key_instruments()
+
     # Flatten instrument list
     all_instruments = []
-    for category, instruments in KEY_INSTRUMENTS.items():
+    for category, instruments in key_instruments.items():
         for ticker, cot_name in instruments.items():
             all_instruments.append((category, cot_name))
-    
+
     # Progress bar
     progress_bar = st.progress(0)
     status_text = st.empty()
-    status_text.text("Fetching dashboard data in parallel...")
-    
-    # Use ThreadPoolExecutor for parallel fetching
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    status_text.text("Processing instruments with optimized correlations...")
+
+    # Use ThreadPoolExecutor for parallel fetching with optimized correlations
+    with ThreadPoolExecutor(max_workers=6) as executor:  # Reduced workers for correlation-heavy tasks
         # Submit all fetch tasks
         future_to_instrument = {
-            executor.submit(fetch_single_instrument_data, cat, inst, api_token): (cat, inst) 
+            executor.submit(fetch_single_instrument_data, cat, inst, api_token): (cat, inst)
             for cat, inst in all_instruments
         }
         
@@ -250,8 +810,10 @@ def fetch_dashboard_data(api_token):
         # Process completed futures as they finish
         for future in as_completed(future_to_instrument):
             completed += 1
-            progress_bar.progress(completed / len(all_instruments))
-            
+            progress = completed / len(all_instruments)
+            progress_bar.progress(progress)
+            status_text.text(f"Processing correlations... {completed}/{len(all_instruments)} ({progress:.0%})")
+
             category, instrument = future_to_instrument[future]
             try:
                 row_data = future.result()
@@ -270,13 +832,15 @@ def fetch_dashboard_data(api_token):
 def fetch_zscore_data_parallel(api_token, trader_category):
     """Fetch and calculate Z-scores for all instruments in parallel"""
 
-    # Get all instruments from KEY_INSTRUMENTS and create ticker map
+    # Get all instruments dynamically and create ticker map
+    key_instruments = get_key_instruments()
+    ticker_map = get_ticker_mapping()  # Use the standardized ticker mapping
     all_instruments = []
-    ticker_map = {}
-    for category, instruments in KEY_INSTRUMENTS.items():
+
+    # Build list of all COT instrument names
+    for category, instruments in key_instruments.items():
         for ticker, cot_name in instruments.items():
             all_instruments.append(cot_name)
-            ticker_map[cot_name] = ticker
 
     # Store data for all instruments
     instrument_data = {}
@@ -356,13 +920,17 @@ def fetch_zscore_data_parallel(api_token, trader_category):
                             week_ago_net = df[cols['net']].iloc[-2]
                             week_ago_net_z = (week_ago_net - net_mean) / net_std
 
-                        # Extract ticker from instrument name
-                        ticker = instrument.split(' - ')[0]
-                        # Use the ticker mapping to get short ticker
-                        for inst_name, tick in ticker_map.items():
-                            if inst_name in ticker:
-                                ticker = tick
-                                break
+                        # Get the futures ticker from the ticker map using the full COT instrument name
+                        ticker = ticker_map.get(instrument)
+
+                        # Fallback: if not found, try without exchange name
+                        if not ticker:
+                            instrument_short = instrument.split(' - ')[0]
+                            ticker = ticker_map.get(instrument_short)
+
+                        # Final fallback: use short instrument name
+                        if not ticker:
+                            ticker = instrument.split(' - ')[0]
 
                         return {
                             'ticker': ticker,
@@ -434,12 +1002,17 @@ def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
     # Create the chart
     fig = go.Figure()
 
-    # Prepare data for plotting
+    # Get ticker to name mapping for display
+    name_map = get_ticker_to_name_mapping()
+
+    # Prepare data for plotting - map tickers to display names
     tickers = [item[0] for item in sorted_instruments]
+    display_names = [name_map.get(ticker, ticker) for ticker in tickers]
 
     # Create a reverse mapping from instrument names to categories
+    key_instruments = get_key_instruments()
     instrument_to_category = {}
-    for category, instruments in KEY_INSTRUMENTS.items():
+    for category, instruments in key_instruments.items():
         for ticker, full_name in instruments.items():
             # Map both ticker and the instrument name part (before exchange) to category
             instrument_to_category[ticker] = category
@@ -458,7 +1031,7 @@ def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
 
         if not category_found:
             # Try matching against full instrument names
-            for category, instruments in KEY_INSTRUMENTS.items():
+            for category, instruments in key_instruments.items():
                 for ticker, full_name in instruments.items():
                     if display_name in full_name or full_name.startswith(display_name):
                         category_found = category
@@ -475,7 +1048,7 @@ def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
 
     # Add bars with category colors
     fig.add_trace(go.Bar(
-        x=tickers,
+        x=display_names,
         y=y_values,
         name='Current',
         marker=dict(color=colors),
@@ -490,7 +1063,7 @@ def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
     if valid_week_ago:
         indices, week_z_values = zip(*valid_week_ago)
         fig.add_trace(go.Scatter(
-            x=[tickers[i] for i in indices],
+            x=[display_names[i] for i in indices],
             y=week_z_values,
             mode='markers',
             name='Week Ago',
@@ -525,7 +1098,8 @@ def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
             tickangle=-45
         ),
         plot_bgcolor='white',
-        bargap=0.2
+        bargap=0.2,
+        margin=dict(l=50, r=50, t=80, b=150)  # Add margins to use available space
     )
 
     # Add reference lines for both modes (both show Z-scores)
@@ -541,10 +1115,11 @@ def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
 def fetch_wow_changes_data(api_token, trader_category):
     """Fetch week-over-week changes for all dashboard instruments"""
 
-    # Get all instruments from KEY_INSTRUMENTS
+    # Get all instruments dynamically
+    key_instruments = get_key_instruments()
     all_instruments = []
     ticker_map = {}
-    for category, instruments in KEY_INSTRUMENTS.items():
+    for category, instruments in key_instruments.items():
         for ticker, cot_name in instruments.items():
             all_instruments.append(cot_name)
             ticker_map[cot_name] = ticker
@@ -602,6 +1177,22 @@ def fetch_wow_changes_data(api_token, trader_category):
                     # Calculate raw change
                     raw_change = latest_net - prev_net
 
+                    # Calculate historical Z-score for this instrument's WoW changes
+                    # Calculate all historical WoW changes for this instrument
+                    df['wow_change'] = df[cols['net']].diff()
+                    historical_changes = df['wow_change'].dropna()
+
+                    # Calculate Z-score based on instrument's own history
+                    z_score = None
+                    z_score_pct_oi = None
+
+                    if len(historical_changes) > 10:  # Need sufficient history
+                        mean_change = historical_changes.mean()
+                        std_change = historical_changes.std()
+
+                        if std_change > 0:
+                            z_score = (raw_change - mean_change) / std_change
+
                     # Calculate change as % of OI if available
                     change_pct_oi = None
                     if 'open_interest_all' in df.columns:
@@ -609,18 +1200,35 @@ def fetch_wow_changes_data(api_token, trader_category):
                         if latest_oi > 0:
                             change_pct_oi = (raw_change / latest_oi) * 100
 
-                    # Extract ticker from instrument name
-                    ticker = instrument.split(' - ')[0]
-                    # Use the ticker mapping to get short ticker
-                    for inst_name, tick in ticker_map.items():
-                        if inst_name in ticker:
-                            ticker = tick
-                            break
+                            # Also calculate Z-score for % of OI changes
+                            df['wow_change_pct_oi'] = (df[cols['net']].diff() / df['open_interest_all']) * 100
+                            historical_pct_changes = df['wow_change_pct_oi'].dropna()
+
+                            if len(historical_pct_changes) > 10:
+                                mean_pct_change = historical_pct_changes.mean()
+                                std_pct_change = historical_pct_changes.std()
+
+                                if std_pct_change > 0:
+                                    z_score_pct_oi = (change_pct_oi - mean_pct_change) / std_pct_change
+
+                    # Get the futures ticker from the ticker map using the full COT instrument name
+                    ticker = ticker_map.get(instrument)
+
+                    # Fallback: if not found, try without exchange name
+                    if not ticker:
+                        instrument_short = instrument.split(' - ')[0]
+                        ticker = ticker_map.get(instrument_short)
+
+                    # Final fallback: use short instrument name
+                    if not ticker:
+                        ticker = instrument.split(' - ')[0]
 
                     return {
                         'ticker': ticker,
                         'raw_change': raw_change,
                         'change_pct_oi': change_pct_oi,
+                        'z_score': z_score,
+                        'z_score_pct_oi': z_score_pct_oi,
                         'latest_net': latest_net,
                         'prev_net': prev_net,
                         'full_name': instrument
@@ -654,51 +1262,36 @@ def display_wow_changes(api_token, trader_category, display_mode="Raw"):
 
     # Sort by change value (most positive to most negative)
     if display_mode == "Raw":
-        # Calculate Z-score of raw changes
-        raw_changes = [v['raw_change'] for v in instrument_data.values() if v['raw_change'] is not None]
-
-        if raw_changes:
-            mean_change = np.mean(raw_changes)
-            std_change = np.std(raw_changes)
-
-            # Calculate Z-scores for each instrument
-            z_scores = {}
-            for ticker, data in instrument_data.items():
-                if data['raw_change'] is not None and std_change > 0:
-                    z_scores[ticker] = (data['raw_change'] - mean_change) / std_change
-                else:
-                    z_scores[ticker] = 0
-
-            # Sort by Z-score
-            sorted_instruments = sorted(z_scores.items(), key=lambda x: x[1], reverse=True)
-            y_values = [item[1] for item in sorted_instruments]
-            y_title = "WoW Change Z-Score"
-            text_format = "{:.2f}"
-        else:
-            sorted_instruments = sorted(instrument_data.items(),
-                                      key=lambda x: x[1]['raw_change'] if x[1]['raw_change'] is not None else 0,
-                                      reverse=True)
-            y_values = [0 for _ in sorted_instruments]
-            y_title = "WoW Change Z-Score"
-            text_format = "{:.2f}"
-    else:  # as % of Open Interest
-        # Sort by change as % of OI
+        # Use pre-calculated historical Z-scores from fetch function
         sorted_instruments = sorted(instrument_data.items(),
-                                  key=lambda x: x[1]['change_pct_oi'] if x[1]['change_pct_oi'] is not None else -999,
+                                  key=lambda x: x[1]['z_score'] if x[1]['z_score'] is not None else 0,
                                   reverse=True)
-        y_values = [item[1]['change_pct_oi'] if item[1]['change_pct_oi'] is not None else 0 for item in sorted_instruments]
-        y_title = "Change (% of OI)"
-        text_format = "{:.2f}%"
+        y_values = [item[1]['z_score'] if item[1]['z_score'] is not None else 0 for item in sorted_instruments]
+        y_title = "WoW Change Z-Score (Historical)"
+        text_format = "{:.2f}"
+    else:  # as % of Open Interest
+        # Use pre-calculated historical Z-scores for % OI from fetch function
+        sorted_instruments = sorted(instrument_data.items(),
+                                  key=lambda x: x[1]['z_score_pct_oi'] if x[1]['z_score_pct_oi'] is not None else 0,
+                                  reverse=True)
+        y_values = [item[1]['z_score_pct_oi'] if item[1]['z_score_pct_oi'] is not None else 0 for item in sorted_instruments]
+        y_title = "Change Z-Score (% of OI, Historical)"
+        text_format = "{:.2f}"
 
     # Create the chart
     fig = go.Figure()
 
-    # Prepare data for plotting
+    # Get ticker to name mapping for display
+    name_map = get_ticker_to_name_mapping()
+
+    # Prepare data for plotting - map tickers to display names
     tickers = [item[0] for item in sorted_instruments]
+    display_names = [name_map.get(ticker, ticker) for ticker in tickers]
 
     # Create a reverse mapping from instrument names to categories
+    key_instruments = get_key_instruments()
     instrument_to_category = {}
-    for category, instruments in KEY_INSTRUMENTS.items():
+    for category, instruments in key_instruments.items():
         for ticker, full_name in instruments.items():
             instrument_to_category[ticker] = category
             # Also map the instrument name (first part before " - ")
@@ -713,7 +1306,7 @@ def display_wow_changes(api_token, trader_category, display_mode="Raw"):
 
         if not category_found:
             # Try matching against full instrument names
-            for category, instruments in KEY_INSTRUMENTS.items():
+            for category, instruments in key_instruments.items():
                 for tick, full_name in instruments.items():
                     if ticker in full_name or full_name.startswith(ticker):
                         category_found = category
@@ -730,7 +1323,7 @@ def display_wow_changes(api_token, trader_category, display_mode="Raw"):
 
     # Add bars with category colors
     fig.add_trace(go.Bar(
-        x=tickers,
+        x=display_names,
         y=y_values,
         name='WoW Change',
         marker=dict(color=colors),
@@ -762,11 +1355,15 @@ def display_wow_changes(api_token, trader_category, display_mode="Raw"):
             tickfont=dict(size=12)
         ),
         plot_bgcolor='white',
-        bargap=0.2
+        bargap=0.2,
+        margin=dict(l=50, r=50, t=80, b=150)  # Add margins to use available space
     )
 
-    # Add a zero line for reference
-    fig.add_hline(y=0, line_width=2, line_color="black")
+    # Add reference lines for Z-scores
+    fig.add_hline(y=2, line_dash="dash", line_color="red", line_width=1)
+    fig.add_hline(y=-2, line_dash="dash", line_color="red", line_width=1)
+    fig.add_hline(y=1, line_dash="dot", line_color="gray", line_width=1)
+    fig.add_hline(y=-1, line_dash="dot", line_color="gray", line_width=1)
 
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
@@ -775,9 +1372,10 @@ def display_wow_changes(api_token, trader_category, display_mode="Raw"):
 def fetch_market_matrix_data(api_token, concentration_metric):
     """Fetch data for Market Matrix using dashboard instruments"""
 
-    # Get all instruments from KEY_INSTRUMENTS
+    # Get all instruments dynamically
+    key_instruments = get_key_instruments()
     all_instruments = []
-    for category, instruments in KEY_INSTRUMENTS.items():
+    for category, instruments in key_instruments.items():
         for ticker, cot_name in instruments.items():
             all_instruments.append(cot_name)
 
@@ -807,7 +1405,7 @@ def fetch_market_matrix_data(api_token, concentration_metric):
     return all_instruments_data
 
 
-def create_dashboard_market_matrix(api_token, concentration_metric='conc_gross_le_4_tdr_long'):
+def create_dashboard_market_matrix(api_token, concentration_metric='conc_gross_le_4_tdr_long', category_filter='All Categories'):
     """Create market structure matrix for dashboard instruments"""
     try:
         # Fetch data for all dashboard instruments
@@ -825,8 +1423,9 @@ def create_dashboard_market_matrix(api_token, concentration_metric='conc_gross_l
         lookback_date = pd.Timestamp.now() - pd.DateOffset(years=2)
 
         # Get all instruments list
+        key_instruments = get_key_instruments()
         dashboard_instruments = []
-        for category, instruments in KEY_INSTRUMENTS.items():
+        for category, instruments in key_instruments.items():
             for ticker, cot_name in instruments.items():
                 dashboard_instruments.append(cot_name)
 
@@ -875,9 +1474,13 @@ def create_dashboard_market_matrix(api_token, concentration_metric='conc_gross_l
                     conc_percentile = 50  # Default if column not found
 
                 # Get category and ticker for coloring
+                key_instruments = get_key_instruments()
+                ticker_map = get_ticker_mapping()
+                name_map = get_ticker_to_name_mapping()
+
                 category = None
                 ticker = None
-                for cat, instruments in KEY_INSTRUMENTS.items():
+                for cat, instruments in key_instruments.items():
                     for tick, cot_name in instruments.items():
                         if cot_name == instrument:
                             category = cat
@@ -886,61 +1489,35 @@ def create_dashboard_market_matrix(api_token, concentration_metric='conc_gross_l
                     if category:
                         break
 
-                # Create commodity name mapping from instrument names
-                commodity_name_mapping = {
-                    "COTTON NO. 2": "Cotton",
-                    "BRITISH POUND": "GBP",
-                    "COCOA": "Cocoa",
-                    "USD INDEX": "DXY",
-                    "E-MINI S&P 500": "S&P 500",
-                    "NASDAQ MINI": "Nasdaq",
-                    "RUSSELL E-MINI": "Russell",
-                    "EURO FX": "EUR",
-                    "JAPANESE YEN": "JPY",
-                    "FRZN CONCENTRATED ORANGE JUICE": "Orange Juice",
-                    "COFFEE C": "Coffee",
-                    "LUMBER": "Lumber",
-                    "WHEAT-HRSpring": "Wheat (HRS)",
-                    "SUGAR NO. 11": "Sugar",
-                    "WHEAT-SRW": "Wheat (SRW)",
-                    "CORN": "Corn",
-                    "FEEDER CATTLE": "Feeder Cattle",
-                    "GOLD": "Gold",
-                    "SILVER": "Silver",
-                    "COPPER- #1": "Copper",
-                    "SOYBEAN OIL": "Soybean Oil",
-                    "SOYBEAN MEAL": "Soybean Meal",
-                    "NAT GAS NYME": "Natural Gas",
-                    "SOYBEANS": "Soybeans",
-                    "WTI-PHYSICAL": "Crude Oil",
-                    "GASOLINE RBOB": "Gasoline",
-                    "GULF JET NY HEAT OIL SPR": "Heating Oil",
-                    "LEAN HOGS": "Lean Hogs",
-                    "PALLADIUM": "Palladium",
-                    "PLATINUM": "Platinum",
-                }
+                # If ticker not found, try to get it from the mapping
+                if not ticker:
+                    ticker = ticker_map.get(instrument)
+                    if not ticker:
+                        instrument_short = instrument.split(' - ')[0]
+                        ticker = ticker_map.get(instrument_short)
 
-                # Get the commodity name from the instrument
-                instrument_base = instrument.split(' - ')[0]
-                commodity_name = commodity_name_mapping.get(instrument_base, instrument_base)
+                # Get the display name from the "name" field in JSON
+                commodity_name = name_map.get(ticker, instrument.split(' - ')[0])
 
-                # Add to scatter data
-                scatter_data.append({
-                    'instrument': instrument,
-                    'trader_count': trader_count,
-                    'concentration': concentration,
-                    'trader_percentile': trader_percentile,
-                    'conc_percentile': conc_percentile,
-                    'open_interest': open_interest,
-                    'short_name': commodity_name,
-                    'category': category or 'Unknown'
-                })
+                # Apply category filter
+                if category_filter == 'All Categories' or category == category_filter:
+                    # Add to scatter data
+                    scatter_data.append({
+                        'instrument': instrument,
+                        'trader_count': trader_count,
+                        'concentration': concentration,
+                        'trader_percentile': trader_percentile,
+                        'conc_percentile': conc_percentile,
+                        'open_interest': open_interest,
+                        'short_name': commodity_name,
+                        'category': category or 'Unknown'
+                    })
 
         progress_bar.empty()
         status_text.empty()
 
         if not scatter_data:
-            st.warning("Insufficient historical data for percentile calculations")
+            st.warning(f"No data available for {category_filter if category_filter != 'All Categories' else 'selected instruments'}")
             return None
 
         # Show summary of included vs excluded instruments
@@ -948,10 +1525,16 @@ def create_dashboard_market_matrix(api_token, concentration_metric='conc_gross_l
         included_count = len(scatter_data)
         excluded_count = total_instruments - included_count
 
+        # Build info message with category filter info
+        category_info = f" ({category_filter})" if category_filter != 'All Categories' else ""
+
         if excluded_count > 0:
-            st.info(f"📊 Market Matrix: Showing {included_count}/{total_instruments} instruments ({excluded_count} excluded due to data limitations)")
+            st.info(f"📊 Market Matrix: Showing {included_count}/{total_instruments} instruments{category_info} ({excluded_count} excluded due to data limitations)")
         else:
-            st.success(f"✅ Market Matrix: Showing all {included_count} instruments")
+            if category_filter != 'All Categories':
+                st.info(f"📊 Market Matrix: Showing {included_count} {category_filter} instruments")
+            else:
+                st.success(f"✅ Market Matrix: Showing all {included_count} instruments")
 
         # Create scatter plot
         fig = go.Figure()
@@ -1138,7 +1721,7 @@ def create_dashboard_market_matrix(api_token, concentration_metric='conc_gross_l
 def display_dashboard(api_token):
     """Display the main dashboard overview"""
     st.header("Commodity Markets Overview")
-    
+
     # Fetch dashboard data
     with st.spinner("Loading market data..."):
         df = fetch_dashboard_data(api_token)
@@ -1151,16 +1734,42 @@ def display_dashboard(api_token):
     display_df = df.copy()
     
     # Format numeric columns
-    numeric_cols = ['NC Net Position', 'Comm Long', 'Comm Short']
+    numeric_cols = ['Open Interest', 'NC Net Position', 'Comm Long', 'Comm Short']
     for col in numeric_cols:
         if col in display_df.columns:
             display_df[col] = display_df[col].apply(lambda x: f"{x:,.0f}" if pd.notna(x) else "")
+
+    # Format OI Change column with +/- signs and colors
+    if 'OI Change' in display_df.columns:
+        def format_oi_change(x):
+            if pd.isna(x):
+                return ""
+            sign = "+" if x >= 0 else ""
+            return f"{sign}{x:,.0f}"
+        display_df['OI Change'] = display_df['OI Change'].apply(format_oi_change)
     
     # Format percentile columns
     percentile_cols = ['NC Net YTD %ile', 'Comm Long YTD %ile', 'Comm Short YTD %ile']
     for col in percentile_cols:
         if col in display_df.columns:
             display_df[col] = display_df[col].apply(lambda x: f"{x:.0f}%" if pd.notna(x) else "")
+
+    # Format enhanced correlation columns
+    correlation_cols = [
+        'NC Corr_P', 'NC Corr_S', 'NC L_L',
+        'CL Corr_P', 'CL Corr_S', 'CL L_L',
+        'CS Corr_P', 'CS Corr_S', 'CS L_L'
+    ]
+    for col in correlation_cols:
+        if col in display_df.columns:
+            def format_correlation(x):
+                if pd.isna(x) or x is None:
+                    return ""
+                try:
+                    return f"{float(x):.2f}"
+                except (ValueError, TypeError):
+                    return ""
+            display_df[col] = display_df[col].apply(format_correlation)
     
     # Format concentration columns
     conc_cols = ['Conc Long 4T', 'Conc Short 4T']
@@ -1171,17 +1780,24 @@ def display_dashboard(api_token):
     # Configure column display with LineChartColumn for sparklines
     column_config = {
         "Category": st.column_config.TextColumn("Category", width="small"),
-        "Ticker": st.column_config.TextColumn("Ticker", width="small"),
         "Instrument": st.column_config.TextColumn("Instrument", width="medium"),
+        "Open Interest": st.column_config.TextColumn("OI", help="Current Open Interest from Futures Data"),
+        "OI Change": st.column_config.TextColumn("OI Δ", help="Daily Change in Open Interest"),
         "NC Net Position": st.column_config.TextColumn("NC Net", help="Non-Commercial Net Position"),
         "NC Net YTD %ile": st.column_config.TextColumn("YTD %", help="YTD Percentile"),
-        "NC Correlation": st.column_config.TextColumn("Corr", help="Price Correlation (TBD)", width="small"),
+        "NC Corr_P": st.column_config.TextColumn("Corr_P", help="Pearson: NC Position Changes vs Weekly Returns", width="small"),
+        "NC Corr_S": st.column_config.TextColumn("Corr_S", help="Spearman: NC Position Changes vs Weekly Returns", width="small"),
+        "NC L_L": st.column_config.TextColumn("L_L", help="Lead-Lag: Best NC Position Changes vs Returns (±2wks)", width="small"),
         "Comm Long": st.column_config.TextColumn("Comm L", help="Commercial Long Positions"),
         "Comm Long YTD %ile": st.column_config.TextColumn("YTD %", help="YTD Percentile"),
-        "Comm Long Corr": st.column_config.TextColumn("Corr", help="Price Correlation (TBD)", width="small"),
+        "CL Corr_P": st.column_config.TextColumn("Corr_P", help="Pearson: Comm Long Changes vs Weekly Returns", width="small"),
+        "CL Corr_S": st.column_config.TextColumn("Corr_S", help="Spearman: Comm Long Changes vs Weekly Returns", width="small"),
+        "CL L_L": st.column_config.TextColumn("L_L", help="Lead-Lag: Best Comm Long Changes vs Returns (±2wks)", width="small"),
         "Comm Short": st.column_config.TextColumn("Comm S", help="Commercial Short Positions"),
         "Comm Short YTD %ile": st.column_config.TextColumn("YTD %", help="YTD Percentile"),
-        "Comm Short Corr": st.column_config.TextColumn("Corr", help="Price Correlation (TBD)", width="small"),
+        "CS Corr_P": st.column_config.TextColumn("Corr_P", help="Pearson: Comm Short Changes vs Weekly Returns", width="small"),
+        "CS Corr_S": st.column_config.TextColumn("Corr_S", help="Spearman: Comm Short Changes vs Weekly Returns", width="small"),
+        "CS L_L": st.column_config.TextColumn("L_L", help="Lead-Lag: Best Comm Short Changes vs Returns (±2wks)", width="small"),
         "Conc Long 4T": st.column_config.TextColumn("4T L%", help="% held by 4 largest long traders"),
         "Conc Short 4T": st.column_config.TextColumn("4T S%", help="% held by 4 largest short traders"),
         "YTD NC Net Trend": st.column_config.LineChartColumn(
@@ -1194,8 +1810,11 @@ def display_dashboard(api_token):
         "Last Update": st.column_config.TextColumn("Updated", width="small"),
     }
     
-    # Sort by category to group them visually
-    display_df = display_df.sort_values('Category', ascending=True)
+    # Sort by custom category order: Index, Financial, Metals, Energy, Currency, Agricultural
+    category_order = ['Index', 'Financial', 'Metals', 'Energy', 'Currency', 'Agricultural']
+    display_df['category_sort'] = display_df['Category'].map({cat: i for i, cat in enumerate(category_order)})
+    display_df = display_df.sort_values(['category_sort', 'Instrument'], ascending=[True, True])
+    display_df = display_df.drop('category_sort', axis=1)
     
     # Apply row coloring based on category using pandas styler
     def color_rows(row):
@@ -1214,6 +1833,17 @@ def display_dashboard(api_token):
         use_container_width=True,
         hide_index=True,
         height=500
+    )
+
+    # Add correlation explanation note below the table
+    st.markdown(
+        """
+        <p style='color: #888888; font-size: 0.9em; margin-top: 10px;'>
+        <b>Correlation Metrics:</b> Corr_P = Pearson correlation (linear relationship), Corr_S = Spearman correlation (monotonic relationship), L_L = Lead-Lag correlation (best timing across ±2 weeks).
+        All correlations are calculated using a rolling 2-year window between weekly position changes and weekly futures returns.
+        </p>
+        """,
+        unsafe_allow_html=True
     )
 
     # Add Cross-Asset Z-Score Comparison below the table
@@ -1324,8 +1954,22 @@ def display_dashboard(api_token):
             key="matrix_concentration_metric"
         )
 
+    with col2_matrix:
+        st.markdown("Filter by category:")
+        # Get all categories dynamically from the instruments
+        key_instruments = get_key_instruments()
+        all_categories = ["All Categories"] + sorted(list(key_instruments.keys()))
+
+        matrix_category_filter = st.selectbox(
+            "Matrix category filter",
+            options=all_categories,
+            index=0,
+            label_visibility="collapsed",
+            key="matrix_category_filter"
+        )
+
     # Display the Market Matrix chart
-    matrix_fig = create_dashboard_market_matrix(api_token, matrix_concentration_metric)
+    matrix_fig = create_dashboard_market_matrix(api_token, matrix_concentration_metric, matrix_category_filter)
     if matrix_fig:
         st.plotly_chart(matrix_fig, use_container_width=True, config={'displayModeBar': False})
 
