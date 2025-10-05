@@ -111,15 +111,12 @@ CATEGORY_COLORS = {
 def get_supabase_client():
     """Initialize Supabase client using secure configuration"""
     try:
-        # First try loading from config file (local development)
-        config_path = '/Users/makson/Desktop/futures_supabase_sync/config.json'
-        if os.path.exists(config_path):
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-                url = config.get('supabase_url')
-                key = config.get('supabase_key')
+        # Try Streamlit secrets first (production)
+        if hasattr(st, 'secrets') and 'SUPABASE_URL' in st.secrets:
+            url = st.secrets['SUPABASE_URL']
+            key = st.secrets['SUPABASE_KEY']
         else:
-            # Fallback to environment variables (production)
+            # Fallback to environment variables
             url = os.getenv("SUPABASE_URL")
             key = os.getenv("SUPABASE_KEY")
 

@@ -36,7 +36,7 @@ def display_time_series_chart_lwc(df, instrument_name, custom_formulas=None):
 
     # Find the futures symbol for this COT instrument
     symbol = None
-    with open('/Users/makson/Desktop/COT-Analysis/instrument_management/futures_symbols_enhanced.json', 'r') as f:
+    with open('instrument_management/futures_symbols_enhanced.json', 'r') as f:
         import json
         mapping = json.load(f)
         for fut_symbol, info in mapping['futures_symbols'].items():
