@@ -339,6 +339,7 @@ def calculate_all_enhanced_correlations_optimized(cot_data, futures_symbol, wind
 
         supabase = get_supabase_client()
         if not supabase:
+            print(f"❌ Supabase client is None for {futures_symbol} - check credentials")
             return result
 
         # OPTIMIZATION 1: Single price data fetch for all correlations
@@ -352,6 +353,7 @@ def calculate_all_enhanced_correlations_optimized(cot_data, futures_symbol, wind
         ).order('date', desc=False).execute()
 
         if not response.data:
+            print(f"❌ No price data returned from Supabase for symbol: {futures_symbol}")
             return result
 
         # Convert to DataFrame and calculate weekly returns
