@@ -26,6 +26,7 @@ from charts.participant_behavior_clusters import create_participant_behavior_clu
 from charts.regime_detection import create_regime_detection_dashboard
 from charts.market_microstructure import create_market_microstructure_analysis
 from futures_price_fetcher import FuturesPriceFetcher
+from futures_price_viewer_lwc import display_futures_price_chart
 
 
 def calculate_percentiles_for_column(df, column, lookback_days):
@@ -228,11 +229,9 @@ def display_time_series_chart(df, instrument_name):
 
 
 def display_time_series_chart_old(df, instrument_name):
-    """OLD VERSION - Display time series analysis - EXACT copy from legacyF.py"""
-    st.subheader("📈 Time Series Analysis")
-
-    # Create tabs - now including Futures Price
-    tab1, tab2, tab3, tab4 = st.tabs(["Standard Time Series", "Share of Open Interest", "Seasonality", "Futures Price"])
+    """OLD VERSION - DEPRECATED - Use display_functions_futures_first.py instead"""
+    st.warning("This function is deprecated. Please use the new futures-first implementation.")
+    return
 
     with tab1:
         # Date range selection
@@ -675,108 +674,29 @@ def display_time_series_chart_old(df, instrument_name):
                             st.metric("Year Change", f"{stats['year_change']:.2f}%")
                             st.metric("Latest OI", f"{stats['latest_oi']:,.0f}")
 
-                    # Create lightweight chart with Bloomberg terminal styling
-                    ohlc_data = []
-                    oi_data = []
+                    # Call the updated futures price viewer with events support
+                    from futures_price_viewer_lwc import (
+                        create_lwc_chart,
+                        get_category_from_futures_symbol,
+                        get_events_for_category
+                    )
 
-                    for _, row in price_df.iterrows():
-                        time_str = row['date'].strftime('%Y-%m-%d')
-                        ohlc_data.append({
-                            'time': time_str,
-                            'open': float(row['open']),
-                            'high': float(row['high']),
-                            'low': float(row['low']),
-                            'close': float(row['close'])
-                        })
-                        oi_data.append({
-                            'time': time_str,
-                            'value': float(row['open_interest'])
-                        })
+                    # Add checkbox for showing historical events
+                    show_events = st.checkbox(
+                        "Show Historical Events",
+                        value=False,
+                        key=f"show_events_{futures_symbol}_timeseries",
+                        help="Display market-moving events relevant to this instrument category"
+                    )
 
-                    # Use Bar series for OHLC bars (not candlesticks)
-                    price_series = {
-                        "type": 'Bar',
-                        "data": ohlc_data,
-                        "options": {
-                            "upColor": '#FFA500',      # Amber/orange like Bloomberg
-                            "downColor": '#FFA500',    # Same color for consistency
-                            "openVisible": True,       # Show open tick
-                            "thinBars": False          # Make bars visible
-                        }
-                    }
+                    # Get historical events if checkbox is checked
+                    events = None
+                    if show_events:
+                        category = get_category_from_futures_symbol(futures_symbol)
+                        events = get_events_for_category(category)
 
-                    # Open Interest as histogram at bottom
-                    oi_series = {
-                        "type": 'Histogram',
-                        "data": oi_data,
-                        "options": {
-                            "color": '#FFA500',
-                            "priceScaleId": 'volume',  # Use separate scale
-                            "priceFormat": {
-                                "type": 'volume'
-                            }
-                        },
-                        "priceScale": {
-                            "scaleMargins": {
-                                "top": 0.7,    # Push to bottom 30% of chart
-                                "bottom": 0
-                            }
-                        }
-                    }
-
-                    # Vintage Bloomberg terminal styling
-                    chart_options = {
-                        "layout": {
-                            "background": {
-                                "type": 'solid',
-                                "color": '#000000'     # Pure black like Bloomberg
-                            },
-                            "textColor": '#FFA500',    # Amber text
-                            "fontFamily": "'Courier New', monospace"
-                        },
-                        "grid": {
-                            "vertLines": {
-                                "color": '#1a1a1a',    # Very subtle grid
-                                "style": 1             # Dotted
-                            },
-                            "horzLines": {
-                                "color": '#1a1a1a',
-                                "style": 1
-                            }
-                        },
-                        "crosshair": {
-                            "mode": 1,                 # Magnet mode
-                            "vertLine": {
-                                "color": '#FFA500',
-                                "width": 1,
-                                "style": 2             # Dashed
-                            },
-                            "horzLine": {
-                                "color": '#FFA500',
-                                "width": 1,
-                                "style": 2
-                            }
-                        },
-                        "priceScale": {
-                            "borderColor": '#FFA500'
-                        },
-                        "timeScale": {
-                            "borderColor": '#FFA500',
-                            "timeVisible": True
-                        }
-                    }
-
-                    # Create a unique key for this chart
-                    chart_key = f'lwc_chart_timeseries_{futures_symbol}'
-
-                    # Create the chart configuration with both price and OI
-                    chart_config = {
-                        "chart": chart_options,
-                        "series": [price_series, oi_series]
-                    }
-
-                    # Render the chart
-                    renderLightweightCharts([chart_config], key=chart_key)
+                    # Create and display chart with events
+                    create_lwc_chart(price_df, futures_symbol, events)
 
 
 def display_percentile_chart(df, instrument_name):

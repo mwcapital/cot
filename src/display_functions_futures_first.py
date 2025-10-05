@@ -10,6 +10,7 @@ from datetime import datetime
 from streamlit_lightweight_charts import renderLightweightCharts
 from display_synchronized_unified import display_synchronized_charts_unified
 from futures_price_fetcher import FuturesPriceFetcher
+from futures_price_viewer_lwc import get_category_from_futures_symbol, get_events_for_category
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy import stats
@@ -178,12 +179,23 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
     # Display the full instrument name as title above charts
     st.markdown(f"### {instrument_name} - {symbol} ({price_adjustment})")
 
-    # Chart display option
-    use_unified = st.checkbox("Use unified chart (single container)", value=False, key="use_unified_chart")
+    # Chart display options
+    col_opt1, col_opt2 = st.columns(2)
+
+    with col_opt1:
+        use_unified = st.checkbox("Use unified chart (single container)", value=False, key="use_unified_chart")
+
+    with col_opt2:
+        show_events = st.checkbox(
+            "Show Historical Events",
+            value=False,
+            key=f"show_events_{symbol}",
+            help="Display market-moving events relevant to this instrument category"
+        )
 
     if use_unified:
         # Call the new unified implementation
-        return display_synchronized_charts_unified(df, instrument_name, symbol, selected_columns, selected_formulas, price_adjustment)
+        return display_synchronized_charts_unified(df, instrument_name, symbol, selected_columns, selected_formulas, price_adjustment, show_events)
 
     # Otherwise continue with the panel implementation below...
 
@@ -200,12 +212,19 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
             display_cot_only_charts(df, selected_columns)
         return
 
+    # Get historical events if checkbox is checked
+    events = None
+    if show_events:
+        category = get_category_from_futures_symbol(symbol)
+        events = get_events_for_category(category)
+
     # Prepare all charts data
     charts = []
 
     # Chart 1: Price candlesticks with volume
     priceData = []
     volumeData = []
+    markers = []
 
     for _, row in price_df.iterrows():
         date = row['date'].strftime('%Y-%m-%d')
@@ -223,6 +242,24 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
                 'value': float(row['open_interest']),
                 'color': 'rgba(128, 128, 128, 0.3)'
             })
+
+    # Add event markers if events are available (subtle markers, hover shows text)
+    if events:
+        data_start = price_df['date'].min()
+        data_end = price_df['date'].max()
+
+        for event in events:
+            event_date = pd.to_datetime(event['date'])
+            # Only add markers for events within the data range
+            if data_start <= event_date <= data_end:
+                markers.append({
+                    'time': event['date'],
+                    'position': 'aboveBar',
+                    'color': '#808080',  # Gray color for subtle markers
+                    'shape': 'circle',   # Small circle instead of arrow
+                    'text': event['description'],
+                    'size': 0.5  # Very small size
+                })
 
     # Main price chart configuration
     priceChart = {
@@ -270,20 +307,25 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
         }
     }
 
-    priceSeries = [
-        {
-            "type": 'Bar',
-            "data": priceData,
-            "options": {
-                "upColor": 'rgb(38,166,154)',
-                "downColor": 'rgb(255,82,82)',
-                "wickUpColor": 'rgb(38,166,154)',
-                "wickDownColor": 'rgb(255,82,82)',
-                "borderVisible": False,
-                "thinBars": False,  # Make bars thicker
-            }
+    # Build price series with optional markers
+    price_series_config = {
+        "type": 'Bar',
+        "data": priceData,
+        "options": {
+            "upColor": 'rgb(38,166,154)',
+            "downColor": 'rgb(255,82,82)',
+            "wickUpColor": 'rgb(38,166,154)',
+            "wickDownColor": 'rgb(255,82,82)',
+            "borderVisible": False,
+            "thinBars": False,  # Make bars thicker
         }
-    ]
+    }
+
+    # Add markers if events are available
+    if markers:
+        price_series_config["markers"] = markers
+
+    priceSeries = [price_series_config]
 
     if volumeData:
         priceSeries.append({

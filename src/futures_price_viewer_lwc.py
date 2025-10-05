@@ -9,6 +9,7 @@ from datetime import datetime
 import streamlit as st
 from streamlit_lightweight_charts import renderLightweightCharts
 import re
+import json
 from futures_price_fetcher import FuturesPriceFetcher
 
 
@@ -21,7 +22,61 @@ def extract_cot_code(instrument_name):
     return None
 
 
-def create_lwc_chart(df, symbol_name=""):
+@st.cache_data(ttl=3600)
+def load_historical_events():
+    """Load historical events from JSON file"""
+    try:
+        events_path = 'instrument_management/futures/events.json'
+        with open(events_path, 'r') as f:
+            events_data = json.load(f)
+        return events_data
+    except Exception as e:
+        st.warning(f"Could not load historical events: {e}")
+        return {}
+
+
+def get_category_from_futures_symbol(futures_symbol):
+    """Get category for a futures symbol from futures_symbols_enhanced.json"""
+    try:
+        mapping_path = 'instrument_management/futures/futures_symbols_enhanced.json'
+        with open(mapping_path, 'r') as f:
+            mapping_data = json.load(f)
+
+        symbol_data = mapping_data.get('futures_symbols', {}).get(futures_symbol, {})
+        return symbol_data.get('category', 'All')
+    except Exception:
+        return 'All'
+
+
+def get_events_for_category(category):
+    """Get events for a specific category, including 'All' category events"""
+    events_data = load_historical_events()
+
+    # Get category-specific events
+    category_events = events_data.get(category, [])
+
+    # Get 'All' category events (cross-cutting macro events)
+    all_events = events_data.get('All', [])
+
+    # Combine both lists
+    combined_events = category_events + all_events
+
+    # Remove duplicates based on date and description
+    seen = set()
+    unique_events = []
+    for event in combined_events:
+        key = (event['date'], event['description'])
+        if key not in seen:
+            seen.add(key)
+            unique_events.append(event)
+
+    # Sort by date
+    unique_events.sort(key=lambda x: x['date'])
+
+    return unique_events
+
+
+def create_lwc_chart(df, symbol_name="", events=None):
     """Create a lightweight-charts with vintage Bloomberg terminal styling"""
 
     # Prepare OHLC and Open Interest data
@@ -42,6 +97,26 @@ def create_lwc_chart(df, symbol_name=""):
             'value': float(row['open_interest'])
         })
 
+    # Prepare markers for historical events
+    markers = []
+    if events:
+        # Create a date range from the data
+        data_start = df['date'].min()
+        data_end = df['date'].max()
+
+        for event in events:
+            event_date = pd.to_datetime(event['date'])
+            # Only add markers for events within the data range
+            if data_start <= event_date <= data_end:
+                markers.append({
+                    'time': event['date'],
+                    'position': 'aboveBar',
+                    'color': '#26a69a',  # Teal color for event markers (visible on black)
+                    'shape': 'arrowDown',
+                    'text': event['description'],
+                    'size': 1
+                })
+
     # Use Bar series for OHLC bars (not candlesticks)
     price_series = {
         "type": 'Bar',
@@ -53,6 +128,10 @@ def create_lwc_chart(df, symbol_name=""):
             "thinBars": False          # Make bars visible
         }
     }
+
+    # Add markers to price series if events exist
+    if markers:
+        price_series["markers"] = markers
 
     # Open Interest as histogram at bottom
     oi_series = {
@@ -158,6 +237,14 @@ def display_futures_price_chart(instrument_name, cot_df=None):
     # Get symbol info
     symbol_info = fetcher.futures_mapping['futures_symbols'].get(futures_symbol, {})
 
+    # Add checkbox for showing historical events
+    show_events = st.checkbox(
+        "Show Historical Events",
+        value=False,
+        key=f"show_events_{futures_symbol}",
+        help="Display market-moving events relevant to this instrument category"
+    )
+
     # Default to Reverse (Back Adjusted)
     adjustment_method = "REV"
 
@@ -176,7 +263,13 @@ def display_futures_price_chart(instrument_name, cot_df=None):
     if price_df.empty:
         return None
 
-    # Create and display lightweight chart
-    create_lwc_chart(price_df, futures_symbol)
+    # Get historical events if checkbox is checked
+    events = None
+    if show_events:
+        category = get_category_from_futures_symbol(futures_symbol)
+        events = get_events_for_category(category)
+
+    # Create and display lightweight chart with events
+    create_lwc_chart(price_df, futures_symbol, events)
 
     return price_df

@@ -6,8 +6,9 @@ import pandas as pd
 import numpy as np
 from streamlit_lightweight_charts import renderLightweightCharts
 from futures_price_fetcher import FuturesPriceFetcher
+from futures_price_viewer_lwc import get_category_from_futures_symbol, get_events_for_category
 
-def display_synchronized_charts_unified(df, instrument_name, symbol, selected_columns, selected_formulas, price_adjustment='NON'):
+def display_synchronized_charts_unified(df, instrument_name, symbol, selected_columns, selected_formulas, price_adjustment='NON', show_events=False):
     """Display synchronized charts in a single container with multiple price scales"""
 
     if df.empty:
@@ -25,9 +26,16 @@ def display_synchronized_charts_unified(df, instrument_name, symbol, selected_co
         st.warning(f"No price data available for {symbol}")
         return
 
+    # Get historical events if checkbox is checked
+    events = None
+    if show_events:
+        category = get_category_from_futures_symbol(symbol)
+        events = get_events_for_category(category)
+
     # Prepare price data
     priceData = []
     volumeData = []
+    markers = []
 
     for _, row in price_df.iterrows():
         date = row['date'].strftime('%Y-%m-%d')
@@ -45,6 +53,24 @@ def display_synchronized_charts_unified(df, instrument_name, symbol, selected_co
                 'value': float(row['open_interest']),
                 'color': 'rgba(128, 128, 128, 0.3)'
             })
+
+    # Add event markers if events are available (subtle markers, hover shows text)
+    if events:
+        data_start = price_df['date'].min()
+        data_end = price_df['date'].max()
+
+        for event in events:
+            event_date = pd.to_datetime(event['date'])
+            # Only add markers for events within the data range
+            if data_start <= event_date <= data_end:
+                markers.append({
+                    'time': event['date'],
+                    'position': 'aboveBar',
+                    'color': '#808080',  # Gray color for subtle markers
+                    'shape': 'circle',   # Small circle instead of arrow
+                    'text': event['description'],
+                    'size': 0.5  # Very small size
+                })
 
     # Prepare COT data aligned with price dates
     cotData = {}
@@ -134,8 +160,8 @@ def display_synchronized_charts_unified(df, instrument_name, symbol, selected_co
     # Build series array
     series = []
 
-    # Add candlestick data (default right scale)
-    series.append({
+    # Add candlestick data (default right scale) with optional markers
+    price_series = {
         "type": 'Candlestick',
         "data": priceData,
         "options": {
@@ -145,7 +171,13 @@ def display_synchronized_charts_unified(df, instrument_name, symbol, selected_co
             "wickDownColor": 'rgb(255,82,82)',
             "borderVisible": False,
         }
-    })
+    }
+
+    # Add markers if events are available
+    if markers:
+        price_series["markers"] = markers
+
+    series.append(price_series)
 
     # Add volume as histogram on same scale
     if volumeData:
