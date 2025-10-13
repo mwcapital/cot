@@ -116,7 +116,7 @@ def get_supabase_client():
             url = st.secrets['SUPABASE_URL']
             key = st.secrets['SUPABASE_KEY']
         else:
-            # Fallback to environment variables
+            # Fallback to environment variables (local development)
             url = os.getenv("SUPABASE_URL")
             key = os.getenv("SUPABASE_KEY")
 
@@ -191,7 +191,9 @@ def calculate_enhanced_correlations(cot_data, futures_symbol, position_type, win
 
         response = supabase.from_('futures_prices').select(
             'date, close'
-        ).eq('symbol', futures_symbol).gte(
+        ).eq('symbol', futures_symbol).eq(
+            'adjustment_method', 'NON'
+        ).gte(
             'date', start_date.strftime('%Y-%m-%d')
         ).order('date', desc=False).execute()
 
@@ -345,7 +347,9 @@ def calculate_all_enhanced_correlations_optimized(cot_data, futures_symbol, wind
 
         response = supabase.from_('futures_prices').select(
             'date, close'
-        ).eq('symbol', futures_symbol).gte(
+        ).eq('symbol', futures_symbol).eq(
+            'adjustment_method', 'NON'
+        ).gte(
             'date', start_date.strftime('%Y-%m-%d')
         ).order('date', desc=False).execute()
 
@@ -511,7 +515,9 @@ def calculate_rolling_correlation(cot_data, futures_symbol, position_type, windo
 
         response = supabase.from_('futures_prices').select(
             'date, close'
-        ).eq('symbol', futures_symbol).gte(
+        ).eq('symbol', futures_symbol).eq(
+            'adjustment_method', 'NON'
+        ).gte(
             'date', start_date.strftime('%Y-%m-%d')
         ).order('date', desc=False).execute()
 
