@@ -194,260 +194,27 @@ def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
         # Initialize session state for analysis settings
         if 'analysis_data_fetched' not in st.session_state:
             st.session_state.analysis_data_fetched = False
-        
+
+        # ===== NOTE: Some chart types moved to main dashboard =====
+        # Cross-Asset, Market Matrix, WoW Changes, and Positioning Conc.
+        # have been moved to the main dashboard page.
+        # The code for these is preserved in git history (commit aaba921)
+        # To restore: revert changes to this file and add back to main.py
+        # ============================================================
+
         # UI elements outside the button to prevent reset
         if chart_type == "Cross-Asset":
-            # Fetch data button
-            if st.button("🚀 Fetch Data for All Instruments", type="primary", key="fetch_cross_asset"):
-                st.session_state.analysis_data_fetched = True
-            
-            # Show analysis UI and chart if data has been fetched
-            if st.session_state.analysis_data_fetched:
-                st.markdown("---")
-                st.subheader("🔄 Cross-Asset Comparison")
-                
-                # Trader category selection - as selectbox like in the screenshot
-                trader_category = st.selectbox(
-                    "Select trader category:",
-                    ["Non-Commercial", "Commercial", "Non-Reportable"],
-                    index=0,
-                    key="cross_asset_trader_category"
-                )
-                
-                # Lookback period for Z-score calculation - as selectbox
-                lookback_period = st.selectbox(
-                    "Lookback period for Z-score calculation:",
-                    ["1 Year", "2 Years", "3 Years", "5 Years", "10 Years"],
-                    index=1,
-                    key="cross_asset_lookback"
-                )
-                
-                # Map lookback period to start date
-                lookback_map = {
-                    "1 Year": pd.Timestamp.now() - pd.DateOffset(years=1),
-                    "2 Years": pd.Timestamp.now() - pd.DateOffset(years=2), 
-                    "3 Years": pd.Timestamp.now() - pd.DateOffset(years=3),
-                    "5 Years": pd.Timestamp.now() - pd.DateOffset(years=5),
-                    "10 Years": pd.Timestamp.now() - pd.DateOffset(years=10)
-                }
-                
-                lookback_start = lookback_map[lookback_period]
-                
-                with st.spinner("Fetching data for selected instruments..."):
-                    # Create cross-asset z-score analysis
-                    fig = create_cross_asset_analysis(
-                        selected_instruments,
-                        trader_category,
-                        api_token,
-                        lookback_start,
-                        True,  # Always show week ago values
-                        instruments_db
-                    )
-                
-                if fig:
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Download button
-                    col1, col2, col3 = st.columns([1, 1, 3])
-                    with col1:
-                        if st.button("💾 Download Cross-Asset Chart", key="download_cross"):
-                            html_string = fig.to_html(include_plotlyjs='cdn')
-                            st.download_button(
-                                label="Download Chart",
-                                data=html_string,
-                                file_name=f"cftc_cross_asset_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
-                                mime="text/html"
-                            )
-        
+            st.info("⬅️ This analysis has been moved to the main dashboard page.")
+
         elif chart_type == "Market Matrix":
-            # Initialize session state for Market Matrix
-            if 'market_matrix_data' not in st.session_state:
-                st.session_state.market_matrix_data = {}
-                
-            # For Market Matrix, show the concentration selector before the button
-            if st.button("🚀 Fetch Data for All Instruments", type="primary"):
-                # Fetch data for all instruments
-                all_instruments_data = {}
-                
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                for idx, instrument in enumerate(selected_instruments):
-                    status_text.text(f"Fetching data for {instrument}...")
-                    progress_bar.progress((idx + 1) / len(selected_instruments))
-                    
-                    df = fetch_cftc_data(instrument, api_token)
-                    if df is not None and not df.empty:
-                        all_instruments_data[instrument] = df
-                
-                progress_bar.empty()
-                status_text.empty()
-                
-                if all_instruments_data:
-                    st.session_state.market_matrix_data = all_instruments_data
-                    st.success("✅ Data fetched successfully!")
-                else:
-                    st.error("Failed to fetch data for the selected instruments")
-            
-            # Show the UI and chart if data exists
-            if st.session_state.market_matrix_data:
-                st.markdown("---")
-                st.subheader("🎯 Market Structure Matrix")
-                st.info("Visualizes market structure using 5-year percentiles for cross-market comparability. Each axis shows where instruments rank relative to their own history.")
-                
-                # Add concentration metric selector - will persist after data is fetched
-                concentration_options = {
-                    'conc_gross_le_4_tdr_long': 'Gross Top 4 Traders Long',
-                    'conc_gross_le_4_tdr_short': 'Gross Top 4 Traders Short',
-                    'conc_gross_le_8_tdr_long': 'Gross Top 8 Traders Long',
-                    'conc_gross_le_8_tdr_short': 'Gross Top 8 Traders Short',
-                    'conc_net_le_4_tdr_long_all': 'Net Top 4 Traders Long',
-                    'conc_net_le_4_tdr_short_all': 'Net Top 4 Traders Short',
-                    'conc_net_le_8_tdr_long_all': 'Net Top 8 Traders Long',
-                    'conc_net_le_8_tdr_short_all': 'Net Top 8 Traders Short'
-                }
-                
-                concentration_metric = st.selectbox(
-                    "Select concentration metric for Y-axis:",
-                    options=list(concentration_options.keys()),
-                    format_func=lambda x: concentration_options[x],
-                    index=0,
-                    help="Choose which concentration metric to compare across markets",
-                    key="market_matrix_concentration_metric"
-                )
-                
-                # Create and show the chart
-                with st.spinner("Calculating 5-year percentiles..."):
-                    fig = create_market_structure_matrix(
-                        st.session_state.market_matrix_data, 
-                        selected_instruments, 
-                        concentration_metric
-                    )
-                if fig:
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Add explanation
-                    with st.expander("📊 Understanding the Percentile-Based Matrix", expanded=False):
-                        st.markdown("""
-                        **Why Percentiles?**
-                        - Raw trader counts and concentration ratios vary significantly across markets
-                        - Percentiles allow fair comparison by showing where each market stands relative to its own 5-year history
-                        - 50th percentile (median) divides the quadrants
-                        
-                        **How to Read:**
-                        - **X-axis**: Percentile of 'traders_tot_all' variable from API (0% = historically low, 100% = historically high)
-                        - **Y-axis**: Concentration percentile based on selected metric
-                        - **Best Quadrant** (Green): Above median traders + Below median concentration
-                        - **Worst Quadrant** (Red): Below median traders + Above median concentration
-                        
-                        **Hover for Details:**
-                        - See both percentile rankings and actual values
-                        - Compare how different markets rank on the same scale
-                        """)
-        
+            st.info("⬅️ This analysis has been moved to the main dashboard page.")
+
         elif chart_type == "WoW Changes":
-            # Initialize session state for WoW Changes
-            if 'wow_changes_data_fetched' not in st.session_state:
-                st.session_state.wow_changes_data_fetched = False
-            
-            # Fetch data button
-            if st.button("🚀 Fetch Data for All Instruments", type="primary", key="fetch_wow_changes"):
-                st.session_state.wow_changes_data_fetched = True
-            
-            # Show analysis UI and chart if data has been fetched
-            if st.session_state.wow_changes_data_fetched:
-                st.markdown("---")
-                st.subheader("📊 Week-over-Week Changes")
-                
-                # Trader category selection - appears only after data is fetched
-                trader_category = st.selectbox(
-                    "Select trader category:",
-                    ["Non-Commercial", "Commercial", "Non-Reportable"],
-                    index=0,
-                    key="wow_changes_trader_category"
-                )
-                
-                with st.spinner("Calculating week-over-week changes..."):
-                    # Create WoW changes chart
-                    fig = create_cross_asset_wow_changes(
-                        selected_instruments,
-                        trader_category,
-                        api_token,
-                        instruments_db
-                    )
-                
-                if fig:
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Download button
-                    col1, col2, col3 = st.columns([1, 1, 3])
-                    with col1:
-                        if st.button("💾 Download WoW Changes Chart", key="download_wow"):
-                            html_string = fig.to_html(include_plotlyjs='cdn')
-                            st.download_button(
-                                label="Download Chart",
-                                data=html_string,
-                                file_name=f"cftc_wow_changes_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
-                                mime="text/html"
-                            )
-        
+            st.info("⬅️ This analysis has been moved to the main dashboard page.")
+
         elif chart_type == "Positioning Conc.":
-            # Initialize session state for Positioning Concentration
-            if 'positioning_conc_data_fetched' not in st.session_state:
-                st.session_state.positioning_conc_data_fetched = False
-            
-            # Fetch data button
-            if st.button("🚀 Fetch Data for All Instruments", type="primary", key="fetch_positioning_conc"):
-                st.session_state.positioning_conc_data_fetched = True
-            
-            # Show analysis UI and charts if data has been fetched
-            if st.session_state.positioning_conc_data_fetched:
-                st.markdown("---")
-                st.subheader("📈 Positioning Concentration Analysis")
-                st.info("Compares positioning as % of open interest across instruments")
-                
-                # Trader category selection - appears only after data is fetched
-                trader_category = st.selectbox(
-                    "Select trader category:",
-                    ["Non-Commercial", "Commercial", "Non-Reportable"],
-                    index=0,
-                    key="positioning_conc_trader_category"
-                )
-                
-                with st.spinner("Calculating positioning concentration..."):
-                    # Create positioning concentration charts
-                    fig_ts, fig_bar = create_positioning_concentration_charts(
-                        selected_instruments,
-                        trader_category,
-                        api_token,
-                        instruments_db
-                    )
+            st.info("⬅️ This analysis has been moved to the main dashboard page.")
 
-                if fig_ts and fig_bar:
-                    st.plotly_chart(fig_ts, use_container_width=True)
-                    st.plotly_chart(fig_bar, use_container_width=True)
-
-                    # Download buttons
-                    col1, col2 = st.columns([1, 1])
-                    with col1:
-                        if st.button("💾 Download Time Series Chart", key="download_positioning_ts"):
-                            html_string = fig_ts.to_html(include_plotlyjs='cdn')
-                            st.download_button(
-                                label="Download Time Series",
-                                data=html_string,
-                                file_name=f"cftc_positioning_timeseries_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
-                                mime="text/html"
-                            )
-                    with col2:
-                        if st.button("💾 Download Bar Chart", key="download_positioning_bar"):
-                            html_string = fig_bar.to_html(include_plotlyjs='cdn')
-                            st.download_button(
-                                label="Download Bar Chart",
-                                data=html_string,
-                                file_name=f"cftc_positioning_current_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
-                                mime="text/html"
-                            )
-        
         elif chart_type == "Participation":
             # Initialize session state for Participation
             if 'participation_data_fetched' not in st.session_state:
