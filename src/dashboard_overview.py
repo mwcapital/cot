@@ -12,7 +12,7 @@ import os
 import json
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from charts.cross_asset_analysis import create_positioning_concentration_charts
+from charts.cross_asset_analysis import create_positioning_concentration_charts, create_relative_strength_matrix
 
 # Load environment variables
 load_dotenv()
@@ -1808,6 +1808,103 @@ def display_positioning_concentration(api_token):
         st.error(f"Category '{selected_category}' not found")
 
 
+def display_strength_matrix(api_token):
+    """Display relative strength matrix for selected asset category"""
+
+    st.markdown("---")
+    st.subheader("💪 Relative Strength Matrix")
+    st.info("Heatmap showing positioning correlations between instruments over the selected time period")
+
+    # Get all categories
+    key_instruments = get_key_instruments()
+    all_categories = sorted(list(key_instruments.keys()))
+
+    # Category and time period selection
+    col1_str, col2_str = st.columns([2, 6])
+    with col1_str:
+        st.markdown("Select asset category:")
+        selected_category = st.selectbox(
+            "Category",
+            options=all_categories,
+            index=all_categories.index("Metals") if "Metals" in all_categories else 0,
+            label_visibility="collapsed",
+            key="strength_matrix_category"
+        )
+
+    with col2_str:
+        st.markdown("Select time period:")
+        time_period = st.selectbox(
+            "Time period",
+            options=["6 Months", "1 Year", "2 Years", "5 Years", "10 Years"],
+            index=1,
+            label_visibility="collapsed",
+            key="strength_matrix_time_period"
+        )
+
+    # Get all instruments for the selected category
+    if selected_category in key_instruments:
+        # Get COT instrument names for this category
+        category_instruments = list(key_instruments[selected_category].values())
+
+        if category_instruments:
+            with st.spinner(f"Calculating positioning correlations for {selected_category} instruments..."):
+                # Create relative strength matrix
+                fig = create_relative_strength_matrix(
+                    category_instruments,
+                    api_token,
+                    time_period,
+                    None  # instruments_db not needed here
+                )
+
+            if fig:
+                # Display the chart
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Add explainer
+                with st.expander("📊 Understanding the Strength Matrix", expanded=False):
+                    st.markdown("""
+                    **What This Matrix Shows:**
+                    - Correlation between Non-Commercial net positioning (long - short) across different instruments
+                    - Values range from -1 to +1, where:
+                      - **+1** (dark blue): Perfect positive correlation - instruments move together
+                      - **0** (white): No correlation - instruments move independently
+                      - **-1** (dark red): Perfect negative correlation - instruments move opposite
+
+                    **How to Use It:**
+                    - **Portfolio Diversification**: Look for instruments with low or negative correlations
+                    - **Risk Management**: High correlations mean similar market exposure
+                    - **Trading Opportunities**: Divergence from typical correlations may signal opportunities
+                    - **Market Regime**: Changing correlations can indicate shifts in market dynamics
+
+                    **Example Interpretations:**
+                    - If Gold and Silver show +0.8: They tend to move in the same direction
+                    - If Oil and Bonds show -0.5: They often move in opposite directions
+                    - If Wheat and Gold show 0.1: They have little relationship
+
+                    **Time Period Impact:**
+                    - Shorter periods (6M-1Y): Capture recent market dynamics and short-term relationships
+                    - Medium periods (2Y): Balance between recent trends and historical patterns
+                    - Longer periods (5Y-10Y): Show stable, long-term relationships and structural correlations
+                    """)
+
+                # Download button
+                if st.button("📥 Download Strength Matrix", key="download_strength_matrix"):
+                    html_string = fig.to_html(include_plotlyjs='cdn')
+                    st.download_button(
+                        label="Download Chart",
+                        data=html_string,
+                        file_name=f"cftc_strength_matrix_{selected_category}_{time_period.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                        mime="text/html",
+                        key="download_strength_btn"
+                    )
+            else:
+                st.error("Unable to generate strength matrix. Please check the data.")
+        else:
+            st.warning(f"No instruments found for category: {selected_category}")
+    else:
+        st.error(f"Category '{selected_category}' not found")
+
+
 def display_dashboard(api_token):
     """Display the main dashboard overview"""
     st.header("Commodity Markets Overview")
@@ -2077,6 +2174,9 @@ def display_dashboard(api_token):
 
     # Add Positioning Concentration Analysis section
     display_positioning_concentration(api_token)
+
+    # Add Strength Matrix section
+    display_strength_matrix(api_token)
 
     # Add refresh button
     if st.button("🔄 Refresh Dashboard Data"):

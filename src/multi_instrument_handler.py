@@ -215,6 +215,9 @@ def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
         elif chart_type == "Positioning Conc.":
             st.info("⬅️ This analysis has been moved to the main dashboard page.")
 
+        elif chart_type == "Strength Matrix":
+            st.info("⬅️ This analysis has been moved to the main dashboard page.")
+
         elif chart_type == "Participation":
             # Initialize session state for Participation
             if 'participation_data_fetched' not in st.session_state:

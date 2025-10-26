@@ -256,12 +256,12 @@ def main():
     
     with col_multi:
         st.markdown("### Multi-Instrument Analysis")
-        # Note: Cross-Asset, Market Matrix, WoW Changes, and Positioning Conc. moved to main dashboard
+        # Note: Most chart types have been moved to main dashboard
         # Uncomment below to restore them to multi-instrument analysis:
         # ["Cross-Asset", "Market Matrix", "WoW Changes", "Positioning Conc.", "Participation", "Strength Matrix"]
         multi_chart_type = st.segmented_control(
             "Select chart type",
-            ["Participation", "Strength Matrix"],
+            ["Participation"],
             selection_mode="single",
             default=None,
             key="multi_chart_type",
