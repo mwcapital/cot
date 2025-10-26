@@ -9,6 +9,10 @@ from datetime import datetime, timedelta
 import pandas as pd
 from supabase import create_client, Client
 from typing import Optional, Dict, List, Tuple
+try:
+    import streamlit as st
+except ImportError:
+    st = None
 
 class FuturesPriceFetcher:
     """Fetch and process futures price data from Supabase"""

@@ -12,6 +12,7 @@ import os
 import json
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from charts.cross_asset_analysis import create_positioning_concentration_charts
 
 # Load environment variables
 load_dotenv()
@@ -1723,6 +1724,90 @@ def create_dashboard_market_matrix(api_token, concentration_metric='conc_gross_l
         return None
 
 
+def display_positioning_concentration(api_token):
+    """Display positioning concentration analysis for selected asset category"""
+
+    st.markdown("---")
+    st.subheader("📈 Positioning Concentration Analysis")
+    st.info("Compares positioning as % of open interest across instruments")
+
+    # Get all categories
+    key_instruments = get_key_instruments()
+    all_categories = sorted(list(key_instruments.keys()))
+
+    # Category selection
+    col1_pos, col2_pos = st.columns([2, 6])
+    with col1_pos:
+        st.markdown("Select asset category:")
+        selected_category = st.selectbox(
+            "Category",
+            options=all_categories,
+            index=all_categories.index("Metals") if "Metals" in all_categories else 0,
+            label_visibility="collapsed",
+            key="positioning_category"
+        )
+
+    with col2_pos:
+        st.markdown("Select trader category:")
+        trader_category = st.selectbox(
+            "Trader category",
+            options=["Commercial", "Non-Commercial", "Non-Reportable"],
+            index=0,
+            label_visibility="collapsed",
+            key="positioning_trader_category"
+        )
+
+    # Get all instruments for the selected category
+    if selected_category in key_instruments:
+        # Get COT instrument names for this category
+        category_instruments = list(key_instruments[selected_category].values())
+
+        if category_instruments:
+            with st.spinner(f"Calculating positioning concentration for {selected_category} instruments..."):
+                # Create positioning concentration charts
+                # Note: instruments_db parameter is None since we're working with pre-loaded instruments
+                fig_ts, fig_bar = create_positioning_concentration_charts(
+                    category_instruments,
+                    trader_category,
+                    api_token,
+                    None  # instruments_db not needed here
+                )
+
+            if fig_ts and fig_bar:
+                # Display the two charts
+                st.plotly_chart(fig_ts, use_container_width=True)
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+                # Download buttons
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    if st.button("📥 Download Time Series Chart", key="download_positioning_ts"):
+                        html_string = fig_ts.to_html(include_plotlyjs='cdn')
+                        st.download_button(
+                            label="Download Time Series",
+                            data=html_string,
+                            file_name=f"cftc_positioning_timeseries_{selected_category}_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                            mime="text/html",
+                            key="download_ts_btn"
+                        )
+                with col2:
+                    if st.button("📥 Download Bar Chart", key="download_positioning_bar"):
+                        html_string = fig_bar.to_html(include_plotlyjs='cdn')
+                        st.download_button(
+                            label="Download Bar Chart",
+                            data=html_string,
+                            file_name=f"cftc_positioning_current_{selected_category}_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                            mime="text/html",
+                            key="download_bar_btn"
+                        )
+            else:
+                st.error("Unable to generate positioning concentration charts. Please check the data.")
+        else:
+            st.warning(f"No instruments found for category: {selected_category}")
+    else:
+        st.error(f"Category '{selected_category}' not found")
+
+
 def display_dashboard(api_token):
     """Display the main dashboard overview"""
     st.header("Commodity Markets Overview")
@@ -1989,6 +2074,9 @@ def display_dashboard(api_token):
         """,
         unsafe_allow_html=True
     )
+
+    # Add Positioning Concentration Analysis section
+    display_positioning_concentration(api_token)
 
     # Add refresh button
     if st.button("🔄 Refresh Dashboard Data"):

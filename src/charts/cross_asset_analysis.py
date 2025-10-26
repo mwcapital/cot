@@ -384,9 +384,9 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
                     df['net_nonrept_positions'] = df[cols['long']] - df[cols['short']]
                     cols['net'] = 'net_nonrept_positions'
                 
-                # Calculate net as % of open interest
+                # Calculate net as % of open interest (using absolute value for concentration)
                 if 'open_interest_all' in df.columns and cols.get('net') in df.columns:
-                    df['net_pct_oi'] = (df[cols['net']] / df['open_interest_all'] * 100).fillna(0)
+                    df['net_pct_oi'] = (abs(df[cols['net']]) / df['open_interest_all'] * 100).fillna(0)
                     
                     # Get trader count columns based on category
                     trader_count_cols = {
@@ -455,20 +455,18 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
                 line=dict(color=colors[idx % len(colors)], width=2),
                 hovertemplate=f'<b>{instrument}</b><br>' +
                              'Date: %{x}<br>' +
-                             'Net % of OI: %{y:.1f}%<extra></extra>'
+                             'Positioning % of OI: %{y:.1f}%<extra></extra>'
             ))
         
         # Update time series layout
         time_series_fig.update_layout(
             title=f"{trader_category} Positioning as % of Open Interest",
             xaxis_title="Date",
-            yaxis_title="Net Positioning (% of OI)",
+            yaxis_title="Positioning (% of OI)",
             height=500,
             hovermode='x unified',
             yaxis=dict(
-                zeroline=True,
-                zerolinewidth=1,
-                zerolinecolor='black',
+                zeroline=False,
                 gridcolor='lightgray',
                 ticksuffix='%'
             ),
@@ -507,8 +505,8 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
         instruments_short = [name.split('-')[0].strip() for name in instruments_full]
         latest_values = [item[1]['latest_pct'] for item in sorted_instruments]
         
-        # Use mint green for positive, red for negative
-        colors_bar = ['#7DCEA0' if v > 0 else '#E74C3C' for v in latest_values]
+        # Use mint green for all bars (since we're showing absolute values)
+        colors_bar = ['#7DCEA0' for v in latest_values]
         
         # Add bars
         bar_chart_fig.add_trace(go.Bar(
@@ -518,7 +516,7 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
             text=[f"{v:.1f}%" for v in latest_values],
             textposition='outside',
             hovertemplate='<b>%{customdata}</b><br>' +
-                         'Net % of OI: %{y:.1f}%<extra></extra>',
+                         'Positioning % of OI: %{y:.1f}%<extra></extra>',
             customdata=instruments_full
         ))
         
@@ -526,13 +524,11 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
         bar_chart_fig.update_layout(
             title=f"Latest {trader_category} Positioning (% of OI)",
             xaxis_title="",
-            yaxis_title="Net Positioning (% of OI)",
-            height=400,
+            yaxis_title="Positioning (% of OI)",
+            height=500,
             showlegend=False,
             yaxis=dict(
-                zeroline=True,
-                zerolinewidth=2,
-                zerolinecolor='black',
+                zeroline=False,
                 gridcolor='lightgray',
                 ticksuffix='%'
             ),
@@ -553,98 +549,12 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
                 font=dict(size=12, color="gray"),
                 xanchor="right", yanchor="top"
             )
-        
-        # Create average position per trader time series chart
-        avg_positions_fig = go.Figure()
-        
-        # Check if we have valid data for average positions
-        has_avg_data = any(all_data[inst]['avg_pos_long'] is not None for inst in all_data)
-        
-        if has_avg_data:
-            # Add traces for each instrument - both long and short
-            for idx, (instrument, data) in enumerate(all_data.items()):
-                if data['avg_pos_long'] is not None and data['avg_pos_short'] is not None:
-                    # Shorten name for display
-                    short_name = instrument.split('-')[0].strip()
-                    
-                    # Add long positions line
-                    avg_positions_fig.add_trace(go.Scatter(
-                        x=data['dates'],
-                        y=data['avg_pos_long'],
-                        mode='lines',
-                        name=f'{short_name} Long',
-                        line=dict(color=colors[idx % len(colors)], width=2),
-                        hovertemplate=f'<b>{instrument}</b><br>' +
-                                     'Date: %{x}<br>' +
-                                     f'{trader_category} Long Avg: %{{y:,.0f}} contracts/trader<extra></extra>'
-                    ))
-                    
-                    # Add short positions line
-                    avg_positions_fig.add_trace(go.Scatter(
-                        x=data['dates'],
-                        y=data['avg_pos_short'],
-                        mode='lines',
-                        name=f'{short_name} Short',
-                        line=dict(color=colors[idx % len(colors)], width=2, dash='dash'),
-                        hovertemplate=f'<b>{instrument}</b><br>' +
-                                     'Date: %{x}<br>' +
-                                     f'{trader_category} Short Avg: %{{y:,.0f}} contracts/trader<extra></extra>'
-                    ))
-            
-            # Update average positions layout
-            avg_positions_fig.update_layout(
-                title=f"Average {trader_category} Position per Trader",
-                xaxis_title="Date",
-                yaxis_title="Average Position per Trader (Contracts)",
-                height=500,
-                hovermode='x unified',
-                yaxis=dict(
-                    gridcolor='lightgray',
-                    tickformat=','
-                ),
-                xaxis=dict(
-                    rangeselector=dict(
-                        buttons=list([
-                            dict(count=1, label="YTD", step="year", stepmode="todate"),
-                            dict(count=1, label="1Y", step="year", stepmode="backward"),
-                            dict(count=2, label="2Y", step="year", stepmode="backward"),
-                            dict(count=5, label="5Y", step="year", stepmode="backward"),
-                            dict(step="all", label="All")
-                        ])
-                    ),
-                    rangeslider=dict(visible=True),
-                    type='date'
-                ),
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1
-                )
-            )
-        else:
-            # Show info message if no trader count data available
-            avg_positions_fig.add_annotation(
-                text=f"Average position per trader data not available for {trader_category} category",
-                xref="paper", yref="paper",
-                x=0.5, y=0.5,
-                showarrow=False,
-                font=dict(size=16, color="gray"),
-                xanchor="center", yanchor="middle"
-            )
-            avg_positions_fig.update_layout(
-                title=f"Average {trader_category} Position per Trader",
-                xaxis_title="Date",
-                yaxis_title="Average Position per Trader (Contracts)",
-                height=400
-            )
-        
-        return time_series_fig, bar_chart_fig, avg_positions_fig
+
+        return time_series_fig, bar_chart_fig
         
     except Exception as e:
         st.error(f"Error creating positioning concentration charts: {str(e)}")
-        return None, None, None
+        return None, None
 
 
 def create_cross_asset_participation_comparison(selected_instruments, api_token, instruments_db):

@@ -416,20 +416,19 @@ def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
                 
                 with st.spinner("Calculating positioning concentration..."):
                     # Create positioning concentration charts
-                    fig_ts, fig_bar, fig_avg = create_positioning_concentration_charts(
+                    fig_ts, fig_bar = create_positioning_concentration_charts(
                         selected_instruments,
                         trader_category,
                         api_token,
                         instruments_db
                     )
-                
-                if fig_ts and fig_bar and fig_avg:
+
+                if fig_ts and fig_bar:
                     st.plotly_chart(fig_ts, use_container_width=True)
                     st.plotly_chart(fig_bar, use_container_width=True)
-                    st.plotly_chart(fig_avg, use_container_width=True)
-                    
+
                     # Download buttons
-                    col1, col2, col3 = st.columns([1, 1, 1])
+                    col1, col2 = st.columns([1, 1])
                     with col1:
                         if st.button("💾 Download Time Series Chart", key="download_positioning_ts"):
                             html_string = fig_ts.to_html(include_plotlyjs='cdn')
@@ -446,15 +445,6 @@ def handle_multi_instrument_flow(chart_type, instruments_db, api_token):
                                 label="Download Bar Chart",
                                 data=html_string,
                                 file_name=f"cftc_positioning_current_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
-                                mime="text/html"
-                            )
-                    with col3:
-                        if st.button("💾 Download Average Positions Chart", key="download_positioning_avg"):
-                            html_string = fig_avg.to_html(include_plotlyjs='cdn')
-                            st.download_button(
-                                label="Download Average Positions",
-                                data=html_string,
-                                file_name=f"cftc_positioning_average_{trader_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
                                 mime="text/html"
                             )
         
