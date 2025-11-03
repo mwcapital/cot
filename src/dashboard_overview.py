@@ -1813,7 +1813,12 @@ def display_strength_matrix(api_token):
 
     st.markdown("---")
     st.subheader("💪 Relative Strength Matrix")
-    st.info("Heatmap showing positioning correlations between instruments over the selected time period")
+    st.markdown(
+        "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
+        "Positioning correlation matrix calculated using 2-year rolling window of Non-Commercial net positioning data."
+        "</p>",
+        unsafe_allow_html=True
+    )
 
     # Get all categories
     key_instruments = get_key_instruments()
@@ -1836,7 +1841,7 @@ def display_strength_matrix(api_token):
         time_period = st.selectbox(
             "Time period",
             options=["6 Months", "1 Year", "2 Years", "5 Years", "10 Years"],
-            index=1,
+            index=2,  # Default to 2 Years
             label_visibility="collapsed",
             key="strength_matrix_time_period"
         )

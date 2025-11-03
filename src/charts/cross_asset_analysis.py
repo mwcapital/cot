@@ -802,7 +802,7 @@ def create_relative_strength_matrix(selected_instruments, api_token, time_period
             zmid=0,
             text=np.round(correlation_matrix.values, 2),
             texttemplate='%{text}',
-            textfont={"size": 10},
+            textfont={"size": 14},  # Increased from 10 to 14
             reversescale=True,
             colorbar=dict(
                 title="Correlation",
