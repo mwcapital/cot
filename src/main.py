@@ -21,7 +21,8 @@ from display_functions_exact import (
     display_momentum_chart,
     display_trader_participation_chart
 )
-from multi_instrument_handler import handle_multi_instrument_flow
+# Multi-instrument handler removed - all multi-instrument analyses moved to main dashboard
+# from multi_instrument_handler import handle_multi_instrument_flow
 from dashboard_overview import display_dashboard
 
 def handle_single_instrument_flow(chart_type, instruments_db, api_token):
@@ -238,58 +239,23 @@ def main():
 
     st.markdown("---")
 
-    # Chart Type Selection FIRST
+    # Chart Type Selection
     st.header("Select Analysis Type")
-    
-    col_single, col_multi = st.columns(2)
-    
-    with col_single:
-        st.markdown("### Single Instrument Analysis")
-        single_chart_type = st.segmented_control(
-            "Select chart type",
-            ["Time Series", "Percentile", "Momentum", "Trader Participation"],
-            selection_mode="single",
-            default=None,
-            key="single_chart_type",
-            label_visibility="collapsed"
-        )
-    
-    with col_multi:
-        st.markdown("### Multi-Instrument Analysis")
-        # Note: Most chart types have been moved to main dashboard
-        # Uncomment below to restore them to multi-instrument analysis:
-        # ["Cross-Asset", "Market Matrix", "WoW Changes", "Positioning Conc.", "Participation", "Strength Matrix"]
-        multi_chart_type = st.segmented_control(
-            "Select chart type",
-            ["Participation"],
-            selection_mode="single",
-            default=None,
-            key="multi_chart_type",
-            label_visibility="collapsed"
-        )
-    
-    # Clear the other selection when one is selected
-    if single_chart_type and multi_chart_type:
-        if st.session_state.get('last_selection') == 'single':
-            multi_chart_type = None
-        else:
-            single_chart_type = None
-    
-    # Track the last selection
-    if single_chart_type:
-        st.session_state['last_selection'] = 'single'
-    elif multi_chart_type:
-        st.session_state['last_selection'] = 'multi'
-    
+
+    single_chart_type = st.segmented_control(
+        "Select chart type",
+        ["Time Series", "Percentile", "Momentum", "Trader Participation"],
+        selection_mode="single",
+        default=None,
+        key="single_chart_type"
+    )
+
     st.markdown("---")
-    
+
     # Determine which type of analysis was selected
     if single_chart_type:
         # Single Instrument Flow
         handle_single_instrument_flow(single_chart_type, instruments_db, api_token)
-    elif multi_chart_type:
-        # Multi-Instrument Flow
-        handle_multi_instrument_flow(multi_chart_type, instruments_db, api_token)
     else:
         # No chart type selected yet
         st.info("👆 Please select an analysis type from the options above to begin")

@@ -9,6 +9,7 @@ import numpy as np
 from datetime import datetime
 import sys
 import os
+import time
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_fetcher import fetch_cftc_data
 
@@ -18,16 +19,21 @@ def create_cross_asset_analysis(selected_instruments, trader_category, api_token
     try:
         # Store data for all instruments
         instrument_data = {}
-        
+        failed_instruments = []
+
         # Progress tracking
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
+
         # Fetch data for each instrument
         for idx, instrument in enumerate(selected_instruments):
             status_text.text(f"Fetching data for {instrument}...")
             progress_bar.progress((idx + 1) / len(selected_instruments))
-            
+
+            # Add small delay between fetches to avoid rate limiting (except for first instrument)
+            if idx > 0:
+                time.sleep(0.5)
+
             # Fetch data
             df = fetch_cftc_data(instrument, api_token)
             
@@ -86,10 +92,22 @@ def create_cross_asset_analysis(selected_instruments, trader_category, api_token
                                 'mean': mean_pct,
                                 'std': std_pct
                             }
-        
+                else:
+                    failed_instruments.append(instrument)
+            else:
+                failed_instruments.append(instrument)
+
         progress_bar.empty()
         status_text.empty()
-        
+
+        # Show warnings for failed instruments
+        if failed_instruments:
+            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([i.split('-')[0].strip() for i in failed_instruments])}")
+
+        # Show success message
+        if instrument_data:
+            st.success(f"✓ Successfully loaded data for {len(instrument_data)} instrument(s): {', '.join([i.split('-')[0].strip() for i in instrument_data.keys()])}")
+
         if not instrument_data:
             st.error("No valid data found for selected instruments")
             return None
@@ -154,6 +172,7 @@ def create_cross_asset_analysis(selected_instruments, trader_category, api_token
             xaxis_title="",
             yaxis_title="Z-Score",
             height=600,
+            width=1400,
             showlegend=True,
             hovermode='x unified',
             yaxis=dict(
@@ -189,16 +208,21 @@ def create_cross_asset_wow_changes(selected_instruments, trader_category, api_to
     try:
         # Store data for all instruments
         instrument_data = {}
-        
+        failed_instruments = []
+
         # Progress tracking
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
+
         # Fetch data for each instrument
         for idx, instrument in enumerate(selected_instruments):
             status_text.text(f"Fetching data for {instrument}...")
             progress_bar.progress((idx + 1) / len(selected_instruments))
-            
+
+            # Add small delay between fetches to avoid rate limiting (except for first instrument)
+            if idx > 0:
+                time.sleep(0.5)
+
             # Fetch data
             df = fetch_cftc_data(instrument, api_token)
             
@@ -251,10 +275,22 @@ def create_cross_asset_wow_changes(selected_instruments, trader_category, api_to
                                 'latest_oi': latest_oi,
                                 'current_date': current_date
                             }
-        
+                else:
+                    failed_instruments.append(instrument)
+            else:
+                failed_instruments.append(instrument)
+
         progress_bar.empty()
         status_text.empty()
-        
+
+        # Show warnings for failed instruments
+        if failed_instruments:
+            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([i.split('-')[0].strip() for i in failed_instruments])}")
+
+        # Show success message
+        if instrument_data:
+            st.success(f"✓ Successfully loaded data for {len(instrument_data)} instrument(s): {', '.join([i.split('-')[0].strip() for i in instrument_data.keys()])}")
+
         if not instrument_data:
             st.error("No valid data found for selected instruments")
             return None
@@ -342,16 +378,21 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
     try:
         # Store data for all instruments
         all_data = {}
-        
+        failed_instruments = []
+
         # Progress tracking
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
+
         # Fetch data for each instrument
         for idx, instrument in enumerate(selected_instruments):
             status_text.text(f"Fetching data for {instrument}...")
             progress_bar.progress((idx + 1) / len(selected_instruments))
-            
+
+            # Add small delay between fetches to avoid rate limiting (except for first instrument)
+            if idx > 0:
+                time.sleep(0.5)
+
             # Fetch data
             df = fetch_cftc_data(instrument, api_token)
             
@@ -384,9 +425,9 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
                     df['net_nonrept_positions'] = df[cols['long']] - df[cols['short']]
                     cols['net'] = 'net_nonrept_positions'
                 
-                # Calculate net as % of open interest (using absolute value for concentration)
+                # Calculate net as % of open interest (with directional sign)
                 if 'open_interest_all' in df.columns and cols.get('net') in df.columns:
-                    df['net_pct_oi'] = (abs(df[cols['net']]) / df['open_interest_all'] * 100).fillna(0)
+                    df['net_pct_oi'] = (df[cols['net']] / df['open_interest_all'] * 100).fillna(0)
                     
                     # Get trader count columns based on category
                     trader_count_cols = {
@@ -427,10 +468,22 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
                         'avg_pos_long': avg_pos_long,
                         'avg_pos_short': avg_pos_short
                     }
-        
+                else:
+                    failed_instruments.append(instrument)
+            else:
+                failed_instruments.append(instrument)
+
         progress_bar.empty()
         status_text.empty()
-        
+
+        # Show warnings for failed instruments
+        if failed_instruments:
+            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([i.split('-')[0].strip() for i in failed_instruments])}")
+
+        # Show success message
+        if all_data:
+            st.success(f"✓ Successfully loaded data for {len(all_data)} instrument(s): {', '.join([i.split('-')[0].strip() for i in all_data.keys()])}")
+
         if not all_data:
             st.error("No valid data found for selected instruments")
             return None, None
@@ -455,18 +508,20 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
                 line=dict(color=colors[idx % len(colors)], width=2),
                 hovertemplate=f'<b>{instrument}</b><br>' +
                              'Date: %{x}<br>' +
-                             'Positioning % of OI: %{y:.1f}%<extra></extra>'
+                             'Net Positioning % of OI: %{y:.1f}%<extra></extra>'
             ))
         
         # Update time series layout
         time_series_fig.update_layout(
-            title=f"{trader_category} Positioning as % of Open Interest",
+            title=f"{trader_category} Net Positioning as % of Open Interest",
             xaxis_title="Date",
-            yaxis_title="Positioning (% of OI)",
+            yaxis_title="Net Positioning (% of OI)",
             height=500,
             hovermode='x unified',
             yaxis=dict(
-                zeroline=False,
+                zeroline=True,
+                zerolinewidth=2,
+                zerolinecolor='black',
                 gridcolor='lightgray',
                 ticksuffix='%'
             ),
@@ -505,30 +560,32 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
         instruments_short = [name.split('-')[0].strip() for name in instruments_full]
         latest_values = [item[1]['latest_pct'] for item in sorted_instruments]
         
-        # Use mint green for all bars (since we're showing absolute values)
-        colors_bar = ['#7DCEA0' for v in latest_values]
-        
+        # Color bars based on direction: green for net long, red for net short
+        colors_bar = ['#2ecc71' if v > 0 else '#e74c3c' for v in latest_values]
+
         # Add bars
         bar_chart_fig.add_trace(go.Bar(
             x=instruments_short,
             y=latest_values,
             marker=dict(color=colors_bar),
-            text=[f"{v:.1f}%" for v in latest_values],
+            text=[f"{v:+.1f}%" for v in latest_values],
             textposition='outside',
             hovertemplate='<b>%{customdata}</b><br>' +
-                         'Positioning % of OI: %{y:.1f}%<extra></extra>',
+                         'Net Positioning % of OI: %{y:+.1f}%<extra></extra>',
             customdata=instruments_full
         ))
         
         # Update bar chart layout
         bar_chart_fig.update_layout(
-            title=f"Latest {trader_category} Positioning (% of OI)",
+            title=f"Latest {trader_category} Net Positioning (% of OI)",
             xaxis_title="",
-            yaxis_title="Positioning (% of OI)",
+            yaxis_title="Net Positioning (% of OI)",
             height=500,
             showlegend=False,
             yaxis=dict(
-                zeroline=False,
+                zeroline=True,
+                zerolinewidth=2,
+                zerolinecolor='black',
                 gridcolor='lightgray',
                 ticksuffix='%'
             ),
@@ -562,23 +619,28 @@ def create_cross_asset_participation_comparison(selected_instruments, api_token,
     try:
         # Store data for all instruments
         all_data = {}
-        
+        failed_instruments = []
+
         # Progress tracking
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
+
         # Fetch data for each instrument
         for idx, instrument in enumerate(selected_instruments):
             status_text.text(f"Fetching data for {instrument}...")
             progress_bar.progress((idx + 1) / len(selected_instruments))
-            
+
+            # Add small delay between fetches to avoid rate limiting (except for first instrument)
+            if idx > 0:
+                time.sleep(0.5)
+
             # Fetch data
             df = fetch_cftc_data(instrument, api_token)
-            
+
             if df is not None and not df.empty:
                 # Sort by date
                 df = df.sort_values('report_date_as_yyyy_mm_dd')
-                
+
                 # Store the data
                 all_data[instrument] = {
                     'dates': df['report_date_as_yyyy_mm_dd'],
@@ -589,14 +651,24 @@ def create_cross_asset_participation_comparison(selected_instruments, api_token,
                     'comm_short': df['traders_comm_short_all'],
                     'open_interest': df['open_interest_all']
                 }
-        
+            else:
+                failed_instruments.append(instrument)
+
         progress_bar.empty()
         status_text.empty()
-        
+
+        # Show data loading summary
+        if failed_instruments and all_data:
+            st.info(f"✓ Loaded {len(all_data)}/{len(selected_instruments)} instruments successfully. Failed: {', '.join([i.split('-')[0].strip() for i in failed_instruments])}")
+        elif all_data:
+            st.success(f"✓ Successfully loaded data for {len(all_data)} instrument(s): {', '.join([i.split('-')[0].strip() for i in all_data.keys()])}")
+        elif failed_instruments:
+            st.error(f"Failed to fetch data for all {len(failed_instruments)} instrument(s)")
+
         if not all_data:
             st.error("No valid data found for selected instruments")
             return None
-        
+
         # Create figure with subplots
         from plotly.subplots import make_subplots
         import plotly.express as px
@@ -706,8 +778,11 @@ def create_cross_asset_participation_comparison(selected_instruments, api_token,
         fig.update_yaxes(title_text="Participation %", row=2, col=2)
         
         # Add zero line for YoY change
-        fig.add_hline(y=0, row=1, col=2, line_dash="dash", line_color="gray")
-        
+        fig.add_hline(y=0, row=1, col=2, line_dash="dash", line_color="gray", opacity=0.5)
+
+        # Add 100% reference line for participation score
+        fig.add_hline(y=100, row=2, col=2, line_dash="dash", line_color="gray", opacity=0.5)
+
         # Add range selector to first subplot
         fig.update_xaxes(
             rangeselector=dict(
@@ -741,11 +816,12 @@ def create_relative_strength_matrix(selected_instruments, api_token, time_period
     try:
         # Store data for all instruments
         all_data = {}
-        
+        failed_instruments = []
+
         # Progress tracking
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
+
         # Define time period mapping
         period_days = {
             "6 Months": 180,
@@ -754,15 +830,19 @@ def create_relative_strength_matrix(selected_instruments, api_token, time_period
             "5 Years": 1825,
             "10 Years": 3650
         }
-        
+
         # Calculate cutoff date
         cutoff_date = pd.Timestamp.now() - pd.DateOffset(days=period_days[time_period])
-        
+
         # Fetch data for each instrument
         for idx, instrument in enumerate(selected_instruments):
             status_text.text(f"Fetching data for {instrument}...")
             progress_bar.progress((idx + 1) / len(selected_instruments))
-            
+
+            # Add small delay between fetches to avoid rate limiting (except for first instrument)
+            if idx > 0:
+                time.sleep(0.5)
+
             # Fetch data
             df = fetch_cftc_data(instrument, api_token)
             
@@ -776,13 +856,25 @@ def create_relative_strength_matrix(selected_instruments, api_token, time_period
                     
                     # Calculate net position for non-commercial
                     df['net_noncomm'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
-                    
+
                     # Store the series indexed by date
                     all_data[instrument] = df.set_index('report_date_as_yyyy_mm_dd')['net_noncomm']
-        
+                else:
+                    failed_instruments.append(instrument)
+            else:
+                failed_instruments.append(instrument)
+
         progress_bar.empty()
         status_text.empty()
-        
+
+        # Show warnings for failed instruments
+        if failed_instruments:
+            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([i.split('-')[0].strip() for i in failed_instruments])}")
+
+        # Show success message
+        if all_data:
+            st.success(f"✓ Successfully loaded data for {len(all_data)} instrument(s): {', '.join([i.split('-')[0].strip() for i in all_data.keys()])}")
+
         if len(all_data) < 2:
             st.warning("Need at least 2 instruments with valid data for correlation matrix")
             return None
@@ -824,14 +916,14 @@ def create_relative_strength_matrix(selected_instruments, api_token, time_period
             yaxis=dict(
                 autorange="reversed"
             ),
-            margin=dict(t=100, b=100, l=100, r=150)
+            margin=dict(t=100, b=180, l=100, r=150)
         )
-        
+
         # Add annotation explaining the matrix
         fig.add_annotation(
             text="Non-Commercial Net Positioning Correlations",
             xref="paper", yref="paper",
-            x=0.5, y=-0.15,
+            x=0.5, y=-0.28,
             showarrow=False,
             font=dict(size=12, color="gray"),
             xanchor="center"

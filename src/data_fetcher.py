@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 from sodapy import Socrata
 import json
+import time
 from config import CFTC_API_BASE, DATASET_CODE, DEFAULT_LIMIT, CFTC_COLUMNS
 from historical_data_loader import get_historical_data_for_instrument, check_data_gap
 
@@ -34,6 +35,28 @@ def load_instruments_database():
         return None
 
 
+def _fetch_with_retry(client, dataset_code, where_clause, select_columns, order_by, limit, max_retries=3):
+    """Helper function to fetch data with retry logic"""
+    for attempt in range(max_retries):
+        try:
+            results = client.get(
+                dataset_code,
+                where=where_clause,
+                select=select_columns,
+                order=order_by,
+                limit=limit
+            )
+            return results
+        except Exception as e:
+            if attempt < max_retries - 1:
+                # Wait before retrying (exponential backoff)
+                wait_time = 2 ** attempt  # 1s, 2s, 4s
+                time.sleep(wait_time)
+            else:
+                # Last attempt failed, raise the exception
+                raise e
+
+
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def fetch_cftc_data(instrument_name, api_token):
     """Fetch CFTC data for a specific instrument with historical data stitching"""
@@ -45,27 +68,30 @@ def fetch_cftc_data(instrument_name, api_token):
             instrument_name_clean = instrument_name.rsplit(' (', 1)[0]
         else:
             instrument_name_clean = instrument_name
-            
-        client = Socrata(CFTC_API_BASE, api_token)
+
+        # Initialize Socrata client with increased timeout (30 seconds instead of default 10)
+        client = Socrata(CFTC_API_BASE, api_token, timeout=30)
 
         # Special handling for WTI-PHYSICAL: merge with historical CRUDE OIL, LIGHT SWEET data
         if instrument_name_clean == "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE":
             # First, get historical data from CRUDE OIL, LIGHT SWEET (2000-2022)
-            historical_results = client.get(
+            historical_results = _fetch_with_retry(
+                client,
                 DATASET_CODE,
-                where="market_and_exchange_names='CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE'",
-                select=",".join(CFTC_COLUMNS),
-                order="report_date_as_yyyy_mm_dd ASC",
-                limit=DEFAULT_LIMIT
+                "market_and_exchange_names='CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
             )
 
             # Then get current data from WTI-PHYSICAL (2022-present)
-            current_results = client.get(
+            current_results = _fetch_with_retry(
+                client,
                 DATASET_CODE,
-                where="market_and_exchange_names='WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE'",
-                select=",".join(CFTC_COLUMNS),
-                order="report_date_as_yyyy_mm_dd ASC",
-                limit=DEFAULT_LIMIT
+                "market_and_exchange_names='WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
             )
 
             # Merge the results
@@ -74,34 +100,37 @@ def fetch_cftc_data(instrument_name, api_token):
         # Special handling for NAT GAS NYME: merge with historical NATURAL GAS data
         elif instrument_name_clean == "NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE":
             # First, get historical data from NATURAL GAS (up to 2016)
-            historical_results = client.get(
+            historical_results = _fetch_with_retry(
+                client,
                 DATASET_CODE,
-                where="market_and_exchange_names='NATURAL GAS - NEW YORK MERCANTILE EXCHANGE'",
-                select=",".join(CFTC_COLUMNS),
-                order="report_date_as_yyyy_mm_dd ASC",
-                limit=DEFAULT_LIMIT
+                "market_and_exchange_names='NATURAL GAS - NEW YORK MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
             )
 
             # Then get current data from NAT GAS NYME (2022-present)
-            current_results = client.get(
+            current_results = _fetch_with_retry(
+                client,
                 DATASET_CODE,
-                where="market_and_exchange_names='NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE'",
-                select=",".join(CFTC_COLUMNS),
-                order="report_date_as_yyyy_mm_dd ASC",
-                limit=DEFAULT_LIMIT
+                "market_and_exchange_names='NAT GAS NYME - NEW YORK MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
             )
 
             # Merge the results
             results = historical_results + current_results
-            
+
         else:
             # Standard fetch for all other instruments
-            results = client.get(
+            results = _fetch_with_retry(
+                client,
                 DATASET_CODE,
-                where=f"market_and_exchange_names='{instrument_name_clean}'",
-                select=",".join(CFTC_COLUMNS),
-                order="report_date_as_yyyy_mm_dd ASC",
-                limit=DEFAULT_LIMIT
+                f"market_and_exchange_names='{instrument_name_clean}'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
             )
 
         client.close()
@@ -207,7 +236,8 @@ def fetch_cftc_data_2year(instrument_name, api_token):
         else:
             instrument_name_clean = instrument_name
 
-        client = Socrata(CFTC_API_BASE, api_token)
+        # Initialize Socrata client with increased timeout
+        client = Socrata(CFTC_API_BASE, api_token, timeout=30)
 
         # Calculate 2 years ago date
         from datetime import datetime, timedelta
@@ -216,12 +246,13 @@ def fetch_cftc_data_2year(instrument_name, api_token):
         # Fetch only 2 years of data using WHERE clause for date filtering
         where_clause = f"market_and_exchange_names='{instrument_name_clean}' AND report_date_as_yyyy_mm_dd >= '{two_years_ago}'"
 
-        results = client.get(
+        results = _fetch_with_retry(
+            client,
             DATASET_CODE,
-            where=where_clause,
-            select=",".join(CFTC_COLUMNS),
-            order="report_date_as_yyyy_mm_dd ASC",
-            limit=200  # ~104 weekly reports in 2 years, 200 is safe
+            where_clause,
+            ",".join(CFTC_COLUMNS),
+            "report_date_as_yyyy_mm_dd ASC",
+            200  # ~104 weekly reports in 2 years, 200 is safe
         )
 
         client.close()
@@ -259,14 +290,15 @@ def fetch_cftc_data_ytd_only(instrument_name, api_token):
     """Optimized fetch for dashboard - only gets YTD data plus latest record"""
     try:
         from datetime import datetime
-        
+
         # Strip the contract code if present
         if ' (' in instrument_name and instrument_name.endswith(')'):
             instrument_name_clean = instrument_name.rsplit(' (', 1)[0]
         else:
             instrument_name_clean = instrument_name
-            
-        client = Socrata(CFTC_API_BASE, api_token)
+
+        # Initialize Socrata client with increased timeout
+        client = Socrata(CFTC_API_BASE, api_token, timeout=30)
         
         # Get current year
         current_year = datetime.now().year
@@ -289,21 +321,23 @@ def fetch_cftc_data_ytd_only(instrument_name, api_token):
         # Special handling for WTI-PHYSICAL
         if instrument_name_clean == "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE":
             # For WTI, just get YTD data from the current instrument
-            results = client.get(
+            results = _fetch_with_retry(
+                client,
                 DATASET_CODE,
-                where=f"market_and_exchange_names='WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE' AND report_date_as_yyyy_mm_dd >= '{year_start}'",
-                select=",".join(dashboard_columns),
-                order="report_date_as_yyyy_mm_dd ASC",
-                limit=100  # YTD should be ~50 records max
+                f"market_and_exchange_names='WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE' AND report_date_as_yyyy_mm_dd >= '{year_start}'",
+                ",".join(dashboard_columns),
+                "report_date_as_yyyy_mm_dd ASC",
+                100  # YTD should be ~50 records max
             )
         else:
             # Standard fetch for YTD data only
-            results = client.get(
+            results = _fetch_with_retry(
+                client,
                 DATASET_CODE,
-                where=f"market_and_exchange_names='{instrument_name_clean}' AND report_date_as_yyyy_mm_dd >= '{year_start}'",
-                select=",".join(dashboard_columns),
-                order="report_date_as_yyyy_mm_dd ASC",
-                limit=100  # YTD should be ~50 records max
+                f"market_and_exchange_names='{instrument_name_clean}' AND report_date_as_yyyy_mm_dd >= '{year_start}'",
+                ",".join(dashboard_columns),
+                "report_date_as_yyyy_mm_dd ASC",
+                100  # YTD should be ~50 records max
             )
         
         if not results:

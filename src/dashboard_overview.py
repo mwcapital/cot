@@ -12,7 +12,7 @@ import os
 import json
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from charts.cross_asset_analysis import create_positioning_concentration_charts, create_relative_strength_matrix
+from charts.cross_asset_analysis import create_positioning_concentration_charts, create_relative_strength_matrix, create_cross_asset_participation_comparison
 
 # Load environment variables
 load_dotenv()
@@ -974,8 +974,8 @@ def fetch_zscore_data_parallel(api_token, trader_category):
     return instrument_data
 
 
-def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
-    """Display cross-asset comparison using dashboard instruments"""
+def display_cross_asset_zscore(api_token, trader_category):
+    """Display cross-asset comparison using dashboard instruments - shows both Raw and % of OI charts"""
 
     # Fetch data with caching and parallel processing
     with st.spinner("Loading cross-asset analysis..."):
@@ -985,136 +985,138 @@ def display_cross_asset_zscore(api_token, trader_category, display_mode="Raw"):
         st.warning("No valid data found for cross-asset comparison")
         return
 
-    # Sort by z-score from most positive to most negative (left to right)
-    if display_mode == "Raw":
-        # Use Z-score of raw net positions
-        sorted_instruments = sorted(instrument_data.items(),
-                                  key=lambda x: x[1]['z_score'] if x[1]['z_score'] is not None else -999,
-                                  reverse=True)  # Most positive first
-        y_values = [item[1]['z_score'] if item[1]['z_score'] is not None else 0 for item in sorted_instruments]
-        week_ago_values = [item[1]['week_ago_z'] for item in sorted_instruments]
-        y_title = "Z-Score"
-        text_format = "{:.2f}"
-    else:  # as % of Open Interest
-        # Use Z-score of net as % of OI
-        sorted_instruments = sorted(instrument_data.items(),
-                                  key=lambda x: x[1]['z_score_pct'] if x[1]['z_score_pct'] is not None else -999,
-                                  reverse=True)  # Most positive first
-        y_values = [item[1]['z_score_pct'] if item[1]['z_score_pct'] is not None else 0 for item in sorted_instruments]
-        week_ago_values = [item[1]['week_ago_z_pct'] for item in sorted_instruments]
-        y_title = "Z-Score (% of OI)"
-        text_format = "{:.2f}"
+    # Sort once by Raw z-score and use same order for both charts
+    sorted_instruments = sorted(instrument_data.items(),
+                              key=lambda x: x[1]['z_score'] if x[1]['z_score'] is not None else -999,
+                              reverse=True)  # Most positive first
 
-    # Create the chart
-    fig = go.Figure()
+    # Create both charts
+    for display_mode in ["Raw", "as % of Open Interest"]:
+        # Use the same sorted order for both charts
+        if display_mode == "Raw":
+            # Use Z-score of raw net positions
+            y_values = [item[1]['z_score'] if item[1]['z_score'] is not None else 0 for item in sorted_instruments]
+            week_ago_values = [item[1]['week_ago_z'] for item in sorted_instruments]
+            y_title = "Z-Score"
+            text_format = "{:.2f}"
+        else:  # as % of Open Interest
+            # Use Z-score of net as % of OI, but keep the same instrument order
+            y_values = [item[1]['z_score_pct'] if item[1]['z_score_pct'] is not None else 0 for item in sorted_instruments]
+            week_ago_values = [item[1]['week_ago_z_pct'] for item in sorted_instruments]
+            y_title = "Z-Score (% of OI)"
+            text_format = "{:.2f}"
 
-    # Get ticker to name mapping for display
-    name_map = get_ticker_to_name_mapping()
+        # Create the chart
+        fig = go.Figure()
 
-    # Prepare data for plotting - map tickers to display names
-    tickers = [item[0] for item in sorted_instruments]
-    display_names = [name_map.get(ticker, ticker) for ticker in tickers]
+        # Get ticker to name mapping for display
+        name_map = get_ticker_to_name_mapping()
 
-    # Create a reverse mapping from instrument names to categories
-    key_instruments = get_key_instruments()
-    instrument_to_category = {}
-    for category, instruments in key_instruments.items():
-        for ticker, full_name in instruments.items():
-            # Map both ticker and the instrument name part (before exchange) to category
-            instrument_to_category[ticker] = category
-            # Also map the instrument name (first part before " - ")
-            instrument_name = full_name.split(' - ')[0]
-            instrument_to_category[instrument_name] = category
+        # Prepare data for plotting - map tickers to display names
+        tickers = [item[0] for item in sorted_instruments]
+        display_names = [name_map.get(ticker, ticker) for ticker in tickers]
 
-    # Get colors based on category
-    colors = []
-    for item in sorted_instruments:
-        # The ticker here is actually the displayed name from the chart
-        display_name = item[0]
+        # Create a reverse mapping from instrument names to categories
+        key_instruments = get_key_instruments()
+        instrument_to_category = {}
+        for category, instruments in key_instruments.items():
+            for ticker, full_name in instruments.items():
+                # Map both ticker and the instrument name part (before exchange) to category
+                instrument_to_category[ticker] = category
+                # Also map the instrument name (first part before " - ")
+                instrument_name = full_name.split(' - ')[0]
+                instrument_to_category[instrument_name] = category
 
-        # Try to find category by exact match or by instrument name
-        category_found = instrument_to_category.get(display_name)
+        # Get colors based on category
+        colors = []
+        for item in sorted_instruments:
+            # The ticker here is actually the displayed name from the chart
+            display_name = item[0]
 
-        if not category_found:
-            # Try matching against full instrument names
-            for category, instruments in key_instruments.items():
-                for ticker, full_name in instruments.items():
-                    if display_name in full_name or full_name.startswith(display_name):
-                        category_found = category
+            # Try to find category by exact match or by instrument name
+            category_found = instrument_to_category.get(display_name)
+
+            if not category_found:
+                # Try matching against full instrument names
+                for category, instruments in key_instruments.items():
+                    for ticker, full_name in instruments.items():
+                        if display_name in full_name or full_name.startswith(display_name):
+                            category_found = category
+                            break
+                    if category_found:
                         break
-                if category_found:
-                    break
 
-        # Default to Agriculture if not found
-        if not category_found:
-            category_found = "Agriculture"
+            # Default to Agriculture if not found
+            if not category_found:
+                category_found = "Agriculture"
 
-        color = CATEGORY_COLORS.get(category_found, '#95E77E')
-        colors.append(color)
+            color = CATEGORY_COLORS.get(category_found, '#95E77E')
+            colors.append(color)
 
-    # Add bars with category colors
-    fig.add_trace(go.Bar(
-        x=display_names,
-        y=y_values,
-        name='Current',
-        marker=dict(color=colors),
-        text=[text_format.format(y) for y in y_values],
-        textposition='outside',
-        hoverinfo='skip'  # Disable hover tooltip
-    ))
-
-    # Add week-ago markers if available
-    valid_week_ago = [(i, z) for i, z in enumerate(week_ago_values) if z is not None]
-
-    if valid_week_ago:
-        indices, week_z_values = zip(*valid_week_ago)
-        fig.add_trace(go.Scatter(
-            x=[display_names[i] for i in indices],
-            y=week_z_values,
-            mode='markers',
-            name='Week Ago',
-            marker=dict(
-                symbol='diamond',
-                size=10,
-                color='purple',
-                line=dict(width=2, color='white')
-            ),
+        # Add bars with category colors
+        fig.add_trace(go.Bar(
+            x=display_names,
+            y=y_values,
+            name='Current',
+            marker=dict(color=colors),
+            text=[text_format.format(y) for y in y_values],
+            textposition='outside',
             hoverinfo='skip'  # Disable hover tooltip
         ))
 
-    # Update layout based on display mode
-    title = (f"{trader_category} Net Positioning Z-Scores (2-year lookback)"
-             if display_mode == "Raw"
-             else f"{trader_category} Net Positioning Z-Scores (% of OI basis, 2-year lookback)")
+        # Add week-ago markers if available
+        valid_week_ago = [(i, z) for i, z in enumerate(week_ago_values) if z is not None]
 
-    fig.update_layout(
-        title=title,
-        xaxis_title="",
-        yaxis_title=y_title,
-        height=500,
-        showlegend=False,
-        hovermode='x unified',
-        yaxis=dict(
-            zeroline=True,
-            zerolinewidth=2,
-            zerolinecolor='black',
-            gridcolor='lightgray'
-        ),
-        xaxis=dict(
-            tickangle=-45
-        ),
-        plot_bgcolor='white',
-        bargap=0.2,
-        margin=dict(l=50, r=50, t=80, b=150)  # Add margins to use available space
-    )
+        if valid_week_ago:
+            indices, week_z_values = zip(*valid_week_ago)
+            fig.add_trace(go.Scatter(
+                x=[display_names[i] for i in indices],
+                y=week_z_values,
+                mode='markers',
+                name='Week Ago',
+                marker=dict(
+                    symbol='diamond',
+                    size=10,
+                    color='purple',
+                    line=dict(width=2, color='white')
+                ),
+                hoverinfo='skip'  # Disable hover tooltip
+            ))
 
-    # Add reference lines for both modes (both show Z-scores)
-    fig.add_hline(y=2, line_dash="dash", line_color="red", line_width=1)
-    fig.add_hline(y=-2, line_dash="dash", line_color="red", line_width=1)
-    fig.add_hline(y=1, line_dash="dot", line_color="gray", line_width=1)
-    fig.add_hline(y=-1, line_dash="dot", line_color="gray", line_width=1)
+        # Update layout based on display mode
+        title = (f"{trader_category} Net Positioning Z-Scores (2-year lookback)"
+                 if display_mode == "Raw"
+                 else f"{trader_category} Net Positioning Z-Scores (% of OI basis, 2-year lookback)")
 
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        fig.update_layout(
+            title=title,
+            xaxis_title="",
+            yaxis_title=y_title,
+            height=500,
+            showlegend=False,
+            hovermode='x unified',
+            yaxis=dict(
+                zeroline=True,
+                zerolinewidth=2,
+                zerolinecolor='black',
+                gridcolor='lightgray',
+                range=[-3, 3]  # Fixed range to show ±3 standard deviations
+            ),
+            xaxis=dict(
+                tickangle=-45
+            ),
+            plot_bgcolor='white',
+            bargap=0.2,
+            margin=dict(l=50, r=50, t=80, b=150)  # Add margins to use available space
+        )
+
+        # Add reference lines for both modes (both show Z-scores)
+        fig.add_hline(y=2, line_dash="dash", line_color="red", line_width=1)
+        fig.add_hline(y=-2, line_dash="dash", line_color="red", line_width=1)
+        fig.add_hline(y=1, line_dash="dot", line_color="gray", line_width=1)
+        fig.add_hline(y=-1, line_dash="dot", line_color="gray", line_width=1)
+
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour
@@ -1728,8 +1730,13 @@ def display_positioning_concentration(api_token):
     """Display positioning concentration analysis for selected asset category"""
 
     st.markdown("---")
-    st.subheader("📈 Positioning Concentration Analysis")
-    st.info("Compares positioning as % of open interest across instruments")
+    st.subheader("Positioning Concentration Analysis")
+    st.markdown(
+        "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
+        "Net positioning as percentage of open interest. Positive values indicate net long positions, negative values indicate net short positions."
+        "</p>",
+        unsafe_allow_html=True
+    )
 
     # Get all categories
     key_instruments = get_key_instruments()
@@ -1812,10 +1819,10 @@ def display_strength_matrix(api_token):
     """Display relative strength matrix for selected asset category"""
 
     st.markdown("---")
-    st.subheader("💪 Relative Strength Matrix")
+    st.subheader("Relative Strength Matrix")
     st.markdown(
         "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
-        "Positioning correlation matrix calculated using 2-year rolling window of Non-Commercial net positioning data."
+        "Positioning correlation matrix calculated using rolling window of Non-Commercial net positioning data."
         "</p>",
         unsafe_allow_html=True
     )
@@ -1910,9 +1917,124 @@ def display_strength_matrix(api_token):
         st.error(f"Category '{selected_category}' not found")
 
 
+def display_participation_comparison(api_token):
+    """Display trader participation comparison for selected asset category"""
+
+    st.markdown("---")
+    st.subheader("Trader Participation Comparison")
+    st.markdown(
+        "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
+        "Analyzes trader count trends, year-over-year changes, average positions per trader, and participation scores across instruments."
+        "</p>",
+        unsafe_allow_html=True
+    )
+
+    # Get all categories
+    key_instruments = get_key_instruments()
+    all_categories = sorted(list(key_instruments.keys()))
+
+    # Category selection
+    col1_part, col2_part = st.columns([2, 6])
+    with col1_part:
+        st.markdown("Select asset category:")
+        selected_category = st.selectbox(
+            "Category",
+            options=all_categories,
+            index=all_categories.index("Metals") if "Metals" in all_categories else 0,
+            label_visibility="collapsed",
+            key="participation_category"
+        )
+
+    # col2_part reserved for future controls (e.g., lookback period, aggregation method)
+
+    # Get all instruments for the selected category
+    if selected_category in key_instruments:
+        # Get COT instrument names for this category
+        category_instruments = list(key_instruments[selected_category].values())
+
+        if category_instruments:
+            with st.spinner(f"Analyzing trader participation for {selected_category} instruments..."):
+                # Create participation comparison
+                fig = create_cross_asset_participation_comparison(
+                    category_instruments,
+                    api_token,
+                    None  # instruments_db not needed here
+                )
+
+            if fig:
+                # Display the chart
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Add explainer
+                with st.expander("📊 Understanding the Participation Charts", expanded=False):
+                    st.markdown("""
+                    **What These Charts Show:**
+
+                    This analysis provides four complementary views of trader participation:
+
+                    1. **Total Trader Count** (Top Left):
+                       - Shows the absolute number of traders active in each market over time
+                       - Higher numbers generally indicate more liquid, well-established markets
+                       - Increasing trends suggest growing market interest
+
+                    2. **Trader Count YoY % Change** (Top Right):
+                       - Year-over-year percentage change in trader participation
+                       - Positive values: Market is attracting new participants
+                       - Negative values: Traders are leaving the market
+                       - Volatility here may indicate market uncertainty or structural changes
+
+                    3. **Avg Position per Trader** (Bottom Left):
+                       - Average size of positions held by each trader (Open Interest ÷ Total Traders)
+                       - Higher values suggest institutional participation or concentrated positions
+                       - Lower values may indicate more retail participation
+                       - Increasing trends can signal growing conviction or leverage
+
+                    4. **Participation Score** (Bottom Right):
+                       - Current trader count as % of historical maximum for each instrument
+                       - 100% = At peak participation levels
+                       - < 50% = Below median historical participation
+                       - Helps identify if current activity is high or low relative to history
+
+                    **How to Use This Analysis:**
+                    - **Market Health**: Rising participation generally indicates healthy market interest
+                    - **Contrarian Signals**: Extreme highs/lows in participation can signal potential reversals
+                    - **Liquidity Assessment**: More traders typically means better liquidity
+                    - **Cross-Market Comparison**: Compare participation trends across similar instruments
+                    - **Market Maturity**: Stable, high participation suggests mature markets
+
+                    **Example Interpretations:**
+                    - Declining participation + rising prices = Potential weak rally
+                    - Rising participation + sideways prices = Building energy for breakout
+                    - Low participation score + high volatility = Thin market, risky conditions
+                    - Increasing avg position size = Growing institutional interest
+                    """)
+
+                # Download button
+                html_string = fig.to_html(include_plotlyjs='cdn')
+                st.download_button(
+                    label="📥 Download Participation Chart",
+                    data=html_string,
+                    file_name=f"cftc_participation_{selected_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                    mime="text/html",
+                    key="download_participation_chart"
+                )
+            else:
+                st.error("Unable to generate participation comparison. Please check the data.")
+        else:
+            st.warning(f"No instruments found for category: {selected_category}")
+    else:
+        st.error(f"Category '{selected_category}' not found")
+
+
 def display_dashboard(api_token):
     """Display the main dashboard overview"""
     st.header("Commodity Markets Overview")
+    st.markdown(
+        "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
+        "Key metrics and positioning data for major commodity futures markets. Updated weekly with CFTC Commitments of Traders reports."
+        "</p>",
+        unsafe_allow_html=True
+    )
 
     # Fetch dashboard data
     with st.spinner("Loading market data..."):
@@ -2041,46 +2163,35 @@ def display_dashboard(api_token):
     # Add Cross-Asset Z-Score Comparison below the table
     st.markdown("---")
     st.subheader("Cross-Asset Futures Positioning")
-
-    # Controls row
-    col1, col2, col3 = st.columns([2, 2, 4])
-    with col1:
-        st.markdown("Select trader category:")
-        trader_category = st.selectbox(
-            "Trader category",
-            ["Non-Commercial Net", "Commercial Net", "Non-Reportable Net"],
-            index=0,
-            label_visibility="collapsed",
-            key="dashboard_trader_category"
-        )
-
-    with col2:
-        st.markdown("Display mode:")
-        display_mode = st.radio(
-            "Display mode",
-            ["Raw", "as % of Open Interest"],
-            index=0,
-            label_visibility="collapsed",
-            key="dashboard_display_mode",
-            horizontal=True
-        )
-
-    # Display the cross-asset Z-score chart
-    display_cross_asset_zscore(api_token, trader_category, display_mode)
-
-    # Add disclaimer about lookback period
     st.markdown(
-        """
-        <p style='color: #888; font-size: 0.9em; font-style: italic; margin-top: 10px;'>
-        Note: Z-scores are calculated using a 2-year lookback period. Values above +2 or below -2 indicate extreme positioning relative to the historical average.
-        </p>
-        """,
+        "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
+        "Z-scores show how current positioning compares to historical average. Values above +2 or below -2 indicate extreme positioning."
+        "</p>",
         unsafe_allow_html=True
     )
+
+    # Controls row
+    st.markdown("Select trader category:")
+    trader_category = st.selectbox(
+        "Trader category",
+        ["Non-Commercial Net", "Commercial Net", "Non-Reportable Net"],
+        index=0,
+        label_visibility="collapsed",
+        key="dashboard_trader_category"
+    )
+
+    # Display both charts (Raw and % of OI)
+    display_cross_asset_zscore(api_token, trader_category)
 
     # Add Week-over-Week Changes section
     st.markdown("---")
     st.subheader("Week-over-Week Position Changes")
+    st.markdown(
+        "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
+        "Shows the weekly change in positioning as percentage of open interest. Positive values indicate increasing positions, negative indicate decreasing positions."
+        "</p>",
+        unsafe_allow_html=True
+    )
 
     # Controls row for WoW chart
     col1_wow, col2_wow, col3_wow = st.columns([2, 2, 4])
@@ -2121,6 +2232,12 @@ def display_dashboard(api_token):
     # Add Market Matrix section
     st.markdown("---")
     st.subheader("Market Structure Matrix")
+    st.markdown(
+        "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
+        "Percentile-based view of trader participation versus positioning concentration. Each instrument is ranked relative to its own 5-year history."
+        "</p>",
+        unsafe_allow_html=True
+    )
 
     # Controls row for Market Matrix
     col1_matrix, col2_matrix, col3_matrix = st.columns([2, 2, 4])
@@ -2182,6 +2299,9 @@ def display_dashboard(api_token):
 
     # Add Strength Matrix section
     display_strength_matrix(api_token)
+
+    # Add Participation Comparison section
+    display_participation_comparison(api_token)
 
     # Add refresh button
     if st.button("🔄 Refresh Dashboard Data"):
