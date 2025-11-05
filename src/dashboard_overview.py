@@ -1257,8 +1257,8 @@ def fetch_wow_changes_data(api_token, trader_category):
     return instrument_data
 
 
-def display_wow_changes(api_token, trader_category, display_mode="Raw"):
-    """Display week-over-week changes using dashboard instruments"""
+def display_wow_changes(api_token, trader_category):
+    """Display week-over-week changes using dashboard instruments - shows both Raw and % of OI charts"""
 
     # Fetch data with caching and parallel processing
     with st.spinner("Loading week-over-week changes..."):
@@ -1268,112 +1268,114 @@ def display_wow_changes(api_token, trader_category, display_mode="Raw"):
         st.warning("No valid data found for week-over-week changes")
         return
 
-    # Sort by change value (most positive to most negative)
-    if display_mode == "Raw":
-        # Use pre-calculated historical Z-scores from fetch function
-        sorted_instruments = sorted(instrument_data.items(),
-                                  key=lambda x: x[1]['z_score'] if x[1]['z_score'] is not None else 0,
-                                  reverse=True)
-        y_values = [item[1]['z_score'] if item[1]['z_score'] is not None else 0 for item in sorted_instruments]
-        y_title = "WoW Change Z-Score (Historical)"
-        text_format = "{:.2f}"
-    else:  # as % of Open Interest
-        # Use pre-calculated historical Z-scores for % OI from fetch function
-        sorted_instruments = sorted(instrument_data.items(),
-                                  key=lambda x: x[1]['z_score_pct_oi'] if x[1]['z_score_pct_oi'] is not None else 0,
-                                  reverse=True)
-        y_values = [item[1]['z_score_pct_oi'] if item[1]['z_score_pct_oi'] is not None else 0 for item in sorted_instruments]
-        y_title = "Change Z-Score (% of OI, Historical)"
-        text_format = "{:.2f}"
+    # Sort once by Raw z-score and use same order for both charts
+    sorted_instruments = sorted(instrument_data.items(),
+                              key=lambda x: x[1]['z_score'] if x[1]['z_score'] is not None else 0,
+                              reverse=True)
 
-    # Create the chart
-    fig = go.Figure()
+    # Create both charts
+    for display_mode in ["Raw", "as % of Open Interest"]:
+        # Use the same sorted order for both charts
+        if display_mode == "Raw":
+            # Use pre-calculated historical Z-scores from fetch function
+            y_values = [item[1]['z_score'] if item[1]['z_score'] is not None else 0 for item in sorted_instruments]
+            y_title = "WoW Change Z-Score (Historical)"
+            text_format = "{:.2f}"
+        else:  # as % of Open Interest
+            # Use pre-calculated historical Z-scores for % OI from fetch function, but keep same order
+            y_values = [item[1]['z_score_pct_oi'] if item[1]['z_score_pct_oi'] is not None else 0 for item in sorted_instruments]
+            y_title = "Change Z-Score (% of OI, Historical)"
+            text_format = "{:.2f}"
 
-    # Get ticker to name mapping for display
-    name_map = get_ticker_to_name_mapping()
+        # Create the chart
+        fig = go.Figure()
 
-    # Prepare data for plotting - map tickers to display names
-    tickers = [item[0] for item in sorted_instruments]
-    display_names = [name_map.get(ticker, ticker) for ticker in tickers]
+        # Get ticker to name mapping for display
+        name_map = get_ticker_to_name_mapping()
 
-    # Create a reverse mapping from instrument names to categories
-    key_instruments = get_key_instruments()
-    instrument_to_category = {}
-    for category, instruments in key_instruments.items():
-        for ticker, full_name in instruments.items():
-            instrument_to_category[ticker] = category
-            # Also map the instrument name (first part before " - ")
-            instrument_name = full_name.split(' - ')[0]
-            instrument_to_category[instrument_name] = category
+        # Prepare data for plotting - map tickers to display names
+        tickers = [item[0] for item in sorted_instruments]
+        display_names = [name_map.get(ticker, ticker) for ticker in tickers]
 
-    # Get colors based on category
-    colors = []
-    for item in sorted_instruments:
-        ticker = item[0]
-        category_found = instrument_to_category.get(ticker)
+        # Create a reverse mapping from instrument names to categories
+        key_instruments = get_key_instruments()
+        instrument_to_category = {}
+        for category, instruments in key_instruments.items():
+            for ticker, full_name in instruments.items():
+                instrument_to_category[ticker] = category
+                # Also map the instrument name (first part before " - ")
+                instrument_name = full_name.split(' - ')[0]
+                instrument_to_category[instrument_name] = category
 
-        if not category_found:
-            # Try matching against full instrument names
-            for category, instruments in key_instruments.items():
-                for tick, full_name in instruments.items():
-                    if ticker in full_name or full_name.startswith(ticker):
-                        category_found = category
+        # Get colors based on category
+        colors = []
+        for item in sorted_instruments:
+            ticker = item[0]
+            category_found = instrument_to_category.get(ticker)
+
+            if not category_found:
+                # Try matching against full instrument names
+                for category, instruments in key_instruments.items():
+                    for tick, full_name in instruments.items():
+                        if ticker in full_name or full_name.startswith(ticker):
+                            category_found = category
+                            break
+                    if category_found:
                         break
-                if category_found:
-                    break
 
-        # Default to Agriculture if not found
-        if not category_found:
-            category_found = "Agriculture"
+            # Default to Agriculture if not found
+            if not category_found:
+                category_found = "Agriculture"
 
-        color = CATEGORY_COLORS.get(category_found, '#95E77E')
-        colors.append(color)
+            color = CATEGORY_COLORS.get(category_found, '#95E77E')
+            colors.append(color)
 
-    # Add bars with category colors
-    fig.add_trace(go.Bar(
-        x=display_names,
-        y=y_values,
-        name='WoW Change',
-        marker=dict(color=colors),
-        text=[text_format.format(y) for y in y_values],
-        textposition='outside',
-        hoverinfo='skip'  # Disable hover tooltip
-    ))
+        # Add bars with category colors
+        fig.add_trace(go.Bar(
+            x=display_names,
+            y=y_values,
+            name='WoW Change',
+            marker=dict(color=colors),
+            text=[text_format.format(y) for y in y_values],
+            textposition='outside',
+            hoverinfo='skip'  # Disable hover tooltip
+        ))
 
-    # Update layout based on display mode
-    title = (f"{trader_category} Week-over-Week Position Changes"
-             if display_mode == "Raw"
-             else f"{trader_category} Week-over-Week Position Changes (% of OI)")
+        # Update layout based on display mode
+        title = (f"{trader_category} Week-over-Week Position Changes"
+                 if display_mode == "Raw"
+                 else f"{trader_category} Week-over-Week Position Changes (% of OI)")
 
-    fig.update_layout(
-        title=title,
-        xaxis_title="",
-        yaxis_title=y_title,
-        height=700,
-        showlegend=False,
-        hovermode='x unified',
-        yaxis=dict(
-            zeroline=True,
-            zerolinewidth=2,
-            zerolinecolor='black',
-            gridcolor='lightgray'
-        ),
-        xaxis=dict(
-            tickangle=-45,
-            tickfont=dict(size=12)
-        ),
-        plot_bgcolor='white',
-        bargap=0.2,
-        margin=dict(l=50, r=50, t=80, b=150)  # Add margins to use available space
-    )
+        fig.update_layout(
+            title=title,
+            xaxis_title="",
+            yaxis_title=y_title,
+            height=700,
+            showlegend=False,
+            hovermode='x unified',
+            yaxis=dict(
+                zeroline=True,
+                zerolinewidth=2,
+                zerolinecolor='black',
+                gridcolor='lightgray',
+                range=[-3, 3]  # Fixed range to show ±3 standard deviations
+            ),
+            xaxis=dict(
+                tickangle=-45,
+                tickfont=dict(size=12)
+            ),
+            plot_bgcolor='white',
+            bargap=0.2,
+            margin=dict(l=50, r=50, t=80, b=150)  # Add margins to use available space
+        )
 
-    # Add reference lines for Z-scores
-    fig.add_hline(y=2, line_dash="dash", line_color="red", line_width=1)
-    fig.add_hline(y=-2, line_dash="dash", line_color="red", line_width=1)
-    fig.add_hline(y=1, line_dash="dot", line_color="gray", line_width=1)
-    fig.add_hline(y=-1, line_dash="dot", line_color="gray", line_width=1)
+        # Add reference lines for Z-scores
+        fig.add_hline(y=2, line_dash="dash", line_color="red", line_width=1)
+        fig.add_hline(y=-2, line_dash="dash", line_color="red", line_width=1)
+        fig.add_hline(y=1, line_dash="dot", line_color="gray", line_width=1)
+        fig.add_hline(y=-1, line_dash="dot", line_color="gray", line_width=1)
 
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour
@@ -1733,7 +1735,7 @@ def display_positioning_concentration(api_token):
     st.subheader("Positioning Concentration Analysis")
     st.markdown(
         "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
-        "Net positioning as percentage of open interest. Positive values indicate net long positions, negative values indicate net short positions."
+        "Absolute long and short positions as percentage of open interest. Shows the magnitude of trader positions in each market."
         "</p>",
         unsafe_allow_html=True
     )
@@ -1758,8 +1760,15 @@ def display_positioning_concentration(api_token):
         st.markdown("Select trader category:")
         trader_category = st.selectbox(
             "Trader category",
-            options=["Commercial", "Non-Commercial", "Non-Reportable"],
-            index=0,
+            options=[
+                "Commercial Long",
+                "Commercial Short",
+                "Non-Commercial Long",
+                "Non-Commercial Short",
+                "Non-Reportable Long",
+                "Non-Reportable Short"
+            ],
+            index=2,  # Default to Non-Commercial Long
             label_visibility="collapsed",
             key="positioning_trader_category"
         )
@@ -1848,7 +1857,7 @@ def display_strength_matrix(api_token):
         time_period = st.selectbox(
             "Time period",
             options=["6 Months", "1 Year", "2 Years", "5 Years", "10 Years"],
-            index=2,  # Default to 2 Years
+            index=1,  # Default to 1 Year
             label_visibility="collapsed",
             key="strength_matrix_time_period"
         )
@@ -1871,33 +1880,6 @@ def display_strength_matrix(api_token):
             if fig:
                 # Display the chart
                 st.plotly_chart(fig, use_container_width=True)
-
-                # Add explainer
-                with st.expander("📊 Understanding the Strength Matrix", expanded=False):
-                    st.markdown("""
-                    **What This Matrix Shows:**
-                    - Correlation between Non-Commercial net positioning (long - short) across different instruments
-                    - Values range from -1 to +1, where:
-                      - **+1** (dark blue): Perfect positive correlation - instruments move together
-                      - **0** (white): No correlation - instruments move independently
-                      - **-1** (dark red): Perfect negative correlation - instruments move opposite
-
-                    **How to Use It:**
-                    - **Portfolio Diversification**: Look for instruments with low or negative correlations
-                    - **Risk Management**: High correlations mean similar market exposure
-                    - **Trading Opportunities**: Divergence from typical correlations may signal opportunities
-                    - **Market Regime**: Changing correlations can indicate shifts in market dynamics
-
-                    **Example Interpretations:**
-                    - If Gold and Silver show +0.8: They tend to move in the same direction
-                    - If Oil and Bonds show -0.5: They often move in opposite directions
-                    - If Wheat and Gold show 0.1: They have little relationship
-
-                    **Time Period Impact:**
-                    - Shorter periods (6M-1Y): Capture recent market dynamics and short-term relationships
-                    - Medium periods (2Y): Balance between recent trends and historical patterns
-                    - Longer periods (5Y-10Y): Show stable, long-term relationships and structural correlations
-                    """)
 
                 # Download button
                 if st.button("📥 Download Strength Matrix", key="download_strength_matrix"):
@@ -2194,40 +2176,17 @@ def display_dashboard(api_token):
     )
 
     # Controls row for WoW chart
-    col1_wow, col2_wow, col3_wow = st.columns([2, 2, 4])
-    with col1_wow:
-        st.markdown("Select trader category:")
-        wow_trader_category = st.selectbox(
-            "WoW Trader category",
-            ["Non-Commercial Net", "Commercial Net", "Non-Reportable Net"],
-            index=0,
-            label_visibility="collapsed",
-            key="wow_trader_category"
-        )
-
-    with col2_wow:
-        st.markdown("Display mode:")
-        wow_display_mode = st.radio(
-            "WoW Display mode",
-            ["Raw", "as % of Open Interest"],
-            index=0,
-            label_visibility="collapsed",
-            key="wow_display_mode",
-            horizontal=True
-        )
-
-    # Display the WoW changes chart
-    display_wow_changes(api_token, wow_trader_category, wow_display_mode)
-
-    # Add disclaimer about WoW calculation
-    st.markdown(
-        """
-        <p style='color: #888; font-size: 0.9em; font-style: italic; margin-top: 10px;'>
-        Week-over-week changes show the difference in positions from the previous week's report.
-        </p>
-        """,
-        unsafe_allow_html=True
+    st.markdown("Select trader category:")
+    wow_trader_category = st.selectbox(
+        "WoW Trader category",
+        ["Non-Commercial Net", "Commercial Net", "Non-Reportable Net"],
+        index=0,
+        label_visibility="collapsed",
+        key="wow_trader_category"
     )
+
+    # Display both charts (Raw and % of OI)
+    display_wow_changes(api_token, wow_trader_category)
 
     # Add Market Matrix section
     st.markdown("---")
