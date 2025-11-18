@@ -1609,16 +1609,80 @@ def display_oi_split_chart(df, price_df, instrument_name):
 def display_momentum_percentile_tab(df, instrument_name):
     """Combined Momentum and Percentile analysis tab - both displayed together"""
 
+    st.subheader("🚀 Momentum Dashboard")
+
+    # Variable selector
+    momentum_vars = {
+        'open_interest_all': 'Open Interest',
+        'noncomm_positions_long_all': 'Non-Commercial Long',
+        'noncomm_positions_short_all': 'Non-Commercial Short',
+        'comm_positions_long_all': 'Commercial Long',
+        'comm_positions_short_all': 'Commercial Short',
+        'tot_rept_positions_long_all': 'Total Reportable Long',
+        'tot_rept_positions_short': 'Total Reportable Short',
+        'nonrept_positions_long_all': 'Non-Reportable Long',
+        'nonrept_positions_short_all': 'Non-Reportable Short'
+    }
+
+    # Add net positions to the list if they exist in the dataframe
+    if 'net_noncomm_positions' not in df.columns and 'noncomm_positions_long_all' in df.columns and 'noncomm_positions_short_all' in df.columns:
+        df['net_noncomm_positions'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
+    if 'net_noncomm_positions' in df.columns:
+        momentum_vars['net_noncomm_positions'] = 'Net Non-Commercial'
+        # Calculate change column for net noncomm positions
+        df['change_in_net_noncomm'] = df['net_noncomm_positions'].diff()
+
+    if 'net_comm_positions' not in df.columns and 'comm_positions_long_all' in df.columns and 'comm_positions_short_all' in df.columns:
+        df['net_comm_positions'] = df['comm_positions_long_all'] - df['comm_positions_short_all']
+    if 'net_comm_positions' in df.columns:
+        momentum_vars['net_comm_positions'] = 'Net Commercial'
+        # Calculate change column for net comm positions
+        df['change_in_net_comm'] = df['net_comm_positions'].diff()
+
+    # Filter to only available columns (including change columns for momentum)
+    change_col_mapping = {
+        'open_interest_all': 'change_in_open_interest_all',
+        'noncomm_positions_long_all': 'change_in_noncomm_long_all',
+        'noncomm_positions_short_all': 'change_in_noncomm_short_all',
+        'comm_positions_long_all': 'change_in_comm_long_all',
+        'comm_positions_short_all': 'change_in_comm_short_all',
+        'tot_rept_positions_long_all': 'change_in_tot_rept_long_all',
+        'tot_rept_positions_short': 'change_in_tot_rept_short',
+        'nonrept_positions_long_all': 'change_in_nonrept_long_all',
+        'nonrept_positions_short_all': 'change_in_nonrept_short_all',
+        'net_noncomm_positions': 'change_in_net_noncomm',
+        'net_comm_positions': 'change_in_net_comm'
+    }
+
+    # For momentum analysis, we need the change columns
+    available_for_momentum = {k: v for k, v in momentum_vars.items()
+                              if k in df.columns and change_col_mapping.get(k, '') in df.columns}
+
+    # For percentile analysis, we just need the column itself
+    available_for_percentile = {k: v for k, v in momentum_vars.items() if k in df.columns}
+
+    # Use the intersection of both for the selector
+    available_vars = available_for_momentum if len(available_for_momentum) > 0 else available_for_percentile
+
+    selected_var = st.selectbox(
+        "Select variable for momentum analysis:",
+        list(available_vars.keys()),
+        format_func=lambda x: available_vars[x],
+        index=0,
+        key="momentum_percentile_var_selector"
+    )
+
     # Display momentum analysis first
     from display_functions_exact import display_momentum_chart
-    display_momentum_chart(df, instrument_name)
+    display_momentum_chart(df, instrument_name, selected_var=selected_var)
 
-    # Add separator
-    st.markdown("---")
+    # Display percentile analysis directly below - cumulative distribution only
+    from charts.percentile_charts import create_percentile_chart
 
-    # Display percentile analysis below
-    from display_functions_exact import display_percentile_chart
-    display_percentile_chart(df, instrument_name)
+    # Use 2-year lookback to match momentum
+    fig = create_percentile_chart(df, selected_var, 2, 'cumulative')
+    if fig:
+        st.plotly_chart(fig, use_container_width=True)
 
 
 def display_extremes_seasonality(df, instrument_name):

@@ -817,12 +817,24 @@ def display_percentile_chart(df, instrument_name):
         st.plotly_chart(fig, use_container_width=True)
 
 
-def display_momentum_chart(df, instrument_name):
+def display_momentum_chart(df, instrument_name, selected_var=None):
     """Display momentum dashboard - EXACT copy from legacyF.py"""
-    st.subheader("🚀 Momentum Dashboard")
+    if selected_var is None:
+        st.subheader("🚀 Momentum Dashboard")
 
-    # Info box about z-score calculation
-    st.info("📊 **Z-Score Calculation**: Z-scores shown below are calculated using a 52-week rolling window (1 year) to measure how many standard deviations the current value is from the rolling mean.")
+    # Z-score calculation description in grey
+    st.markdown('<p style="color: #808080; font-size: 13px;">Z-scores shown below are calculated using a 104-week rolling window (2 years) to measure how many standard deviations the current value is from the rolling mean.</p>', unsafe_allow_html=True)
+
+    # Calculate net positions and their changes if they don't exist
+    if 'net_noncomm_positions' not in df.columns and 'noncomm_positions_long_all' in df.columns and 'noncomm_positions_short_all' in df.columns:
+        df['net_noncomm_positions'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
+    if 'net_noncomm_positions' in df.columns and 'change_in_net_noncomm' not in df.columns:
+        df['change_in_net_noncomm'] = df['net_noncomm_positions'].diff()
+
+    if 'net_comm_positions' not in df.columns and 'comm_positions_long_all' in df.columns and 'comm_positions_short_all' in df.columns:
+        df['net_comm_positions'] = df['comm_positions_long_all'] - df['comm_positions_short_all']
+    if 'net_comm_positions' in df.columns and 'change_in_net_comm' not in df.columns:
+        df['change_in_net_comm'] = df['net_comm_positions'].diff()
 
     # Define momentum variables with their corresponding API change columns
     momentum_vars = {
@@ -861,6 +873,14 @@ def display_momentum_chart(df, instrument_name):
         'nonrept_positions_short_all': {
             'display': 'Non-Reportable Short',
             'change_col': 'change_in_nonrept_short_all'
+        },
+        'net_noncomm_positions': {
+            'display': 'Net Non-Commercial',
+            'change_col': 'change_in_net_noncomm'
+        },
+        'net_comm_positions': {
+            'display': 'Net Commercial',
+            'change_col': 'change_in_net_comm'
         }
     }
 
@@ -868,33 +888,33 @@ def display_momentum_chart(df, instrument_name):
     available_vars = {k: v for k, v in momentum_vars.items()
                      if k in df.columns and v['change_col'] in df.columns}
 
-    selected_var = st.selectbox(
-        "Select variable for momentum analysis:",
-        list(available_vars.keys()),
-        format_func=lambda x: available_vars[x]['display'],
-        index=0
-    )
+    if selected_var is None:
+        selected_var = st.selectbox(
+            "Select variable for momentum analysis:",
+            list(available_vars.keys()),
+            format_func=lambda x: available_vars[x]['display'],
+            index=0,
+            key="momentum_var_selector"
+        )
 
     # Use all available data
     df_filtered = df.copy()
-    
+
     # Get the corresponding API change column
     change_col = available_vars[selected_var]['change_col']
-    
+
     # Use the position variable for display and API change column for calculations
     display_var = selected_var
-    
-    # Show data info
-    st.info(f"📊 Showing {len(df_filtered)} data points from {df_filtered['report_date_as_yyyy_mm_dd'].min().strftime('%Y-%m-%d')} to {df_filtered['report_date_as_yyyy_mm_dd'].max().strftime('%Y-%m-%d')}")
-    
+
+    # Don't show data info - removed as requested
+
     fig = create_single_variable_momentum_dashboard(df_filtered, display_var, change_col)
     if fig:
         # Configure plotly to show autoscale buttons
         config = {
             'displayModeBar': True,
             'displaylogo': False,
-            'modeBarButtonsToAdd': ['drawline', 'drawopenpath', 'eraseshape'],
-            'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+            'modeBarButtonsToRemove': ['lasso2d', 'select2d', 'zoom2d', 'pan2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
             'toImageButtonOptions': {
                 'format': 'png',
                 'filename': f'momentum_{selected_var}',
@@ -904,6 +924,8 @@ def display_momentum_chart(df, instrument_name):
             }
         }
         st.plotly_chart(fig, use_container_width=True, config=config)
+
+    return selected_var  # Return the selected variable for use in percentile
 
 
 def display_trader_participation_chart(df, instrument_name):

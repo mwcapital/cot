@@ -20,20 +20,20 @@ def create_single_variable_momentum_dashboard(df, variable_name, change_col):
         actual_values = df_momentum[variable_name].fillna(0)
         change_values = df_momentum[change_col].fillna(0)
         
-        # Calculate z-scores using 52-week rolling window
-        rolling_mean = change_values.rolling(window=52, min_periods=1).mean()
-        rolling_std = change_values.rolling(window=52, min_periods=1).std()
-        
+        # Calculate z-scores using 104-week rolling window (2 years)
+        rolling_mean = change_values.rolling(window=104, min_periods=1).mean()
+        rolling_std = change_values.rolling(window=104, min_periods=1).std()
+
         # Calculate z-score: (current - rolling mean) / rolling std
         z_scores = pd.Series(index=change_values.index, dtype=float)
         for i in range(len(change_values)):
             if i == 0:
                 z_scores.iloc[i] = 0
             else:
-                # Use up to 52 weeks of history
-                lookback_start = max(0, i - 51)
+                # Use up to 104 weeks of history (2 years)
+                lookback_start = max(0, i - 103)
                 historical_values = change_values.iloc[lookback_start:i+1]
-                
+
                 if len(historical_values) > 1 and historical_values.std() > 0:
                     mean = historical_values[:-1].mean()  # Exclude current value from mean
                     std = historical_values[:-1].std()    # Exclude current value from std
