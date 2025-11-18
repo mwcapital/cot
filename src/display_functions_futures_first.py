@@ -1676,13 +1676,22 @@ def display_momentum_percentile_tab(df, instrument_name):
     from display_functions_exact import display_momentum_chart
     display_momentum_chart(df, instrument_name, selected_var=selected_var)
 
-    # Display percentile analysis directly below - cumulative distribution only
+    # Display percentile analysis directly below - time series and distribution
     from charts.percentile_charts import create_percentile_chart
 
     # Use 2-year lookback to match momentum
-    fig = create_percentile_chart(df, selected_var, 2, 'cumulative')
-    if fig:
-        st.plotly_chart(fig, use_container_width=True)
+    # First show time series percentile chart with heat-style colored bars
+    st.markdown("---")
+    st.markdown("### 📊 Percentile Analysis")
+
+    fig_time_series = create_percentile_chart(df, selected_var, 2, 'time_series')
+    if fig_time_series:
+        st.plotly_chart(fig_time_series, use_container_width=True)
+
+    # Then show distribution chart showing where we are
+    fig_distribution = create_percentile_chart(df, selected_var, 2, 'distribution')
+    if fig_distribution:
+        st.plotly_chart(fig_distribution, use_container_width=True)
 
 
 def display_extremes_seasonality(df, instrument_name):
