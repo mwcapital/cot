@@ -150,10 +150,10 @@ def create_single_variable_momentum_dashboard(df, variable_name, change_col):
         
         # Update layout
         fig.update_layout(
-            title=f"Momentum Dashboard - {variable_name.replace('_', ' ').title()}",
             height=900,
             showlegend=False,
             hovermode='x unified',
+            margin=dict(t=20, l=80, r=80, b=40),  # Consistent margins, reduced top since no title
             xaxis=dict(
                 rangeslider=dict(visible=False),
                 autorange=True

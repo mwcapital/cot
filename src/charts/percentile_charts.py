@@ -127,19 +127,11 @@ def create_percentile_chart(df, column, lookback_years=5, chart_type='time_serie
 
             # Update layout
             fig.update_layout(
-                title=dict(
-                    text=f"Historical Percentile: {column.replace('_', ' ').title()}",
-                    y=0.95,
-                    x=0.5,
-                    xanchor='center',
-                    yanchor='top',
-                    font=dict(size=18)
-                ),
                 hovermode='x unified',
                 height=500,
                 showlegend=False,
                 dragmode='zoom',
-                margin=dict(t=60, l=80, r=80, b=40),  # Smaller margins for seamless flow
+                margin=dict(t=20, l=80, r=80, b=40),  # Reduced top margin since no title
                 xaxis=dict(
                     type='date'
                 ),
@@ -427,13 +419,12 @@ def create_distribution_chart(df_pct, column, lookback_years):
         )
 
         fig.update_layout(
-            title=f"Distribution Analysis: {column.replace('_', ' ').title()} ({lookback_years if lookback_years != 'all' else 'All'} {'Years' if lookback_years != 'all' else 'Time'})",
             xaxis_title="Value",
             yaxis_title="Density" if use_density else "Percentage (%)",
             showlegend=True,
             height=400,
             barmode='overlay',
-            margin=dict(t=60, l=80, r=80, b=40),  # Consistent margins for seamless flow
+            margin=dict(t=20, l=80, r=80, b=40),  # Reduced top margin since no title
             legend=dict(
                 orientation="v",
                 yanchor="top",
