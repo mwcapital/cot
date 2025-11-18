@@ -820,110 +820,63 @@ def display_percentile_chart(df, instrument_name):
 def display_momentum_chart(df, instrument_name):
     """Display momentum dashboard - EXACT copy from legacyF.py"""
     st.subheader("🚀 Momentum Dashboard")
-    
-    # Add date range selector for adaptive view
-    col1, col2, col3 = st.columns([2, 1, 1])
-    
-    with col1:
-        # Define momentum variables with their corresponding API change columns
-        momentum_vars = {
-            'open_interest_all': {
-                'display': 'Open Interest',
-                'change_col': 'change_in_open_interest_all'
-            },
-            'noncomm_positions_long_all': {
-                'display': 'Non-Commercial Long',
-                'change_col': 'change_in_noncomm_long_all'
-            },
-            'noncomm_positions_short_all': {
-                'display': 'Non-Commercial Short',
-                'change_col': 'change_in_noncomm_short_all'
-            },
-            'comm_positions_long_all': {
-                'display': 'Commercial Long',
-                'change_col': 'change_in_comm_long_all'
-            },
-            'comm_positions_short_all': {
-                'display': 'Commercial Short',
-                'change_col': 'change_in_comm_short_all'
-            },
-            'tot_rept_positions_long_all': {
-                'display': 'Total Reportable Long',
-                'change_col': 'change_in_tot_rept_long_all'
-            },
-            'tot_rept_positions_short': {
-                'display': 'Total Reportable Short',
-                'change_col': 'change_in_tot_rept_short'
-            },
-            'nonrept_positions_long_all': {
-                'display': 'Non-Reportable Long',
-                'change_col': 'change_in_nonrept_long_all'
-            },
-            'nonrept_positions_short_all': {
-                'display': 'Non-Reportable Short',
-                'change_col': 'change_in_nonrept_short_all'
-            }
+
+    # Info box about z-score calculation
+    st.info("📊 **Z-Score Calculation**: Z-scores shown below are calculated using a 52-week rolling window (1 year) to measure how many standard deviations the current value is from the rolling mean.")
+
+    # Define momentum variables with their corresponding API change columns
+    momentum_vars = {
+        'open_interest_all': {
+            'display': 'Open Interest',
+            'change_col': 'change_in_open_interest_all'
+        },
+        'noncomm_positions_long_all': {
+            'display': 'Non-Commercial Long',
+            'change_col': 'change_in_noncomm_long_all'
+        },
+        'noncomm_positions_short_all': {
+            'display': 'Non-Commercial Short',
+            'change_col': 'change_in_noncomm_short_all'
+        },
+        'comm_positions_long_all': {
+            'display': 'Commercial Long',
+            'change_col': 'change_in_comm_long_all'
+        },
+        'comm_positions_short_all': {
+            'display': 'Commercial Short',
+            'change_col': 'change_in_comm_short_all'
+        },
+        'tot_rept_positions_long_all': {
+            'display': 'Total Reportable Long',
+            'change_col': 'change_in_tot_rept_long_all'
+        },
+        'tot_rept_positions_short': {
+            'display': 'Total Reportable Short',
+            'change_col': 'change_in_tot_rept_short'
+        },
+        'nonrept_positions_long_all': {
+            'display': 'Non-Reportable Long',
+            'change_col': 'change_in_nonrept_long_all'
+        },
+        'nonrept_positions_short_all': {
+            'display': 'Non-Reportable Short',
+            'change_col': 'change_in_nonrept_short_all'
         }
-        
-        # Filter to only available position columns
-        available_vars = {k: v for k, v in momentum_vars.items() 
-                         if k in df.columns and v['change_col'] in df.columns}
-        
-        selected_var = st.selectbox(
-            "Select variable for momentum analysis:",
-            list(available_vars.keys()),
-            format_func=lambda x: available_vars[x]['display'],
-            index=0
-        )
-    
-    with col2:
-        # Date range quick selector
-        date_range_option = st.selectbox(
-            "Time Period:",
-            ["All Time", "5 Years", "2 Years", "1 Year", "6 Months", "3 Months", "Custom"],
-            index=0,
-            key="momentum_date_range"
-        )
-    
-    # Filter data based on selection
+    }
+
+    # Filter to only available position columns
+    available_vars = {k: v for k, v in momentum_vars.items()
+                     if k in df.columns and v['change_col'] in df.columns}
+
+    selected_var = st.selectbox(
+        "Select variable for momentum analysis:",
+        list(available_vars.keys()),
+        format_func=lambda x: available_vars[x]['display'],
+        index=0
+    )
+
+    # Use all available data
     df_filtered = df.copy()
-    
-    if date_range_option != "All Time":
-        end_date = df['report_date_as_yyyy_mm_dd'].max()
-        
-        if date_range_option == "5 Years":
-            start_date = end_date - pd.DateOffset(years=5)
-        elif date_range_option == "2 Years":
-            start_date = end_date - pd.DateOffset(years=2)
-        elif date_range_option == "1 Year":
-            start_date = end_date - pd.DateOffset(years=1)
-        elif date_range_option == "6 Months":
-            start_date = end_date - pd.DateOffset(months=6)
-        elif date_range_option == "3 Months":
-            start_date = end_date - pd.DateOffset(months=3)
-        elif date_range_option == "Custom":
-            with col3:
-                # Custom date range
-                min_date = df['report_date_as_yyyy_mm_dd'].min()
-                max_date = df['report_date_as_yyyy_mm_dd'].max()
-                
-                date_range = st.date_input(
-                    "Select dates:",
-                    value=(max_date - pd.DateOffset(years=1), max_date),
-                    min_value=min_date,
-                    max_value=max_date,
-                    key="momentum_custom_dates"
-                )
-                
-                if len(date_range) == 2:
-                    start_date, end_date = date_range
-                else:
-                    start_date = end_date - pd.DateOffset(years=1)
-        
-        df_filtered = df_filtered[
-            (df_filtered['report_date_as_yyyy_mm_dd'] >= pd.Timestamp(start_date)) &
-            (df_filtered['report_date_as_yyyy_mm_dd'] <= pd.Timestamp(end_date))
-        ]
     
     # Get the corresponding API change column
     change_col = available_vars[selected_var]['change_col']
