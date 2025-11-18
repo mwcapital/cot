@@ -17,29 +17,675 @@ from scipy import stats
 
 def display_time_series_chart(df, instrument_name):
     """Display time series analysis with futures price/OI base layer"""
-    st.subheader("📈 Time Series Analysis")
+    st.subheader("📈 Time Series Analysis - Cycle Analysis Journey")
 
-    # Then create tabs for COT analysis (without Futures Price tab)
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Standard Time Series", "Share of Open Interest", "Seasonality", "Percentile", "Momentum"])
+    # Create new 4-tab structure for coherent analytical flow
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "1️⃣ Position Context",
+        "2️⃣ Trend & Momentum",
+        "3️⃣ Extremes & Seasonality",
+        "4️⃣ Cycle Composite"
+    ])
 
     with tab1:
-        display_cot_time_series_with_price(df, instrument_name)
+        display_position_context(df, instrument_name)
 
     with tab2:
-        display_share_of_oi(df, instrument_name)
+        display_trend_momentum(df, instrument_name)
 
     with tab3:
-        display_seasonality(df, instrument_name)
+        display_extremes_seasonality(df, instrument_name)
 
     with tab4:
-        display_percentile_tab(df, instrument_name)
+        display_cycle_composite(df, instrument_name)
 
-    with tab5:
-        display_momentum_tab(df, instrument_name)
+def display_position_context(df, instrument_name):
+    """Tab 1: Position Context - Where are we now?
+    Shows raw positions and % of OI side-by-side with key metrics
+    """
+    st.markdown("### 📍 Position Context - Where are we now?")
+    st.markdown("Current positioning levels across different views with key context metrics")
 
-def display_cot_time_series_with_price(df, instrument_name):
+    # Key metrics strip at the top
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    # Calculate current metrics
+    if len(df) > 0:
+        latest_data = df.iloc[-1]
+
+        # Calculate percentile rank for net non-commercial
+        if 'net_noncomm_positions' not in df.columns:
+            df['net_noncomm_positions'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
+
+        # Calculate 52-week percentile
+        lookback_52w = min(52, len(df))
+        recent_data = df.tail(lookback_52w)
+        current_value = df['net_noncomm_positions'].iloc[-1]
+        percentile = stats.percentileofscore(recent_data['net_noncomm_positions'], current_value)
+
+        # Calculate z-score
+        if len(recent_data) > 1:
+            mean = recent_data['net_noncomm_positions'].mean()
+            std = recent_data['net_noncomm_positions'].std()
+            z_score = (current_value - mean) / std if std > 0 else 0
+        else:
+            z_score = 0
+
+        # Calculate momentum (4-week rate of change)
+        if len(df) >= 5:
+            value_4w_ago = df['net_noncomm_positions'].iloc[-5]
+            momentum = ((current_value - value_4w_ago) / abs(value_4w_ago) * 100) if value_4w_ago != 0 else 0
+        else:
+            momentum = 0
+
+        with col1:
+            st.metric("Current Net Position", f"{current_value:,.0f}")
+        with col2:
+            st.metric("52W Percentile", f"{percentile:.1f}%",
+                     delta="Extreme" if percentile > 90 or percentile < 10 else "Normal")
+        with col3:
+            st.metric("Z-Score", f"{z_score:.2f}",
+                     delta="High" if abs(z_score) > 2 else "Normal")
+        with col4:
+            st.metric("4W Momentum", f"{momentum:+.1f}%")
+        with col5:
+            st.metric("Open Interest", f"{latest_data['open_interest_all']:,.0f}")
+
+    st.markdown("---")
+
+    # Combined charts section
+    st.markdown("#### 📊 Positioning Views")
+
+    # Column selector for what to display
+    col1, col2 = st.columns(2)
+    with col1:
+        position_type = st.selectbox(
+            "Select position type:",
+            ["Net Non-Commercial", "Net Commercial", "All Positions"],
+            key="position_context_type"
+        )
+
+    # Create two columns for side-by-side charts
+    chart_col1, chart_col2 = st.columns(2)
+
+    with chart_col1:
+        st.markdown("##### Raw Positions")
+        # Display raw positions chart
+        display_cot_time_series_with_price(df, instrument_name, compact_mode=True, selected_position=position_type)
+
+    with chart_col2:
+        st.markdown("##### As % of Open Interest")
+        # Display % of OI chart
+        display_share_of_oi(df, instrument_name, compact_mode=True, selected_position=position_type)
+
+
+def display_trend_momentum(df, instrument_name):
+    """Tab 2: Trend & Momentum - Where are we heading?
+    Shows momentum, moving averages, and divergences
+    """
+    st.markdown("### 📈 Trend & Momentum - Where are we heading?")
+    st.markdown("Rate of change, trend strength, and divergence indicators")
+
+    # Calculate momentum indicators
+    if 'net_noncomm_positions' not in df.columns:
+        df['net_noncomm_positions'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
+
+    # Create stacked charts
+    fig = make_subplots(
+        rows=3, cols=1,
+        row_heights=[0.4, 0.3, 0.3],
+        subplot_titles=[
+            "Rate of Change (Momentum)",
+            "Moving Average Ribbons",
+            "Price vs Positioning Divergence"
+        ],
+        vertical_spacing=0.1,
+        shared_xaxes=True
+    )
+
+    # 1. Rate of Change Chart
+    for period in [4, 13, 26]:
+        df[f'roc_{period}w'] = df['net_noncomm_positions'].pct_change(period) * 100
+        fig.add_trace(
+            go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=df[f'roc_{period}w'],
+                name=f'{period}W RoC',
+                line=dict(width=2 if period == 13 else 1)
+            ),
+            row=1, col=1
+        )
+
+    # Add zero line
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5, row=1, col=1)
+
+    # 2. Moving Average Ribbons
+    for period in [10, 20, 40, 52]:
+        df[f'ma_{period}'] = df['net_noncomm_positions'].rolling(window=period, min_periods=1).mean()
+        fig.add_trace(
+            go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=df[f'ma_{period}'],
+                name=f'{period}W MA',
+                opacity=0.7
+            ),
+            row=2, col=1
+        )
+
+    # Add current position
+    fig.add_trace(
+        go.Scatter(
+            x=df['report_date_as_yyyy_mm_dd'],
+            y=df['net_noncomm_positions'],
+            name='Net Position',
+            line=dict(color='black', width=2)
+        ),
+        row=2, col=1
+    )
+
+    # 3. Divergence Analysis (simplified - would need price data for full implementation)
+    # For now, show positioning acceleration/deceleration
+    df['position_accel'] = df['net_noncomm_positions'].diff().diff()
+    fig.add_trace(
+        go.Bar(
+            x=df['report_date_as_yyyy_mm_dd'],
+            y=df['position_accel'],
+            name='Position Acceleration',
+            marker_color=df['position_accel'].apply(lambda x: 'green' if x > 0 else 'red')
+        ),
+        row=3, col=1
+    )
+
+    # Update layout
+    fig.update_layout(
+        height=800,
+        showlegend=True,
+        hovermode='x unified',
+        title=f"{instrument_name} - Trend & Momentum Analysis"
+    )
+
+    fig.update_xaxes(title_text="Date", row=3, col=1)
+    fig.update_yaxes(title_text="% Change", row=1, col=1)
+    fig.update_yaxes(title_text="Net Position", row=2, col=1)
+    fig.update_yaxes(title_text="Acceleration", row=3, col=1)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def display_extremes_seasonality(df, instrument_name):
+    """Tab 3: Extremes & Seasonality - Are we at a turning point?
+    Combines percentile bands with seasonal patterns
+    """
+    st.markdown("### 🎯 Extremes & Seasonality - Are we at a turning point?")
+    st.markdown("Historical extremes aligned with seasonal patterns")
+
+    # Create combined view
+    fig = make_subplots(
+        rows=2, cols=1,
+        row_heights=[0.5, 0.5],
+        subplot_titles=[
+            "Percentile Bands & Historical Extremes",
+            "Seasonal Pattern Overlay"
+        ],
+        vertical_spacing=0.15,
+        shared_xaxes=True
+    )
+
+    # Calculate percentiles
+    if 'net_noncomm_positions' not in df.columns:
+        df['net_noncomm_positions'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
+
+    # Rolling percentiles
+    window = 52
+    df['pct_90'] = df['net_noncomm_positions'].rolling(window=window, min_periods=20).quantile(0.9)
+    df['pct_75'] = df['net_noncomm_positions'].rolling(window=window, min_periods=20).quantile(0.75)
+    df['pct_50'] = df['net_noncomm_positions'].rolling(window=window, min_periods=20).quantile(0.5)
+    df['pct_25'] = df['net_noncomm_positions'].rolling(window=window, min_periods=20).quantile(0.25)
+    df['pct_10'] = df['net_noncomm_positions'].rolling(window=window, min_periods=20).quantile(0.1)
+
+    # 1. Percentile Bands Chart
+    fig.add_trace(
+        go.Scatter(
+            x=df['report_date_as_yyyy_mm_dd'],
+            y=df['pct_90'],
+            name='90th Percentile',
+            line=dict(color='red', dash='dash', width=1),
+            showlegend=True
+        ),
+        row=1, col=1
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=df['report_date_as_yyyy_mm_dd'],
+            y=df['pct_10'],
+            name='10th Percentile',
+            line=dict(color='green', dash='dash', width=1),
+            fill='tonexty',
+            fillcolor='rgba(200, 200, 200, 0.2)',
+            showlegend=True
+        ),
+        row=1, col=1
+    )
+
+    # Add actual position
+    fig.add_trace(
+        go.Scatter(
+            x=df['report_date_as_yyyy_mm_dd'],
+            y=df['net_noncomm_positions'],
+            name='Net Position',
+            line=dict(color='blue', width=2),
+            showlegend=True
+        ),
+        row=1, col=1
+    )
+
+    # Mark extremes
+    extremes_high = df[df['net_noncomm_positions'] >= df['pct_90']]
+    extremes_low = df[df['net_noncomm_positions'] <= df['pct_10']]
+
+    if not extremes_high.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=extremes_high['report_date_as_yyyy_mm_dd'],
+                y=extremes_high['net_noncomm_positions'],
+                mode='markers',
+                name='High Extreme',
+                marker=dict(color='red', size=8, symbol='triangle-up'),
+                showlegend=True
+            ),
+            row=1, col=1
+        )
+
+    if not extremes_low.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=extremes_low['report_date_as_yyyy_mm_dd'],
+                y=extremes_low['net_noncomm_positions'],
+                mode='markers',
+                name='Low Extreme',
+                marker=dict(color='green', size=8, symbol='triangle-down'),
+                showlegend=True
+            ),
+            row=1, col=1
+        )
+
+    # 2. Seasonal Pattern (simplified version)
+    # Group by week of year and calculate averages
+    df['week_of_year'] = pd.to_datetime(df['report_date_as_yyyy_mm_dd']).dt.isocalendar().week
+    df['year'] = pd.to_datetime(df['report_date_as_yyyy_mm_dd']).dt.year
+
+    # Calculate seasonal average for last 5 years
+    recent_years = df[df['year'] >= df['year'].max() - 5]
+    seasonal_avg = recent_years.groupby('week_of_year')['net_noncomm_positions'].mean()
+
+    # Current year data
+    current_year = df[df['year'] == df['year'].max()]
+
+    # Create week mapping for current year
+    weeks = list(range(1, 54))
+    seasonal_line = []
+    for week in weeks:
+        if week in seasonal_avg.index:
+            seasonal_line.append(seasonal_avg[week])
+        else:
+            seasonal_line.append(None)
+
+    # Plot seasonal average
+    fig.add_trace(
+        go.Scatter(
+            x=weeks,
+            y=seasonal_line,
+            name='5Y Seasonal Average',
+            line=dict(color='orange', width=2),
+            showlegend=True
+        ),
+        row=2, col=1
+    )
+
+    # Plot current year
+    fig.add_trace(
+        go.Scatter(
+            x=current_year['week_of_year'],
+            y=current_year['net_noncomm_positions'],
+            name='Current Year',
+            line=dict(color='blue', width=2),
+            mode='lines+markers',
+            showlegend=True
+        ),
+        row=2, col=1
+    )
+
+    # Update layout
+    fig.update_layout(
+        height=700,
+        showlegend=True,
+        hovermode='x unified',
+        title=f"{instrument_name} - Extremes & Seasonality"
+    )
+
+    fig.update_xaxes(title_text="Date", row=1, col=1)
+    fig.update_xaxes(title_text="Week of Year", row=2, col=1)
+    fig.update_yaxes(title_text="Net Position", row=1, col=1)
+    fig.update_yaxes(title_text="Net Position", row=2, col=1)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def display_cycle_composite(df, instrument_name):
+    """Tab 4: Cycle Composite - Putting it all together
+    Synthesis view with cycle phase indicator
+    """
+    st.markdown("### 🔄 Cycle Composite - Complete Market Cycle Analysis")
+    st.markdown("Multi-factor synthesis identifying cycle phase and historical analogues")
+
+    # Calculate all indicators
+    if 'net_noncomm_positions' not in df.columns:
+        df['net_noncomm_positions'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
+
+    # Calculate cycle indicators
+    lookback = min(52, len(df))
+    df['percentile_rank'] = df['net_noncomm_positions'].rolling(window=lookback, min_periods=20).apply(
+        lambda x: stats.percentileofscore(x, x.iloc[-1]) if len(x) > 0 else 50
+    )
+
+    df['z_score'] = (df['net_noncomm_positions'] -
+                     df['net_noncomm_positions'].rolling(window=lookback, min_periods=20).mean()) / \
+                    df['net_noncomm_positions'].rolling(window=lookback, min_periods=20).std()
+
+    df['momentum_4w'] = df['net_noncomm_positions'].pct_change(4) * 100
+    df['momentum_13w'] = df['net_noncomm_positions'].pct_change(13) * 100
+
+    # Determine cycle phase
+    def determine_cycle_phase(row):
+        if pd.isna(row['percentile_rank']) or pd.isna(row['momentum_4w']):
+            return "Insufficient Data"
+
+        percentile = row['percentile_rank']
+        momentum = row['momentum_4w']
+
+        if percentile > 80:
+            if momentum > 0:
+                return "Distribution (Late Cycle)"
+            else:
+                return "Top Reversal"
+        elif percentile < 20:
+            if momentum < 0:
+                return "Accumulation (Early Cycle)"
+            else:
+                return "Bottom Reversal"
+        else:
+            if abs(momentum) > 10:
+                return "Trending" if momentum > 0 else "Correcting"
+            else:
+                return "Consolidation"
+
+    df['cycle_phase'] = df.apply(determine_cycle_phase, axis=1)
+
+    # Current status
+    if len(df) > 0:
+        current_phase = df['cycle_phase'].iloc[-1]
+        current_percentile = df['percentile_rank'].iloc[-1]
+        current_z_score = df['z_score'].iloc[-1]
+        current_momentum = df['momentum_4w'].iloc[-1]
+
+        # Display current cycle phase with color coding
+        phase_colors = {
+            "Distribution (Late Cycle)": "🔴",
+            "Top Reversal": "🟠",
+            "Accumulation (Early Cycle)": "🟢",
+            "Bottom Reversal": "🟡",
+            "Trending": "🔵",
+            "Correcting": "🟣",
+            "Consolidation": "⚪",
+            "Insufficient Data": "⚫"
+        }
+
+        # Summary box
+        st.info(f"""
+        ### {phase_colors.get(current_phase, "⚪")} Current Cycle Phase: **{current_phase}**
+
+        **Key Indicators:**
+        - Percentile Rank: {current_percentile:.1f}%
+        - Z-Score: {current_z_score:.2f}
+        - 4-Week Momentum: {current_momentum:+.1f}%
+
+        **Interpretation:**
+        {get_cycle_interpretation(current_phase, current_percentile, current_momentum)}
+        """)
+
+    # Multi-factor scoring chart
+    fig = make_subplots(
+        rows=3, cols=1,
+        row_heights=[0.4, 0.3, 0.3],
+        subplot_titles=[
+            "Composite Cycle Score",
+            "Individual Factor Contributions",
+            "Historical Cycle Phases"
+        ],
+        vertical_spacing=0.1,
+        shared_xaxes=True
+    )
+
+    # Calculate composite score
+    df['composite_score'] = (
+        (df['percentile_rank'] - 50) / 50 * 0.4 +  # Percentile contribution
+        df['z_score'].clip(-3, 3) / 3 * 0.3 +       # Z-score contribution
+        df['momentum_4w'].clip(-50, 50) / 50 * 0.3  # Momentum contribution
+    )
+
+    # 1. Composite Score
+    fig.add_trace(
+        go.Scatter(
+            x=df['report_date_as_yyyy_mm_dd'],
+            y=df['composite_score'],
+            name='Composite Score',
+            line=dict(color='blue', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(0, 0, 255, 0.1)'
+        ),
+        row=1, col=1
+    )
+
+    # Add threshold lines
+    fig.add_hline(y=0.5, line_dash="dash", line_color="red", opacity=0.5, row=1, col=1)
+    fig.add_hline(y=-0.5, line_dash="dash", line_color="green", opacity=0.5, row=1, col=1)
+    fig.add_hline(y=0, line_dash="solid", line_color="gray", opacity=0.5, row=1, col=1)
+
+    # 2. Individual Factors
+    factors = ['percentile_rank', 'z_score', 'momentum_4w']
+    colors = ['purple', 'orange', 'green']
+
+    for factor, color in zip(factors, colors):
+        if factor == 'percentile_rank':
+            normalized = (df[factor] - 50) / 50
+        elif factor == 'z_score':
+            normalized = df[factor].clip(-3, 3) / 3
+        else:  # momentum
+            normalized = df[factor].clip(-50, 50) / 50
+
+        fig.add_trace(
+            go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=normalized,
+                name=factor.replace('_', ' ').title(),
+                line=dict(color=color, width=1.5)
+            ),
+            row=2, col=1
+        )
+
+    # 3. Cycle Phase Timeline
+    # Create color mapping for phases
+    phase_color_map = {
+        "Distribution (Late Cycle)": "red",
+        "Top Reversal": "orange",
+        "Accumulation (Early Cycle)": "green",
+        "Bottom Reversal": "yellow",
+        "Trending": "blue",
+        "Correcting": "purple",
+        "Consolidation": "gray",
+        "Insufficient Data": "black"
+    }
+
+    # Create numeric mapping for phases
+    phase_numeric = {phase: i for i, phase in enumerate(phase_color_map.keys())}
+    df['phase_numeric'] = df['cycle_phase'].map(phase_numeric)
+
+    fig.add_trace(
+        go.Scatter(
+            x=df['report_date_as_yyyy_mm_dd'],
+            y=df['phase_numeric'],
+            mode='markers',
+            name='Cycle Phase',
+            marker=dict(
+                color=[phase_color_map[phase] for phase in df['cycle_phase']],
+                size=6
+            ),
+            text=df['cycle_phase'],
+            hovertemplate='%{text}<extra></extra>'
+        ),
+        row=3, col=1
+    )
+
+    # Update layout
+    fig.update_layout(
+        height=800,
+        showlegend=True,
+        hovermode='x unified',
+        title=f"{instrument_name} - Cycle Composite Analysis"
+    )
+
+    fig.update_xaxes(title_text="Date", row=3, col=1)
+    fig.update_yaxes(title_text="Composite Score", row=1, col=1)
+    fig.update_yaxes(title_text="Normalized Value", row=2, col=1)
+    fig.update_yaxes(title_text="Phase", ticktext=list(phase_color_map.keys()),
+                     tickvals=list(range(len(phase_color_map))), row=3, col=1)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Historical Analogues Section
+    st.markdown("---")
+    st.markdown("### 📚 Historical Analogues")
+
+    # Find similar historical setups
+    if len(df) > 52:
+        current_percentile = df['percentile_rank'].iloc[-1]
+        current_momentum = df['momentum_4w'].iloc[-1]
+
+        # Find similar conditions
+        similar_conditions = df[
+            (abs(df['percentile_rank'] - current_percentile) < 10) &
+            (abs(df['momentum_4w'] - current_momentum) < 5) &
+            (df.index < len(df) - 1)  # Exclude current
+        ]
+
+        if len(similar_conditions) > 0:
+            st.write(f"Found {len(similar_conditions)} similar historical setups:")
+
+            # Show what happened next
+            outcomes = []
+            for idx in similar_conditions.index:
+                if idx + 13 < len(df):  # Look 13 weeks ahead
+                    future_return = ((df['net_noncomm_positions'].iloc[idx + 13] -
+                                    df['net_noncomm_positions'].iloc[idx]) /
+                                   abs(df['net_noncomm_positions'].iloc[idx]) * 100)
+                    outcomes.append({
+                        'Date': df['report_date_as_yyyy_mm_dd'].iloc[idx],
+                        'Percentile': df['percentile_rank'].iloc[idx],
+                        'Momentum': df['momentum_4w'].iloc[idx],
+                        '13W Forward Return': future_return
+                    })
+
+            if outcomes:
+                outcomes_df = pd.DataFrame(outcomes)
+                st.dataframe(outcomes_df.style.format({
+                    'Percentile': '{:.1f}%',
+                    'Momentum': '{:+.1f}%',
+                    '13W Forward Return': '{:+.1f}%'
+                }))
+
+                avg_outcome = outcomes_df['13W Forward Return'].mean()
+                st.write(f"**Average 13-week forward return in similar setups: {avg_outcome:+.1f}%**")
+
+
+def get_cycle_interpretation(phase, percentile, momentum):
+    """Provide interpretation for each cycle phase"""
+    interpretations = {
+        "Distribution (Late Cycle)": "Market positioning is extremely bullish and still building. This often precedes tops but can persist longer than expected.",
+        "Top Reversal": "Bullish positioning is extreme and starting to reverse. Watch for confirmation of trend change.",
+        "Accumulation (Early Cycle)": "Market positioning is extremely bearish and still building. This often precedes bottoms.",
+        "Bottom Reversal": "Bearish positioning is extreme and starting to reverse. Potential opportunity developing.",
+        "Trending": f"Market is in a strong {'uptrend' if momentum > 0 else 'downtrend'} with momentum. Trend following conditions.",
+        "Correcting": "Market is pulling back within the larger trend. Monitor for continuation or reversal signals.",
+        "Consolidation": "Market is range-bound with low momentum. Wait for breakout direction.",
+        "Insufficient Data": "Not enough historical data to determine cycle phase."
+    }
+
+    return interpretations.get(phase, "Unable to determine current market conditions.")
+
+
+def display_cot_time_series_with_price(df, instrument_name, compact_mode=False, selected_position=None):
     """Display COT time series data with price chart and synchronized subplots"""
 
+    # In compact mode, use simplified display
+    if compact_mode:
+        # Simplified chart display for compact mode
+        import plotly.graph_objects as go
+
+        # Calculate net positions
+        df['net_noncomm_positions'] = df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']
+        df['net_comm_positions'] = df['comm_positions_long_all'] - df['comm_positions_short_all']
+
+        fig = go.Figure()
+
+        # Determine what to plot based on selected_position
+        if selected_position == "Net Non-Commercial":
+            fig.add_trace(go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=df['net_noncomm_positions'],
+                name='Net Non-Commercial',
+                line=dict(color='blue', width=2)
+            ))
+        elif selected_position == "Net Commercial":
+            fig.add_trace(go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=df['net_comm_positions'],
+                name='Net Commercial',
+                line=dict(color='green', width=2)
+            ))
+        else:  # All Positions
+            fig.add_trace(go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=df['noncomm_positions_long_all'],
+                name='Non-Comm Long',
+                line=dict(color='green')
+            ))
+            fig.add_trace(go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=df['noncomm_positions_short_all'],
+                name='Non-Comm Short',
+                line=dict(color='red')
+            ))
+            fig.add_trace(go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=df['net_noncomm_positions'],
+                name='Net Non-Comm',
+                line=dict(color='blue', width=2)
+            ))
+
+        fig.update_layout(
+            height=300,
+            margin=dict(t=10, b=40),
+            hovermode='x unified',
+            showlegend=True,
+            xaxis_title="Date",
+            yaxis_title="Contracts"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+        return
+
+    # Full display mode (not compact)
     # Price adjustment selection at the top
     st.markdown("**Price Adjustment Method**")
     price_adjustment = st.radio(
@@ -569,9 +1215,71 @@ def display_synchronized_charts(df, instrument_name, price_adjustment, selected_
     # Render all charts with synchronization
     renderLightweightCharts(charts, 'synchronized_charts')
 
-def display_share_of_oi(df, instrument_name):
+def display_share_of_oi(df, instrument_name, compact_mode=False, selected_position=None):
     """Display Share of Open Interest chart with futures price data and long/short toggle"""
 
+    # In compact mode, use simplified display
+    if compact_mode:
+        # Simplified chart display for compact mode
+        import plotly.graph_objects as go
+
+        # Calculate percentages of OI
+        df['net_noncomm_pct'] = (df['noncomm_positions_long_all'] - df['noncomm_positions_short_all']) / df['open_interest_all'] * 100
+        df['net_comm_pct'] = (df['comm_positions_long_all'] - df['comm_positions_short_all']) / df['open_interest_all'] * 100
+        df['noncomm_long_pct'] = df['noncomm_positions_long_all'] / df['open_interest_all'] * 100
+        df['noncomm_short_pct'] = -df['noncomm_positions_short_all'] / df['open_interest_all'] * 100
+
+        fig = go.Figure()
+
+        # Determine what to plot based on selected_position
+        if selected_position == "Net Non-Commercial":
+            fig.add_trace(go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=df['net_noncomm_pct'],
+                name='Net Non-Comm % of OI',
+                line=dict(color='blue', width=2),
+                fill='tozeroy'
+            ))
+        elif selected_position == "Net Commercial":
+            fig.add_trace(go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=df['net_comm_pct'],
+                name='Net Comm % of OI',
+                line=dict(color='green', width=2),
+                fill='tozeroy'
+            ))
+        else:  # All Positions
+            fig.add_trace(go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=df['noncomm_long_pct'],
+                name='Non-Comm Long %',
+                line=dict(color='green'),
+                stackgroup='one'
+            ))
+            fig.add_trace(go.Scatter(
+                x=df['report_date_as_yyyy_mm_dd'],
+                y=df['noncomm_short_pct'],
+                name='Non-Comm Short %',
+                line=dict(color='red'),
+                stackgroup='one'
+            ))
+
+        # Add zero line
+        fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+
+        fig.update_layout(
+            height=300,
+            margin=dict(t=10, b=40),
+            hovermode='x unified',
+            showlegend=True,
+            xaxis_title="Date",
+            yaxis_title="% of Open Interest"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+        return
+
+    # Full display mode (not compact)
     # Information box
     st.info("""
     This chart shows how open interest is distributed among different trader categories.
