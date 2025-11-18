@@ -20,7 +20,7 @@ def display_time_series_chart(df, instrument_name):
     st.subheader("📈 Time Series Analysis")
 
     # Then create tabs for COT analysis (without Futures Price tab)
-    tab1, tab2, tab3 = st.tabs(["Standard Time Series", "Share of Open Interest", "Seasonality"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Standard Time Series", "Share of Open Interest", "Seasonality", "Percentile", "Momentum"])
 
     with tab1:
         display_cot_time_series_with_price(df, instrument_name)
@@ -30,6 +30,12 @@ def display_time_series_chart(df, instrument_name):
 
     with tab3:
         display_seasonality(df, instrument_name)
+
+    with tab4:
+        display_percentile_tab(df, instrument_name)
+
+    with tab5:
+        display_momentum_tab(df, instrument_name)
 
 def display_cot_time_series_with_price(df, instrument_name):
     """Display COT time series data with price chart and synchronized subplots"""
@@ -1588,3 +1594,15 @@ def display_oi_split_chart(df, price_df, instrument_name):
         "chart": oiChart,
         "series": oiSeries
     }], 'oi_split_chart')
+
+
+def display_percentile_tab(df, instrument_name):
+    """Display percentile analysis within Time Series tab"""
+    from display_functions_exact import display_percentile_chart
+    display_percentile_chart(df, instrument_name)
+
+
+def display_momentum_tab(df, instrument_name):
+    """Display momentum analysis within Time Series tab"""
+    from display_functions_exact import display_momentum_chart
+    display_momentum_chart(df, instrument_name)

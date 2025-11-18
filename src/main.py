@@ -17,8 +17,6 @@ st.set_page_config(
 from data_fetcher import load_instruments_database, fetch_cftc_data
 from display_functions_exact import (
     display_time_series_chart,
-    display_percentile_chart,
-    display_momentum_chart,
     display_trader_participation_chart
 )
 # Multi-instrument handler removed - all multi-instrument analyses moved to main dashboard
@@ -153,12 +151,6 @@ def handle_single_instrument_flow(chart_type, instruments_db, api_token):
         if chart_type == "Time Series":
             display_time_series_chart(df, selected_instrument)
 
-        elif chart_type == "Percentile":
-            display_percentile_chart(df, selected_instrument)
-
-        elif chart_type == "Momentum":
-            display_momentum_chart(df, selected_instrument)
-
         elif chart_type == "Trader Participation":
             display_trader_participation_chart(df, selected_instrument)
 
@@ -244,7 +236,7 @@ def main():
 
     single_chart_type = st.segmented_control(
         "Select chart type",
-        ["Time Series", "Percentile", "Momentum", "Trader Participation"],
+        ["Time Series", "Trader Participation"],
         selection_mode="single",
         default=None,
         key="single_chart_type"
