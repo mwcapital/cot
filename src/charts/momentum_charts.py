@@ -46,7 +46,7 @@ def create_single_variable_momentum_dashboard(df, variable_name, change_col):
             rows=4, cols=1,
             row_heights=[0.3, 0.25, 0.25, 0.2],
             shared_xaxes=True,
-            vertical_spacing=0.06,
+            vertical_spacing=0.04,
             subplot_titles=(
                 f'{variable_name.replace("_", " ").title()} - Actual Values',
                 'Week-over-Week Changes',
@@ -151,7 +151,7 @@ def create_single_variable_momentum_dashboard(df, variable_name, change_col):
         # Update layout
         fig.update_layout(
             title=f"Momentum Dashboard - {variable_name.replace('_', ' ').title()}",
-            height=1000,
+            height=900,
             showlegend=False,
             hovermode='x unified',
             xaxis=dict(
@@ -167,23 +167,9 @@ def create_single_variable_momentum_dashboard(df, variable_name, change_col):
                 autorange=True
             ),
             xaxis4=dict(
-                rangeslider=dict(visible=True, thickness=0.05),
+                rangeslider=dict(visible=False),
                 title='Date',
-                autorange=True,
-                rangeselector=dict(
-                    buttons=list([
-                        dict(count=1, label="1M", step="month", stepmode="backward"),
-                        dict(count=3, label="3M", step="month", stepmode="backward"),
-                        dict(count=6, label="6M", step="month", stepmode="backward"),
-                        dict(count=1, label="1Y", step="year", stepmode="backward"),
-                        dict(count=2, label="2Y", step="year", stepmode="backward"),
-                        dict(step="all", label="All")
-                    ]),
-                    bgcolor='rgba(255,255,255,0.9)',
-                    activecolor='lightblue',
-                    x=0.01,
-                    y=1.0
-                )
+                autorange=True
             ),
             yaxis=dict(
                 title="Value",

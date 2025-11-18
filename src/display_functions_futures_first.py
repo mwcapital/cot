@@ -1680,10 +1680,7 @@ def display_momentum_percentile_tab(df, instrument_name):
     from charts.percentile_charts import create_percentile_chart
 
     # Use 2-year lookback to match momentum
-    # First show time series percentile chart with heat-style colored bars
-    st.markdown("---")
-    st.markdown("### 📊 Percentile Analysis")
-
+    # First show time series percentile chart with heat-style colored bars - seamlessly continue
     fig_time_series = create_percentile_chart(df, selected_var, 2, 'time_series')
     if fig_time_series:
         st.plotly_chart(fig_time_series, use_container_width=True)

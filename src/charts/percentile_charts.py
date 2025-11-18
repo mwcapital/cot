@@ -56,17 +56,8 @@ def create_percentile_chart(df, column, lookback_years=5, chart_type='time_serie
             # Remove NaN values
             df_display = df_display.dropna(subset=['percentile_rank'])
 
-            # Create subplot with mini-map
-            fig = make_subplots(
-                rows=2, cols=1,
-                shared_xaxes=True,
-                row_heights=[0.7, 0.3],
-                vertical_spacing=0.05,
-                subplot_titles=(
-                    f'Percentile Rank (Rolling {lookback_years if lookback_years != "all" else "All Time"} Window)', 
-                    'Full Period Navigator'
-                )
-            )
+            # Create single plot for seamless flow
+            fig = go.Figure()
 
             # Determine bar width based on data density
             # Use bars only for recent data or sparse data
@@ -104,8 +95,7 @@ def create_percentile_chart(df, column, lookback_years=5, chart_type='time_serie
                         text=df_display['actual_value'].round(0).astype(str),
                         textposition='none',
                         hovertemplate='Date: %{x|%Y-%m-%d}<br>Percentile: %{y:.1f}%<br>Value: %{text}<extra></extra>'
-                    ),
-                    row=1, col=1
+                    )
                 )
             else:
                 # Use area chart for dense data
@@ -118,39 +108,22 @@ def create_percentile_chart(df, column, lookback_years=5, chart_type='time_serie
                         name='Percentile Rank',
                         line=dict(color='blue', width=2),
                         fillcolor='rgba(0, 100, 255, 0.3)',
-                        hovertemplate='Date: %{x|%Y-%m-%d}<br>Percentile: %{y:.1f}%<br>Value: ' + 
+                        hovertemplate='Date: %{x|%Y-%m-%d}<br>Percentile: %{y:.1f}%<br>Value: ' +
                                      df_display['actual_value'].round(0).astype(str) + '<extra></extra>'
-                    ),
-                    row=1, col=1
+                    )
                 )
 
             # Add reference lines
-            fig.add_hline(y=50, line_dash="dash", line_color="black", line_width=1, 
-                         annotation_text="50th", annotation_position="right", row=1, col=1)
+            fig.add_hline(y=50, line_dash="dash", line_color="black", line_width=1,
+                         annotation_text="50th", annotation_position="right")
             fig.add_hline(y=90, line_dash="dot", line_color="red", line_width=2,
-                         annotation_text="90th", annotation_position="right", row=1, col=1)
+                         annotation_text="90th", annotation_position="right")
             fig.add_hline(y=10, line_dash="dot", line_color="green", line_width=2,
-                         annotation_text="10th", annotation_position="right", row=1, col=1)
+                         annotation_text="10th", annotation_position="right")
 
             # Add subtle shaded zones
-            fig.add_hrect(y0=75, y1=100, line_width=0, fillcolor="red", opacity=0.05, row=1, col=1)
-            fig.add_hrect(y0=0, y1=25, line_width=0, fillcolor="green", opacity=0.05, row=1, col=1)
-
-            # Add mini-map navigator showing full data
-            fig.add_trace(
-                go.Scatter(
-                    x=df_display['report_date_as_yyyy_mm_dd'],
-                    y=df_display['percentile_rank'],
-                    mode='lines',
-                    name='',
-                    line=dict(color='rgba(0,0,255,0.5)', width=1),
-                    fill='tozeroy',
-                    fillcolor='rgba(0,0,255,0.1)',
-                    showlegend=False,
-                    hoverinfo='skip'
-                ),
-                row=2, col=1
-            )
+            fig.add_hrect(y0=75, y1=100, line_width=0, fillcolor="red", opacity=0.05)
+            fig.add_hrect(y0=0, y1=25, line_width=0, fillcolor="green", opacity=0.05)
 
             # Update layout
             fig.update_layout(
@@ -163,28 +136,11 @@ def create_percentile_chart(df, column, lookback_years=5, chart_type='time_serie
                     font=dict(size=18)
                 ),
                 hovermode='x unified',
-                height=700,
+                height=500,
                 showlegend=False,
                 dragmode='zoom',
-                margin=dict(t=120, l=80, r=80, b=80),  # Increase top margin for buttons
+                margin=dict(t=60, l=80, r=80, b=40),  # Smaller margins for seamless flow
                 xaxis=dict(
-                    rangeselector=dict(
-                        buttons=list([
-                            dict(count=6, label="6M", step="month", stepmode="backward"),
-                            dict(count=1, label="YTD", step="year", stepmode="todate"),
-                            dict(count=1, label="1Y", step="year", stepmode="backward"),
-                            dict(count=2, label="2Y", step="year", stepmode="backward"),
-                            dict(count=5, label="5Y", step="year", stepmode="backward"),
-                            dict(count=10, label="10Y", step="year", stepmode="backward"),
-                            dict(label="All", step="all")
-                        ]),
-                        bgcolor='rgba(255,255,255,0.9)',
-                        x=0,
-                        xanchor='left',
-                        y=1.15,
-                        yanchor='top',
-                        font=dict(size=11)
-                    ),
                     type='date'
                 ),
                 yaxis=dict(
@@ -194,24 +150,11 @@ def create_percentile_chart(df, column, lookback_years=5, chart_type='time_serie
                     tickvals=[0, 25, 50, 75, 100],
                     ticktext=['0%', '25%', '50%', '75%', '100%']
                 ),
-                xaxis2=dict(
-                    type='date',
-                    rangeslider=dict(
-                        visible=True,
-                        thickness=0.1,
-                        bgcolor='rgba(0,0,0,0.05)'
-                    )
-                ),
-                yaxis2=dict(
-                    title="",
-                    range=[0, 100],
-                    visible=False
-                )
             )
 
             # Configure axes
-            fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)', row=1, col=1)
-            fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)', row=1, col=1)
+            fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+            fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
 
         elif chart_type == 'distribution':
             return create_distribution_chart(df_pct, column, lookback_years)
@@ -241,58 +184,8 @@ def create_distribution_chart(df_pct, column, lookback_years):
         current_value = df_pct[column].iloc[-1] if not df_pct.empty else np.nan
         current_date = df_pct['report_date_as_yyyy_mm_dd'].max()
         
-        # Add toggle for histogram type
-        col1_toggle, col2_toggle = st.columns([1, 3])
-        with col1_toggle:
-            use_density = st.toggle("Probability Density", value=True, key="density_toggle")
-        
-        # Add explainer
-        with col2_toggle:
-            with st.expander("ℹ️ How to read this chart"):
-                if use_density:
-                    st.markdown("""
-                    **Probability Density View (Adaptive Binning):**
-                    
-                    The height alone doesn't tell you probability - you need to consider the width of each bar too.
-                    
-                    For example:
-                    - Your tallest bar shows about 15μ (0.000015) density
-                    - If each bar covers about 10,000 units on the x-axis
-                    - Then probability = 0.000015 × 10,000 = 0.15 = 15% of observations fall in that bar
-                    
-                    Quick visual interpretation:
-                    - Taller bars = More common values (higher concentration)
-                    - Shorter bars = Less common values
-                    - Multiple peaks = Multiple common value ranges
-                    
-                    **Freedman-Diaconis Method:**
-                    - Bin width = 2 × IQR × n^(-1/3)
-                    - IQR (Interquartile Range) is robust to outliers
-                    - Automatically balances detail vs noise
-                    - More data → narrower bins → more detail
-                    - Reveals true distribution shape that fixed bins might hide
-                    
-                    Key features:
-                    - Narrower bins where data is dense (better resolution)
-                    - Wider bins where data is sparse (less noise)
-                    - Total area under all bars = 1 (100% probability)
-                    - Optimal for financial data with outliers
-                    """)
-                else:
-                    st.markdown("""
-                    **Percentage View:**
-                    
-                    The height directly shows what percentage of observations fall in each bar.
-                    
-                    For example:
-                    - A bar with height 5 means 5% of all historical values are in that range
-                    - All bars together sum to 100%
-                    
-                    Quick visual interpretation:
-                    - Taller bars = More frequent values in history
-                    - Shorter bars = Rare values
-                    - You can directly read percentages without calculation
-                    """)
+        # Use density mode for consistency
+        use_density = True
 
         # Create histogram with distribution curve
         fig = go.Figure()
@@ -538,8 +431,9 @@ def create_distribution_chart(df_pct, column, lookback_years):
             xaxis_title="Value",
             yaxis_title="Density" if use_density else "Percentage (%)",
             showlegend=True,
-            height=500,
+            height=400,
             barmode='overlay',
+            margin=dict(t=60, l=80, r=80, b=40),  # Consistent margins for seamless flow
             legend=dict(
                 orientation="v",
                 yanchor="top",
