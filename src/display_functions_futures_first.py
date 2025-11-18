@@ -20,12 +20,11 @@ def display_time_series_chart(df, instrument_name):
     st.subheader("📈 Time Series Analysis")
 
     # Then create tabs for COT analysis (without Futures Price tab)
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "Standard Time Series",
         "Share of Open Interest",
         "Seasonality",
-        "Percentile",
-        "Momentum",
+        "Momentum & Percentile",
         "Extremes & Seasonality",
         "Cycle Composite"
     ])
@@ -40,15 +39,12 @@ def display_time_series_chart(df, instrument_name):
         display_seasonality(df, instrument_name)
 
     with tab4:
-        display_percentile_tab(df, instrument_name)
+        display_momentum_percentile_tab(df, instrument_name)
 
     with tab5:
-        display_momentum_tab(df, instrument_name)
-
-    with tab6:
         display_extremes_seasonality(df, instrument_name)
 
-    with tab7:
+    with tab6:
         display_cycle_composite(df, instrument_name)
 
 def display_cot_time_series_with_price(df, instrument_name):
@@ -1610,16 +1606,19 @@ def display_oi_split_chart(df, price_df, instrument_name):
     }], 'oi_split_chart')
 
 
-def display_percentile_tab(df, instrument_name):
-    """Display percentile analysis within Time Series tab"""
-    from display_functions_exact import display_percentile_chart
-    display_percentile_chart(df, instrument_name)
+def display_momentum_percentile_tab(df, instrument_name):
+    """Combined Momentum and Percentile analysis tab - both displayed together"""
 
-
-def display_momentum_tab(df, instrument_name):
-    """Display momentum analysis within Time Series tab"""
+    # Display momentum analysis first
     from display_functions_exact import display_momentum_chart
     display_momentum_chart(df, instrument_name)
+
+    # Add separator
+    st.markdown("---")
+
+    # Display percentile analysis below
+    from display_functions_exact import display_percentile_chart
+    display_percentile_chart(df, instrument_name)
 
 
 def display_extremes_seasonality(df, instrument_name):
