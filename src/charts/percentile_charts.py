@@ -84,17 +84,22 @@ def create_percentile_chart(df, column, lookback_years=5, chart_type='time_serie
                             ],
                             cmin=0,
                             cmax=100,
+                            opacity=1.0,  # Full opacity for visibility
+                            line=dict(width=0.5, color='rgba(0,0,0,0.2)'),  # Add subtle outline
                             colorbar=dict(
                                 title="Percentile",
                                 tickmode='array',
                                 tickvals=[0, 10, 25, 50, 75, 90, 100],
                                 ticktext=['0%', '10%', '25%', '50%', '75%', '90%', '100%'],
-                                x=1.02
+                                x=1.02,
+                                yanchor='middle',
+                                y=0.5
                             )
                         ),
                         text=df_display['actual_value'].round(0).astype(str),
                         textposition='none',
-                        hovertemplate='Date: %{x|%Y-%m-%d}<br>Percentile: %{y:.1f}%<br>Value: %{text}<extra></extra>'
+                        hovertemplate='Date: %{x|%Y-%m-%d}<br>Percentile: %{y:.1f}%<br>Value: %{text}<extra></extra>',
+                        width=None  # Let Plotly determine optimal bar width
                     )
                 )
             else:
@@ -128,25 +133,32 @@ def create_percentile_chart(df, column, lookback_years=5, chart_type='time_serie
             # Update layout
             fig.update_layout(
                 hovermode='x unified',
-                height=500,
+                height=400,  # Match distribution chart height
                 showlegend=False,
                 dragmode='zoom',
-                margin=dict(t=20, l=80, r=80, b=40),  # Reduced top margin since no title
+                margin=dict(t=20, l=80, r=80, b=50),  # Reduced top margin without title
                 xaxis=dict(
                     type='date'
                 ),
                 yaxis=dict(
                     title="Percentile Rank (%)",
-                    range=[-5, 105],
+                    range=[0, 100],  # Set proper range without negative values
                     tickmode='array',
                     tickvals=[0, 25, 50, 75, 100],
-                    ticktext=['0%', '25%', '50%', '75%', '100%']
-                ),
+                    ticktext=['0%', '25%', '50%', '75%', '100%'],
+                    autorange=False  # Ensure range is not auto-reversed
+                )
             )
 
-            # Configure axes
+            # Configure axes - Force proper y-axis orientation
             fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
-            fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+            fig.update_yaxes(
+                showgrid=True,
+                gridwidth=1,
+                gridcolor='rgba(128,128,128,0.2)',
+                autorange=False,  # Disable auto-range
+                range=[0, 100]  # Explicitly set range with 0 at bottom
+            )
 
         elif chart_type == 'distribution':
             return create_distribution_chart(df_pct, column, lookback_years)
@@ -422,9 +434,9 @@ def create_distribution_chart(df_pct, column, lookback_years):
             xaxis_title="Value",
             yaxis_title="Density" if use_density else "Percentage (%)",
             showlegend=True,
-            height=400,
+            height=400,  # Match time series chart height
             barmode='overlay',
-            margin=dict(t=20, l=80, r=80, b=40),  # Reduced top margin since no title
+            margin=dict(t=20, l=80, r=80, b=50),  # Reduced top margin without title
             legend=dict(
                 orientation="v",
                 yanchor="top",

@@ -19,33 +19,21 @@ def display_time_series_chart(df, instrument_name):
     """Display time series analysis with futures price/OI base layer"""
     st.subheader("📈 Time Series Analysis")
 
-    # Then create tabs for COT analysis (without Futures Price tab)
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    # Create tabs for COT analysis
+    tab1, tab2, tab3 = st.tabs([
         "Standard Time Series",
-        "Share of Open Interest",
         "Seasonality",
-        "Momentum & Percentile",
-        "Extremes & Seasonality",
-        "Cycle Composite"
+        "Momentum & Percentile"
     ])
 
     with tab1:
         display_cot_time_series_with_price(df, instrument_name)
 
     with tab2:
-        display_share_of_oi(df, instrument_name)
-
-    with tab3:
         display_seasonality(df, instrument_name)
 
-    with tab4:
+    with tab3:
         display_momentum_percentile_tab(df, instrument_name)
-
-    with tab5:
-        display_extremes_seasonality(df, instrument_name)
-
-    with tab6:
-        display_cycle_composite(df, instrument_name)
 
 def display_cot_time_series_with_price(df, instrument_name):
     """Display COT time series data with price chart and synchronized subplots"""
@@ -909,6 +897,236 @@ def display_share_of_oi(df, instrument_name):
     renderLightweightCharts(charts, 'share_of_oi_charts')
 
 
+def display_momentum_percentile_tab(df, instrument_name):
+    """Display combined Momentum & Percentile analysis"""
+
+    # Import required functions
+    from charts.momentum_charts import create_momentum_analysis_charts
+    from charts.percentile_charts import create_percentile_chart
+
+    st.markdown("### Momentum & Percentile Analysis")
+    st.markdown('<p style="color: #808080; font-size: 13px;">Percentile ranks, distribution analysis, and z-scores of changes are calculated using a 2-year (104-week) rolling lookback period.</p>', unsafe_allow_html=True)
+
+    # Let user select which variable to analyze
+    variable_names = {
+        "open_interest_all": "Open Interest",
+        "noncomm_positions_long_all": "Non-Commercial Long",
+        "noncomm_positions_short_all": "Non-Commercial Short",
+        "comm_positions_long_all": "Commercial Long",
+        "comm_positions_short_all": "Commercial Short",
+        "net_noncomm_positions": "Net Non-Commercial",
+        "net_comm_positions": "Net Commercial",
+        "nonrept_positions_long_all": "Non-Reportable Long",
+        "nonrept_positions_short_all": "Non-Reportable Short"
+    }
+
+    # Get available columns that exist in the dataframe
+    available_vars = [var for var in variable_names.keys() if var in df.columns]
+
+    # Default to open_interest_all if available
+    default_idx = 0
+    if 'open_interest_all' in available_vars:
+        default_idx = available_vars.index('open_interest_all')
+
+    selected_var = st.selectbox(
+        "Select variable for analysis:",
+        options=available_vars,
+        format_func=lambda x: variable_names.get(x, x),
+        index=default_idx,
+        key=f"momentum_var_{instrument_name}"
+    )
+
+    if not selected_var:
+        st.error("No variable selected")
+        return
+
+    # 1. First show actual values chart with Streamlit-based range selector
+    st.markdown("---")
+    st.markdown("#### Actual Values")
+
+    # Create range selector buttons using Streamlit
+    col_buttons = st.columns(5)
+
+    # Initialize session state for range selection if not exists
+    if 'momentum_range' not in st.session_state:
+        st.session_state.momentum_range = 'All'  # Start with all data visible
+
+    # Range buttons with highlighting for selected range
+    with col_buttons[0]:
+        if st.button("1Y", key="range_1y", use_container_width=True,
+                    type="primary" if st.session_state.momentum_range == '1Y' else "secondary"):
+            st.session_state.momentum_range = '1Y'
+            st.rerun()
+    with col_buttons[1]:
+        if st.button("2Y", key="range_2y", use_container_width=True,
+                    type="primary" if st.session_state.momentum_range == '2Y' else "secondary"):
+            st.session_state.momentum_range = '2Y'
+            st.rerun()
+    with col_buttons[2]:
+        if st.button("5Y", key="range_5y", use_container_width=True,
+                    type="primary" if st.session_state.momentum_range == '5Y' else "secondary"):
+            st.session_state.momentum_range = '5Y'
+            st.rerun()
+    with col_buttons[3]:
+        if st.button("10Y", key="range_10y", use_container_width=True,
+                    type="primary" if st.session_state.momentum_range == '10Y' else "secondary"):
+            st.session_state.momentum_range = '10Y'
+            st.rerun()
+    with col_buttons[4]:
+        if st.button("All", key="range_all", use_container_width=True,
+                    type="primary" if st.session_state.momentum_range == 'All' else "secondary"):
+            st.session_state.momentum_range = 'All'
+            st.rerun()
+
+    # Filter data based on selected range
+    df_sorted = df.copy()
+    df_sorted = df_sorted.sort_values('report_date_as_yyyy_mm_dd')
+
+    # Ensure we have data to work with
+    if df_sorted.empty:
+        st.warning("No data available for the selected instrument.")
+        return
+
+    # Convert dates to datetime if not already
+    df_sorted['report_date_as_yyyy_mm_dd'] = pd.to_datetime(df_sorted['report_date_as_yyyy_mm_dd'])
+    latest_date = df_sorted['report_date_as_yyyy_mm_dd'].max()
+
+    # Apply filtering based on selected range
+    if st.session_state.momentum_range == '1Y':
+        start_date = latest_date - pd.DateOffset(years=1)
+        df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+    elif st.session_state.momentum_range == '2Y':
+        start_date = latest_date - pd.DateOffset(years=2)
+        df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+    elif st.session_state.momentum_range == '5Y':
+        start_date = latest_date - pd.DateOffset(years=5)
+        df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+    elif st.session_state.momentum_range == '10Y':
+        start_date = latest_date - pd.DateOffset(years=10)
+        df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+    else:  # 'All'
+        df_filtered = df_sorted.copy()
+
+    # Reset index to ensure clean plotting
+    df_filtered = df_filtered.reset_index(drop=True)
+
+    # Create actual values chart with filtered data
+    # Simple, direct approach - no complex validation
+
+    # Ensure we have the column
+    if selected_var not in df_filtered.columns:
+        st.error(f"Variable '{selected_var}' not found in the data.")
+        return
+
+    # Get the data points from the FILTERED dataframe
+    dates = df_filtered['report_date_as_yyyy_mm_dd'].tolist()
+    values = df_filtered[selected_var].tolist()
+
+    # Clean the data - remove NaN values
+    clean_dates = []
+    clean_values = []
+    for d, v in zip(dates, values):
+        if pd.notna(v):
+            clean_dates.append(d)
+            clean_values.append(float(v))
+
+    # Check if we have valid data
+    if not clean_values:
+        st.error(f"No valid data for {selected_var} in the selected time range")
+        return
+
+    # Create figure with the actual values
+    fig_actual = go.Figure()
+
+    # Add the actual values trace - make sure it's visible
+    fig_actual.add_trace(
+        go.Scatter(
+            x=clean_dates,
+            y=clean_values,
+            mode='lines',
+            name=selected_var.replace('_', ' ').title(),
+            line=dict(
+                color='#1f77b4',  # Standard plotly blue
+                width=3
+            ),
+            connectgaps=False,  # Don't connect gaps for cleaner visualization
+            hovertemplate='Date: %{x|%Y-%m-%d}<br>Value: %{y:,.0f}<extra></extra>',
+            visible=True  # Explicitly set visible
+        )
+    )
+
+    # Simple layout with proper y-axis orientation
+    fig_actual.update_layout(
+        height=350,
+        showlegend=False,
+        hovermode='x unified',
+        margin=dict(t=20, l=80, r=80, b=50),
+        xaxis=dict(
+            title='Date',
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(200,200,200,0.3)',
+            type='date'
+        ),
+        yaxis=dict(
+            title='Value',
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(200,200,200,0.3)',
+            autorange=True,
+            zeroline=True,
+            zerolinecolor='rgba(128,128,128,0.3)',
+            zerolinewidth=1
+        )
+    )
+
+    # Force update to ensure y-axis is not reversed
+    fig_actual.update_yaxes(autorange=True)
+
+    # Display with selected range indicator and data point count
+    date_range_str = f"{clean_dates[0].strftime('%Y-%m-%d')} to {clean_dates[-1].strftime('%Y-%m-%d')}" if clean_dates else "No data"
+    st.caption(f"📊 Showing: {st.session_state.momentum_range} | {len(clean_values)} data points | {date_range_str}")
+    st.plotly_chart(fig_actual, use_container_width=True)
+
+    # 2. Then show both percentile charts (time series and distribution)
+    st.markdown("#### Percentile Analysis")
+
+    # Get the current x-axis range from session state (set by the Actual Values chart range selector)
+    current_range = st.session_state.get('momentum_range', 'All')
+
+    # Calculate the date range based on selection
+    latest_date = df['report_date_as_yyyy_mm_dd'].max()
+    if current_range == '1Y':
+        start_date = latest_date - pd.DateOffset(years=1)
+    elif current_range == '2Y':
+        start_date = latest_date - pd.DateOffset(years=2)
+    elif current_range == '5Y':
+        start_date = latest_date - pd.DateOffset(years=5)
+    elif current_range == '10Y':
+        start_date = latest_date - pd.DateOffset(years=10)
+    else:  # 'All'
+        start_date = df['report_date_as_yyyy_mm_dd'].min()
+
+    # Show time series percentile chart with matching x-axis range
+    fig_time_series = create_percentile_chart(df, selected_var, 2, 'time_series')
+    if fig_time_series:
+        # Apply the same x-axis range as the Actual Values chart
+        fig_time_series.update_xaxes(range=[start_date, latest_date])
+        st.plotly_chart(fig_time_series, use_container_width=True, key=f'percentile_ts_{selected_var}')
+
+    # Show distribution chart below it (not time-based, so no x-axis syncing needed)
+    fig_distribution = create_percentile_chart(df, selected_var, 2, 'distribution')
+    if fig_distribution:
+        st.plotly_chart(fig_distribution, use_container_width=True, key=f'percentile_dist_{selected_var}')
+
+    # 3. Finally show the momentum analysis charts (3 charts) with matching x-axis range
+    st.markdown("#### Momentum Analysis")
+    fig_momentum = create_momentum_analysis_charts(df, selected_var)
+    if fig_momentum:
+        # Apply the same x-axis range to all subplots
+        fig_momentum.update_xaxes(range=[start_date, latest_date])
+        st.plotly_chart(fig_momentum, use_container_width=True, key=f'momentum_{selected_var}')
+
 def display_seasonality(df, instrument_name):
     """Display seasonality analysis for the instrument"""
     st.markdown("### Seasonality Analysis")
@@ -995,21 +1213,37 @@ def display_seasonality(df, instrument_name):
         )
         zone_type_value = 'percentile' if zone_type == 'Percentile' else 'std'
 
-    # Show previous year checkbox below
-    show_previous_year = st.checkbox(
-        "Show previous year",
-        value=True,
-        key=f"seasonality_prev_year_{instrument_name}"
-    )
+    # Show previous year checkbox only for 10+ years lookback
+    show_previous_year = True  # Default value
+    if lookback_years == 'all' or (isinstance(lookback_years, int) and lookback_years >= 10):
+        show_previous_year = st.checkbox(
+            "Show previous year",
+            value=True,
+            key=f"seasonality_prev_year_{instrument_name}"
+        )
+
+    # Add checkbox for simplified view (only when lookback is 5 years)
+    show_simple_average = False
+    if lookback_years == 5:
+        show_simple_average = st.checkbox(
+            "Show as simple average (current year vs 5-year average only)",
+            value=False,
+            key=f"seasonality_simple_{instrument_name}"
+        )
 
     # Create and display the seasonality chart
-    fig = create_seasonality_chart(
-        df,
-        selected_column,
-        lookback_years,
-        show_previous_year,
-        zone_type_value
-    )
+    if lookback_years == 5 and show_simple_average:
+        # Show simplified 2-line chart
+        fig = create_simple_seasonal_overlay(df, selected_column)
+    else:
+        # Show standard multi-year comparison
+        fig = create_seasonality_chart(
+            df,
+            selected_column,
+            lookback_years,
+            show_previous_year,
+            zone_type_value
+        )
 
     if fig:
         st.plotly_chart(fig, use_container_width=True)
@@ -1320,6 +1554,98 @@ def create_seasonality_chart(df, column, lookback_years=5, show_previous_year=Tr
         return None
 
 
+def create_simple_seasonal_overlay(df, column):
+    """Create simplified seasonal overlay showing current year vs 5-year average"""
+    try:
+        df_seasonal = df.copy()
+
+        # Add week and year columns
+        df_seasonal['week_of_year'] = pd.to_datetime(df_seasonal['report_date_as_yyyy_mm_dd']).dt.isocalendar().week
+        df_seasonal['year'] = pd.to_datetime(df_seasonal['report_date_as_yyyy_mm_dd']).dt.year
+
+        # Calculate seasonal average for last 5 years
+        recent_years = df_seasonal[df_seasonal['year'] >= df_seasonal['year'].max() - 5]
+        seasonal_avg = recent_years.groupby('week_of_year')[column].mean()
+
+        # Current year data
+        current_year = df_seasonal[df_seasonal['year'] == df_seasonal['year'].max()]
+
+        # Create figure
+        fig = go.Figure()
+
+        # Create week mapping for seasonal average
+        weeks = list(range(1, 54))
+        seasonal_line = []
+        for week in weeks:
+            if week in seasonal_avg.index:
+                seasonal_line.append(seasonal_avg[week])
+            else:
+                seasonal_line.append(None)
+
+        # Plot 5-year seasonal average (orange line)
+        fig.add_trace(
+            go.Scatter(
+                x=weeks,
+                y=seasonal_line,
+                name='5Y Seasonal Average',
+                line=dict(color='orange', width=2),
+                mode='lines',
+                hovertemplate='Week: %{x}<br>5Y Avg: %{y:,.0f}<extra></extra>'
+            )
+        )
+
+        # Plot current year (blue line)
+        fig.add_trace(
+            go.Scatter(
+                x=current_year['week_of_year'],
+                y=current_year[column],
+                name=f'Current Year ({current_year["year"].iloc[0]})',
+                line=dict(color='blue', width=2),
+                mode='lines+markers',
+                marker=dict(size=4),
+                hovertemplate='Week: %{x}<br>Value: %{y:,.0f}<extra></extra>'
+            )
+        )
+
+        # Update layout
+        fig.update_layout(
+            title=f"Seasonal Pattern Overlay - {column.replace('_', ' ').title()}",
+            xaxis_title="Week of Year",
+            yaxis_title=column.replace('_', ' ').title(),
+            height=400,
+            showlegend=True,
+            hovermode='x unified',
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+
+        fig.update_xaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(200,200,200,0.3)',
+            range=[0, 53]
+        )
+
+        fig.update_yaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(200,200,200,0.3)'
+        )
+
+        return fig
+
+    except Exception as e:
+        import traceback
+        st.error(f"Error creating simple seasonal overlay: {str(e)}")
+        st.text(f"Full error trace:\n{traceback.format_exc()}")
+        return None
+
+
 def display_cot_only_charts(df, selected_columns):
     """Display only COT data when no price data is available"""
 
@@ -1606,8 +1932,8 @@ def display_oi_split_chart(df, price_df, instrument_name):
     }], 'oi_split_chart')
 
 
-def display_momentum_percentile_tab(df, instrument_name):
-    """Combined Momentum and Percentile analysis tab - both displayed together"""
+def display_momentum_percentile_tab_OLD_UNUSED(df, instrument_name):
+    """OLD DUPLICATE - NOT USED - Combined Momentum and Percentile analysis tab - both displayed together"""
 
     st.subheader("🚀 Momentum Dashboard")
 
@@ -1672,15 +1998,17 @@ def display_momentum_percentile_tab(df, instrument_name):
         key="momentum_percentile_var_selector"
     )
 
-    # Display momentum analysis first
-    from display_functions_exact import display_momentum_chart
-    display_momentum_chart(df, instrument_name, selected_var=selected_var)
-
-    # Display percentile analysis directly below - time series and distribution
+    # Display the charts in the requested order
+    from charts.momentum_charts import create_actual_values_chart, create_momentum_analysis_charts
     from charts.percentile_charts import create_percentile_chart
 
-    # Use 2-year lookback to match momentum
-    # First show time series percentile chart with heat-style colored bars - seamlessly continue
+    # 1. First show actual values chart only
+    fig_actual = create_actual_values_chart(df, selected_var)
+    if fig_actual:
+        st.plotly_chart(fig_actual, use_container_width=True)
+
+    # 2. Then show both percentile charts
+    # First show time series percentile chart with heat-style colored bars
     fig_time_series = create_percentile_chart(df, selected_var, 2, 'time_series')
     if fig_time_series:
         st.plotly_chart(fig_time_series, use_container_width=True)
@@ -1689,6 +2017,11 @@ def display_momentum_percentile_tab(df, instrument_name):
     fig_distribution = create_percentile_chart(df, selected_var, 2, 'distribution')
     if fig_distribution:
         st.plotly_chart(fig_distribution, use_container_width=True)
+
+    # 3. Finally show the remaining momentum analysis charts (WoW changes, magnitude, z-score)
+    fig_momentum = create_momentum_analysis_charts(df, selected_var)
+    if fig_momentum:
+        st.plotly_chart(fig_momentum, use_container_width=True)
 
 
 def display_extremes_seasonality(df, instrument_name):
