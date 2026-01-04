@@ -122,6 +122,173 @@ def fetch_cftc_data(instrument_name, api_token):
             # Merge the results
             results = historical_results + current_results
 
+        # Special handling for GASOLINE RBOB: merge with historical UNLEADED GASOLINE and GASOLINE BLENDSTOCK
+        elif instrument_name_clean == "GASOLINE RBOB - NEW YORK MERCANTILE EXCHANGE":
+            # Get historical data from UNLEADED GASOLINE (1986-2006)
+            historical_1_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='UNLEADED GASOLINE, N.Y. HARBOR - NEW YORK MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+
+            # Get historical data from GASOLINE BLENDSTOCK (2006-2022)
+            historical_2_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='GASOLINE BLENDSTOCK (RBOB) - NEW YORK MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+
+            # Get current data from GASOLINE RBOB (2022-present)
+            current_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='GASOLINE RBOB - NEW YORK MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+
+            # Merge all results
+            results = historical_1_results + historical_2_results + current_results
+
+        # Special handling for COPPER: merge with historical COPPER and COPPER-GRADE #1
+        elif instrument_name_clean == "COPPER- #1 - COMMODITY EXCHANGE INC.":
+            # Get historical data from COPPER (1986-1989)
+            historical_1_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='COPPER - COMMODITY EXCHANGE INC.'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+
+            # Get historical data from COPPER-GRADE #1 (1989-2022)
+            historical_2_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='COPPER-GRADE #1 - COMMODITY EXCHANGE INC.'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+
+            # Get current data from COPPER- #1 (2022-present)
+            current_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='COPPER- #1 - COMMODITY EXCHANGE INC.'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+
+            # Merge all results
+            results = historical_1_results + historical_2_results + current_results
+
+        # Special handling for E-MINI S&P 500: merge with historical E-MINI S&P 500 STOCK INDEX
+        elif instrument_name_clean == "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE":
+            # Get historical data (2000-2022)
+            historical_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='E-MINI S&P 500 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+            # Get current data (2022-present)
+            current_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+            results = historical_results + current_results
+
+        # Special handling for NASDAQ MINI: merge with historical NASDAQ-100 STOCK INDEX (MINI)
+        elif instrument_name_clean == "NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE":
+            # Get historical data (2000-2022)
+            historical_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='NASDAQ-100 STOCK INDEX (MINI) - CHICAGO MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+            # Get current data (2022-present)
+            current_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+            results = historical_results + current_results
+
+        # Special handling for DJIA x $5: merge with historical DOW JONES INDUSTRIAL AVG- x $5
+        elif instrument_name_clean == "DJIA x $5 - CHICAGO BOARD OF TRADE":
+            # Get historical data (2002-2022)
+            historical_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='DOW JONES INDUSTRIAL AVG- x $5 - CHICAGO BOARD OF TRADE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+            # Get current data (2022-present)
+            current_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='DJIA x $5 - CHICAGO BOARD OF TRADE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+            results = historical_results + current_results
+
+        # Special handling for RUSSELL E-MINI: merge ICE (2008-2018) and CME (2017+) data
+        elif instrument_name_clean == "RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE":
+            # Get ICE historical data (2008-2018)
+            ice_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='RUSSELL 2000 MINI INDEX FUTURE - ICE FUTURES U.S.'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+            # Get CME historical data (2017-2022)
+            cme_historical_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='E-MINI RUSSELL 2000 INDEX - CHICAGO MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+            # Get current CME data (2022-present)
+            current_results = _fetch_with_retry(
+                client,
+                DATASET_CODE,
+                "market_and_exchange_names='RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE'",
+                ",".join(CFTC_COLUMNS),
+                "report_date_as_yyyy_mm_dd ASC",
+                DEFAULT_LIMIT
+            )
+            results = ice_results + cme_historical_results + current_results
+
         else:
             # Standard fetch for all other instruments
             results = _fetch_with_retry(
@@ -182,6 +349,42 @@ def fetch_cftc_data(instrument_name, api_token):
             # For Natural Gas, try the historical name from FUT86_16.txt
             historical_df = get_historical_data_for_instrument(
                 "NATURAL GAS - NEW YORK MERCANTILE EXCHANGE",
+                end_date=api_start_date
+            )
+        elif instrument_name_clean == "GASOLINE RBOB - NEW YORK MERCANTILE EXCHANGE":
+            # For Gasoline RBOB, try the oldest historical name from FUT86_16.txt
+            historical_df = get_historical_data_for_instrument(
+                "UNLEADED GASOLINE, N.Y. HARBOR - NEW YORK MERCANTILE EXCHANGE",
+                end_date=api_start_date
+            )
+        elif instrument_name_clean == "COPPER- #1 - COMMODITY EXCHANGE INC.":
+            # For Copper, try the oldest historical name from FUT86_16.txt
+            historical_df = get_historical_data_for_instrument(
+                "COPPER - COMMODITY EXCHANGE INC.",
+                end_date=api_start_date
+            )
+        elif instrument_name_clean == "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE":
+            # For S&P 500 Mini, try the historical name from FUT86_16.txt
+            historical_df = get_historical_data_for_instrument(
+                "E-MINI S&P 500 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE",
+                end_date=api_start_date
+            )
+        elif instrument_name_clean == "NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE":
+            # For NASDAQ Mini, try the historical name from FUT86_16.txt
+            historical_df = get_historical_data_for_instrument(
+                "NASDAQ-100 STOCK INDEX (MINI) - CHICAGO MERCANTILE EXCHANGE",
+                end_date=api_start_date
+            )
+        elif instrument_name_clean == "DJIA x $5 - CHICAGO BOARD OF TRADE":
+            # For Mini Dow Jones, try the historical name from FUT86_16.txt
+            historical_df = get_historical_data_for_instrument(
+                "DOW JONES INDUSTRIAL AVG- x $5 - CHICAGO BOARD OF TRADE",
+                end_date=api_start_date
+            )
+        elif instrument_name_clean == "RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE":
+            # For Russell 2000, try the ICE historical name from FUT86_16.txt
+            historical_df = get_historical_data_for_instrument(
+                "RUSSELL 2000 MINI INDEX FUTURE - ICE FUTURES U.S.",
                 end_date=api_start_date
             )
         else:

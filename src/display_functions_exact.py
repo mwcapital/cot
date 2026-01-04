@@ -17,6 +17,7 @@ from charts.share_of_oi import create_share_of_oi_chart
 from charts.trader_participation_analysis import (
     create_concentration_risk_heatmap,
     create_market_structure_quadrant,
+    create_market_structure_timeline,
     create_concentration_divergence_analysis,
     create_heterogeneity_index,
     create_spreading_activity_analysis
@@ -948,658 +949,284 @@ def display_trader_participation_chart(df, instrument_name):
     
     if analysis_type == "Participation Density Dashboard":
         st.markdown("#### 📊 Average Position per Trader Analysis")
-        
+        st.markdown('<p style="color: #808080; font-size: 13px;">Concentration metrics use Net positions (4 or fewer traders). Percentiles calculated using 2-year rolling lookback. Price chart uses Non-Adjusted method. Bar colors: Green (below 33rd percentile), Yellow (33rd-67th percentile), Red (above 67th percentile).</p>', unsafe_allow_html=True)
+
+        # Fixed price adjustment to Non-Adjusted
+        price_adjustment_code = "NON"
+
+        # Fetch price data
+        price_df = None
+        try:
+            import re
+            import json
+            import os
+
+            # Extract clean instrument name and find futures symbol
+            instrument_clean = re.sub(r'\s*\(\d+\)$', '', instrument_name).strip()
+            symbol = None
+            json_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instrument_management', 'futures', 'futures_symbols_enhanced.json')
+            with open(json_path, 'r') as f:
+                mapping = json.load(f)
+                for fut_symbol, info in mapping['futures_symbols'].items():
+                    if info['cot_mapping']['matched']:
+                        if instrument_clean in info['cot_mapping']['instruments']:
+                            symbol = fut_symbol
+                            break
+
+            if symbol:
+                fetcher = FuturesPriceFetcher()
+                start_date = df['report_date_as_yyyy_mm_dd'].min().strftime('%Y-%m-%d')
+                end_date = df['report_date_as_yyyy_mm_dd'].max().strftime('%Y-%m-%d')
+                price_df = fetcher.fetch_weekly_prices(symbol, start_date, end_date, price_adjustment_code)
+        except Exception as e:
+            st.warning(f"Could not fetch price data: {str(e)}")
+
         # Create tabs for different views
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Enhanced View", "Original View", "Concentration Flow", "Risk Heatmap", "Market Quadrant", "Spreading Activity"])
-        
+        tab1, tab2 = st.tabs(["Enhanced View", "Spreading Activity"])
+
         with tab1:
-            # Add explainer
-            with st.expander("📖 Understanding This Analysis", expanded=False):
-                st.markdown("""
-                **What This Dashboard Shows:**
-                
-                **1. Average Position per Trader (Top Chart)**
-                - **Bars**: Show the average position size per trader (Open Interest ÷ Total Traders)
-                - **Blue Line**: Total number of traders participating in the market
-                - **Bar Colors** (based on historical percentile with your selected lookback):
-                    - 🟢 **Green**: Below 33rd percentile - Smaller than usual positions
-                    - 🟡 **Yellow**: 33rd-67th percentile - Normal position sizes
-                    - 🔴 **Red**: Above 67th percentile - Larger than usual positions
-                
-                **2. Top 4 Traders Concentration**
-                - **Long Concentration**: Percentage of total open interest held by the 4 largest long traders
-                - **Short Concentration**: Percentage of total open interest held by the 4 largest short traders
-                - Higher values indicate more concentrated/less democratic markets
-                
-                **3. Percentile Rankings**
-                - Shows where current concentration levels rank historically
-                - 80th percentile = Higher than 80% of historical values (unusually concentrated)
-                - 20th percentile = Lower than 80% of historical values (unusually democratic)
-                
-                **Why It Matters:**
-                - High concentration + Few traders = Market dominated by large players (higher volatility risk)
-                - Low concentration + Many traders = More democratic market (typically more stable)
-                - Rising concentration often precedes major market moves
-                """)
-        
-            # Add toggle for gross vs net concentration
-            col_toggle, col_lookback, col_empty = st.columns([1, 1, 2])
-            with col_toggle:
-                concentration_type = st.radio(
-                "Concentration Type:",
-                ["Net", "Gross"],
-                index=0,
-                horizontal=True,
-                help="Net: Position after offsetting long/short | Gross: Total position regardless of direction"
-            )
-        
-            with col_lookback:
-                lookback_period = st.selectbox(
-                "Percentile Lookback:",
-                ["6 Months", "1 Year", "2 Years", "5 Years", "10 Years", "Since 2010", "All Time"],
-                index=1
-            )
-        
-            # Map lookback to days
-            lookback_map = {
-            "6 Months": 180,
-            "1 Year": 365,
-            "2 Years": 730,
-            "5 Years": 1825,
-            "10 Years": 3650,
-            "Since 2010": "since_2010",  # Special case
-            "All Time": None
-        }
-            lookback_days = lookback_map[lookback_period]
-            
-            # Calculate percentile based on selected lookback
-            if lookback_days == "since_2010":
-                lookback_date = pd.Timestamp('2010-01-01')
-                df_lookback = df[df['report_date_as_yyyy_mm_dd'] >= lookback_date].copy()
-            elif lookback_days:
-                lookback_date = df['report_date_as_yyyy_mm_dd'].max() - pd.Timedelta(days=lookback_days)
-                df_lookback = df[df['report_date_as_yyyy_mm_dd'] >= lookback_date].copy()
-            else:
-                df_lookback = df.copy()
-            
-            # Calculate avg position per trader for all data
-            df['avg_position_per_trader'] = df['open_interest_all'] / df['traders_tot_all']
-            
-            # Calculate percentile for each point based on lookback window
-            percentile_data = []
-            for i in range(len(df)):
-                current_date = df.iloc[i]['report_date_as_yyyy_mm_dd']
-                if lookback_days == "since_2010":
-                    lookback_start = pd.Timestamp('2010-01-01')
-                    window_data = df[(df['report_date_as_yyyy_mm_dd'] >= lookback_start) & 
-                                   (df['report_date_as_yyyy_mm_dd'] <= current_date)]
-                elif lookback_days:
-                    lookback_start = current_date - pd.Timedelta(days=lookback_days)
-                    window_data = df[(df['report_date_as_yyyy_mm_dd'] >= lookback_start) & 
-                                   (df['report_date_as_yyyy_mm_dd'] <= current_date)]
+            # Add time range selector buttons
+            st.markdown("#### Select Time Range")
+            col_buttons = st.columns(5)
+
+            # Initialize session state for range selection if not exists
+            if 'participation_range' not in st.session_state:
+                st.session_state.participation_range = 'All'
+
+            # Range buttons with highlighting for selected range
+            with col_buttons[0]:
+                if st.button("1Y", key="part_range_1y", use_container_width=True,
+                            type="primary" if st.session_state.participation_range == '1Y' else "secondary"):
+                    st.session_state.participation_range = '1Y'
+                    st.rerun()
+            with col_buttons[1]:
+                if st.button("2Y", key="part_range_2y", use_container_width=True,
+                            type="primary" if st.session_state.participation_range == '2Y' else "secondary"):
+                    st.session_state.participation_range = '2Y'
+                    st.rerun()
+            with col_buttons[2]:
+                if st.button("5Y", key="part_range_5y", use_container_width=True,
+                            type="primary" if st.session_state.participation_range == '5Y' else "secondary"):
+                    st.session_state.participation_range = '5Y'
+                    st.rerun()
+            with col_buttons[3]:
+                if st.button("10Y", key="part_range_10y", use_container_width=True,
+                            type="primary" if st.session_state.participation_range == '10Y' else "secondary"):
+                    st.session_state.participation_range = '10Y'
+                    st.rerun()
+            with col_buttons[4]:
+                if st.button("All", key="part_range_all", use_container_width=True,
+                            type="primary" if st.session_state.participation_range == 'All' else "secondary"):
+                    st.session_state.participation_range = 'All'
+                    st.rerun()
+
+            st.markdown("---")
+
+            # Fixed settings: always use Net concentration with 2-year lookback
+            concentration_type = 'Net'
+            lookback_days = 730  # 2 years
+
+            # Filter data based on selected time range
+            df_sorted = df.copy()
+            df_sorted = df_sorted.sort_values('report_date_as_yyyy_mm_dd')
+            df_sorted['report_date_as_yyyy_mm_dd'] = pd.to_datetime(df_sorted['report_date_as_yyyy_mm_dd'])
+            latest_date = df_sorted['report_date_as_yyyy_mm_dd'].max()
+
+            # Apply filtering based on selected range
+            if st.session_state.participation_range == '1Y':
+                start_date = latest_date - pd.DateOffset(years=1)
+                df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+            elif st.session_state.participation_range == '2Y':
+                start_date = latest_date - pd.DateOffset(years=2)
+                df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+            elif st.session_state.participation_range == '5Y':
+                start_date = latest_date - pd.DateOffset(years=5)
+                df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+            elif st.session_state.participation_range == '10Y':
+                start_date = latest_date - pd.DateOffset(years=10)
+                df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+            else:  # 'All'
+                df_filtered = df_sorted.copy()
+
+            df_filtered = df_filtered.reset_index(drop=True)
+
+            # Filter price data to match the same time range
+            price_df_filtered = None
+            if price_df is not None and not price_df.empty:
+                price_df_copy = price_df.copy()
+                price_df_copy['date'] = pd.to_datetime(price_df_copy['date'])
+                if st.session_state.participation_range != 'All':
+                    price_df_filtered = price_df_copy[price_df_copy['date'] >= start_date].copy()
                 else:
-                    window_data = df[df['report_date_as_yyyy_mm_dd'] <= current_date]
-                
+                    price_df_filtered = price_df_copy.copy()
+
+            # Calculate avg position per trader for all data
+            df_filtered['avg_position_per_trader'] = df_filtered['open_interest_all'] / df_filtered['traders_tot_all']
+
+            # Calculate percentile for each point based on 2-year rolling window
+            percentile_data = []
+            for i in range(len(df_filtered)):
+                current_date = df_filtered.iloc[i]['report_date_as_yyyy_mm_dd']
+                lookback_start = current_date - pd.Timedelta(days=lookback_days)
+                window_data = df_filtered[(df_filtered['report_date_as_yyyy_mm_dd'] >= lookback_start) &
+                               (df_filtered['report_date_as_yyyy_mm_dd'] <= current_date)]
+
                 if len(window_data) > 0:
-                    current_val = df.iloc[i]['avg_position_per_trader']
+                    current_val = df_filtered.iloc[i]['avg_position_per_trader']
                     percentile = (window_data['avg_position_per_trader'] < current_val).sum() / len(window_data) * 100
                     percentile_data.append(percentile)
                 else:
                     percentile_data.append(50)
-            
-            # Create participation density chart with percentile data
-            density_fig = create_participation_density_dashboard(df, instrument_name, percentile_data, concentration_type)
-            
-            # Update the percentile y-axis title dynamically with lookback period
+
+            # Create participation density chart with filtered price data
+            density_fig = create_participation_density_dashboard(df_filtered, instrument_name, percentile_data, concentration_type, price_df_filtered)
+
             if density_fig:
-                fig_update_text = f"Percentile ({lookback_period})"
-                density_fig.update_yaxes(
-                    title_text=fig_update_text,
-                    row=2, col=1  # Second subplot is the avg position percentile chart
-                )
-                
                 st.plotly_chart(density_fig, use_container_width=True)
-        
-        with tab2:
-            # Add explainer for original view
-            with st.expander("📖 Understanding Original Analysis", expanded=False):
-                st.markdown("""
-                **Original Comprehensive Participation Analysis**
-                
-                This shows the original comprehensive analysis from legacyF.py with ALL trader categories:
-                
-                - **Overall Average**: Average position per trader across all categories
-                - **Non-Commercial Long/Short/Spread**: Average positions for each non-commercial category
-                - **Commercial Long/Short**: Average positions for commercial traders
-                - **Total Reportable Long/Short**: Average positions for all reportable traders
-                
-                Each category shows:
-                - **Green Bars**: Average position size per trader
-                - **Blue Line**: Number of traders (on right axis)
-                - **Purple Area**: Historical percentile ranking of the average position size (NOT trader count)
-                """)
-            
-            # Percentile lookback selector (same as original)
-            col_lookback, col_empty = st.columns([1, 3])
-            with col_lookback:
-                lookback_period_original = st.selectbox(
-                    "Percentile Lookback:",
-                    ["6 Months", "1 Year", "2 Years", "5 Years", "10 Years", "Since 2010", "All Time"],
-                    index=1,
-                    key="original_lookback"
-                )
-            
-            # Map lookback to days
-            lookback_map_original = {
-                "6 Months": 180,
-                "1 Year": 365,
-                "2 Years": 730,
-                "5 Years": 1825,
-                "10 Years": 3650,
-                "Since 2010": "since_2010",  # Special case
-                "All Time": None
-            }
-            lookback_days_original = lookback_map_original[lookback_period_original]
-            
-            # Create the EXACT original chart from legacyF.py
-            fig_original = create_participation_density_dashboard_original(
-                df, 
-                instrument_name, 
-                None,  # percentile_data not used in original
-                lookback_days_original
-            )
-            if fig_original:
-                st.plotly_chart(fig_original, use_container_width=True)
-            else:
-                st.error("Unable to create original participation density dashboard")
-        
-        with tab3:
-            st.markdown("#### 🌊 Market Concentration Flow Analysis")
-            
-            # Explanation expander
-            with st.expander("📖 Understanding Market Concentration", expanded=False):
-                st.markdown("""
-                **What is Market Concentration?**
-                
-                Market concentration measures whether positions are controlled by a few large traders (concentrated) 
-                or distributed among many smaller traders (democratic/dispersed).
-                
-                **How we measure it:**
-                - **Trader Count Percentile (T%)**: Where current trader count ranks vs historical (since 2010)
-                - **Average Position Percentile (P%)**: Where average position size ranks vs historical
-                
-                **Concentration Levels:**
-                - 🔴 **High**: Few traders (≤33%ile) with large positions (≥67%ile) - Market dominated by few
-                - 🟠 **Medium-High**: Either few traders OR large positions - Somewhat concentrated
-                - 🟡 **Medium**: Middle range for both metrics - Balanced market
-                - 🟢 **Medium-Low**: Either many traders OR small positions - Somewhat dispersed
-                - 🟢 **Low**: Many traders (≥67%ile) with small positions (≤33%ile) - Democratic market
-                
-                **Why it matters:**
-                High concentration suggests potential for larger price moves as few traders control the market.
-                Low concentration indicates a more stable, democratized market with diverse participation.
-                """)
-            
-            # Time period selection
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                flow_lookback = st.selectbox(
-                    "Compare periods:",
-                    ["Week over Week", "Month over Month", "Quarter over Quarter"],
-                    index=0
-                )
-            
-            # Map to days
-            lookback_map = {"Week over Week": 7, "Month over Month": 30, "Quarter over Quarter": 90}
-            lookback_days = lookback_map[flow_lookback]
-            
-            # Get current and previous period data
-            latest_date = df['report_date_as_yyyy_mm_dd'].max()
-            previous_date = latest_date - pd.Timedelta(days=lookback_days)
-            
-            # Find closest available dates
-            df['date_diff_prev'] = abs(df['report_date_as_yyyy_mm_dd'] - previous_date)
-            prev_idx = df['date_diff_prev'].idxmin()
-            prev_data = df.loc[prev_idx]
-            
-            current_data = df[df['report_date_as_yyyy_mm_dd'] == latest_date].iloc[0]
-            
-            # Create a grouped bar chart instead of Sankey for better visibility
+
+            # Add individual category charts below
+            st.markdown("---")
+            st.markdown("#### Individual Trader Categories")
+
+            # Define categories (excluding Overall Average)
+            from charts.participation_charts import create_individual_category_chart
+
             categories = [
-                ('Non-Comm Long', 'noncomm_positions_long_all', 'traders_noncomm_long_all'),
-                ('Non-Comm Short', 'noncomm_positions_short_all', 'traders_noncomm_short_all'),
-                ('Commercial Long', 'comm_positions_long_all', 'traders_comm_long_all'),
-                ('Commercial Short', 'comm_positions_short_all', 'traders_comm_short_all')
+                ('noncomm_positions_long_all', 'traders_noncomm_long_all', 'Non-Commercial Long'),
+                ('noncomm_positions_short_all', 'traders_noncomm_short_all', 'Non-Commercial Short'),
+                ('noncomm_postions_spread_all', 'traders_noncomm_spread_all', 'Non-Commercial Spread'),
+                ('comm_positions_long_all', 'traders_comm_long_all', 'Commercial Long'),
+                ('comm_positions_short_all', 'traders_comm_short_all', 'Commercial Short'),
+                ('tot_rept_positions_long_all', 'traders_tot_rept_long_all', 'Total Reportable Long'),
+                ('tot_rept_positions_short', 'traders_tot_rept_short_all', 'Total Reportable Short')
             ]
-            
-            # Prepare data for visualization
-            data_for_plot = []
-            for cat_name, pos_col, trader_col in categories:
-                # Previous period
-                prev_traders = float(prev_data[trader_col]) if pd.notna(prev_data[trader_col]) else 0
-                prev_avg = float(prev_data[pos_col]) / prev_traders if prev_traders > 0 else 0
-                
-                # Current period
-                curr_traders = float(current_data[trader_col]) if pd.notna(current_data[trader_col]) else 0
-                curr_avg = float(current_data[pos_col]) / curr_traders if curr_traders > 0 else 0
-                
-                # Classify concentration levels based on historical percentiles
-                def get_concentration_level(avg_pos, trader_count, pos_col, trader_col, df):
-                    # Calculate historical percentiles for this category
-                    # Use all data since 2010 for percentile calculation
-                    lookback_date = pd.Timestamp('2010-01-01')
-                    hist_data = df[df['report_date_as_yyyy_mm_dd'] >= lookback_date].copy()
-                    
-                    # Calculate average positions for historical data
-                    hist_data['avg_pos'] = hist_data[pos_col] / hist_data[trader_col]
-                    hist_data = hist_data[hist_data[trader_col] > 0]  # Filter out zero traders
-                    
-                    # Get percentiles
-                    trader_percentile = stats.percentileofscore(hist_data[trader_col], trader_count)
-                    avg_pos_percentile = stats.percentileofscore(hist_data['avg_pos'], avg_pos)
-                    
-                    # High concentration: Few traders (low percentile) with large positions (high percentile)
-                    # Low concentration: Many traders (high percentile) with small positions (low percentile)
-                    
-                    if trader_percentile <= 33 and avg_pos_percentile >= 67:
-                        return "High"  # Few traders, large positions
-                    elif trader_percentile >= 67 and avg_pos_percentile <= 33:
-                        return "Low"   # Many traders, small positions
-                    elif trader_percentile <= 33 or avg_pos_percentile >= 67:
-                        return "Medium-High"  # Either few traders OR large positions
-                    elif trader_percentile >= 67 or avg_pos_percentile <= 33:
-                        return "Medium-Low"   # Either many traders OR small positions
-                    else:
-                        return "Medium"  # Middle range for both
-                
-                prev_level = get_concentration_level(prev_avg, prev_traders, pos_col, trader_col, df)
-                curr_level = get_concentration_level(curr_avg, curr_traders, pos_col, trader_col, df)
-                
-                # Calculate percentiles for display
-                lookback_date = pd.Timestamp('2010-01-01')
-                hist_data = df[df['report_date_as_yyyy_mm_dd'] >= lookback_date].copy()
-                hist_data['avg_pos'] = hist_data[pos_col] / hist_data[trader_col]
-                hist_data = hist_data[hist_data[trader_col] > 0]
-                
-                prev_trader_pct = stats.percentileofscore(hist_data[trader_col], prev_traders)
-                prev_pos_pct = stats.percentileofscore(hist_data['avg_pos'], prev_avg)
-                curr_trader_pct = stats.percentileofscore(hist_data[trader_col], curr_traders)
-                curr_pos_pct = stats.percentileofscore(hist_data['avg_pos'], curr_avg)
-                
-                data_for_plot.append({
-                    'Category': cat_name,
-                    'Period': 'Previous',
-                    'Concentration': prev_level,
-                    'Avg Position': prev_avg,
-                    'Trader Count': prev_traders,
-                    'Total Position': float(prev_data[pos_col]),
-                    'Trader Percentile': prev_trader_pct,
-                    'Position Percentile': prev_pos_pct
-                })
-                
-                data_for_plot.append({
-                    'Category': cat_name,
-                    'Period': 'Current',
-                    'Concentration': curr_level,
-                    'Avg Position': curr_avg,
-                    'Trader Count': curr_traders,
-                    'Total Position': float(current_data[pos_col]),
-                    'Trader Percentile': curr_trader_pct,
-                    'Position Percentile': curr_pos_pct
-                })
-            
-            # Create DataFrame
-            plot_df = pd.DataFrame(data_for_plot)
-            
-            # Create subplots
-            fig = make_subplots(
-                rows=2, cols=2,
-                subplot_titles=('Average Position per Trader', 'Trader Count', 
-                              'Concentration Levels (T%=Traders, P%=Position)', 'Total Positions'),
-                vertical_spacing=0.18,
-                horizontal_spacing=0.12,
-                specs=[[{"type": "bar"}, {"type": "bar"}],
-                       [{"type": "scatter"}, {"type": "bar"}]]
-            )
-            
-            # Color mapping
-            colors = {'Previous': '#90EE90', 'Current': '#4169E1'}
-            concentration_colors = {
-                'High': '#DC143C',         # Crimson red - high concentration risk
-                'Medium-High': '#FF8C00',  # Dark orange
-                'Medium': '#FFD700',       # Gold
-                'Medium-Low': '#9ACD32',   # Yellow green
-                'Low': '#32CD32'           # Lime green - low concentration (more democratic)
-            }
-            
-            # Plot 1: Average Position per Trader
-            for period in ['Previous', 'Current']:
-                period_data = plot_df[plot_df['Period'] == period]
-                fig.add_trace(
-                    go.Bar(
-                        x=period_data['Category'],
-                        y=period_data['Avg Position'],
-                        name=period,
-                        marker_color=colors[period],
-                        showlegend=True
-                    ),
-                    row=1, col=1
-                )
-            
-            # Plot 2: Trader Count
-            for period in ['Previous', 'Current']:
-                period_data = plot_df[plot_df['Period'] == period]
-                fig.add_trace(
-                    go.Bar(
-                        x=period_data['Category'],
-                        y=period_data['Trader Count'],
-                        name=period,
-                        marker_color=colors[period],
-                        showlegend=False
-                    ),
-                    row=1, col=2
-                )
-            
-            # Plot 3: Concentration Level with Percentiles
-            for cat in ['Non-Comm Long', 'Non-Comm Short', 'Commercial Long', 'Commercial Short']:
-                prev_data_cat = plot_df[(plot_df['Category'] == cat) & (plot_df['Period'] == 'Previous')].iloc[0]
-                curr_data_cat = plot_df[(plot_df['Category'] == cat) & (plot_df['Period'] == 'Current')].iloc[0]
-                
-                # Create text with percentiles
-                prev_text = f"T:{prev_data_cat['Trader Percentile']:.0f}%<br>P:{prev_data_cat['Position Percentile']:.0f}%"
-                curr_text = f"T:{curr_data_cat['Trader Percentile']:.0f}%<br>P:{curr_data_cat['Position Percentile']:.0f}%"
-                
-                # Plot previous period
-                fig.add_trace(
+
+            # Create and display each category chart
+            for position_col, trader_col, title in categories:
+                if position_col in df_filtered.columns and trader_col in df_filtered.columns:
+                    cat_fig = create_individual_category_chart(df_filtered, position_col, trader_col, title)
+                    if cat_fig:
+                        st.plotly_chart(cat_fig, use_container_width=True)
+
+
+        with tab2:
+            st.markdown("#### Non-Commercial Spreading Activity")
+
+            # Grey explanatory text
+            st.markdown('<p style="color: #808080; font-size: 13px;">Calculation: Spread Traders ÷ (Long-Only + Short-Only Traders). Note: Only non-commercials can hold spread positions in COT data.</p>', unsafe_allow_html=True)
+
+            # Add time range selector buttons
+            st.markdown("#### Select Time Range")
+            col_buttons = st.columns(5)
+
+            # Initialize session state for spreading range selection if not exists
+            if 'spreading_range' not in st.session_state:
+                st.session_state.spreading_range = 'All'
+
+            # Range buttons with highlighting for selected range
+            with col_buttons[0]:
+                if st.button("1Y", key="spread_range_1y", use_container_width=True,
+                            type="primary" if st.session_state.spreading_range == '1Y' else "secondary"):
+                    st.session_state.spreading_range = '1Y'
+                    st.rerun()
+            with col_buttons[1]:
+                if st.button("2Y", key="spread_range_2y", use_container_width=True,
+                            type="primary" if st.session_state.spreading_range == '2Y' else "secondary"):
+                    st.session_state.spreading_range = '2Y'
+                    st.rerun()
+            with col_buttons[2]:
+                if st.button("5Y", key="spread_range_5y", use_container_width=True,
+                            type="primary" if st.session_state.spreading_range == '5Y' else "secondary"):
+                    st.session_state.spreading_range = '5Y'
+                    st.rerun()
+            with col_buttons[3]:
+                if st.button("10Y", key="spread_range_10y", use_container_width=True,
+                            type="primary" if st.session_state.spreading_range == '10Y' else "secondary"):
+                    st.session_state.spreading_range = '10Y'
+                    st.rerun()
+            with col_buttons[4]:
+                if st.button("All", key="spread_range_all", use_container_width=True,
+                            type="primary" if st.session_state.spreading_range == 'All' else "secondary"):
+                    st.session_state.spreading_range = 'All'
+                    st.rerun()
+
+            st.markdown("---")
+
+            # Filter data based on selected time range
+            df_spread_sorted = df.copy()
+            df_spread_sorted = df_spread_sorted.sort_values('report_date_as_yyyy_mm_dd')
+            df_spread_sorted['report_date_as_yyyy_mm_dd'] = pd.to_datetime(df_spread_sorted['report_date_as_yyyy_mm_dd'])
+            latest_date_spread = df_spread_sorted['report_date_as_yyyy_mm_dd'].max()
+
+            # Apply filtering based on selected range
+            if st.session_state.spreading_range == '1Y':
+                start_date_spread = latest_date_spread - pd.DateOffset(years=1)
+                df_spread_filtered = df_spread_sorted[df_spread_sorted['report_date_as_yyyy_mm_dd'] >= start_date_spread].copy()
+            elif st.session_state.spreading_range == '2Y':
+                start_date_spread = latest_date_spread - pd.DateOffset(years=2)
+                df_spread_filtered = df_spread_sorted[df_spread_sorted['report_date_as_yyyy_mm_dd'] >= start_date_spread].copy()
+            elif st.session_state.spreading_range == '5Y':
+                start_date_spread = latest_date_spread - pd.DateOffset(years=5)
+                df_spread_filtered = df_spread_sorted[df_spread_sorted['report_date_as_yyyy_mm_dd'] >= start_date_spread].copy()
+            elif st.session_state.spreading_range == '10Y':
+                start_date_spread = latest_date_spread - pd.DateOffset(years=10)
+                df_spread_filtered = df_spread_sorted[df_spread_sorted['report_date_as_yyyy_mm_dd'] >= start_date_spread].copy()
+            else:  # 'All'
+                df_spread_filtered = df_spread_sorted.copy()
+
+            df_spread_filtered = df_spread_filtered.reset_index(drop=True)
+
+            # Filter price data to match the same time range
+            price_df_spread_filtered = None
+            if price_df is not None and not price_df.empty:
+                price_df_copy_spread = price_df.copy()
+                price_df_copy_spread['date'] = pd.to_datetime(price_df_copy_spread['date'])
+                if st.session_state.spreading_range != 'All':
+                    price_df_spread_filtered = price_df_copy_spread[price_df_copy_spread['date'] >= start_date_spread].copy()
+                else:
+                    price_df_spread_filtered = price_df_copy_spread.copy()
+
+            # Display price chart first if available
+            if price_df_spread_filtered is not None and not price_df_spread_filtered.empty:
+                price_fig = go.Figure()
+                price_fig.add_trace(
                     go.Scatter(
-                        x=[cat],
-                        y=['Previous'],
-                        mode='markers+text',
-                        marker=dict(
-                            size=40,
-                            color=concentration_colors[prev_data_cat['Concentration']],
-                            line=dict(width=2, color='black')
-                        ),
-                        text=prev_text,
-                        textposition='middle center',
-                        textfont=dict(size=10, color='black', family='Arial Black'),
-                        showlegend=False,
-                        name=prev_data_cat['Concentration']
-                    ),
-                    row=2, col=1
+                        x=price_df_spread_filtered['date'],
+                        y=price_df_spread_filtered['close'],
+                        name='Price',
+                        line=dict(color='#2E86AB', width=2),
+                        mode='lines'
+                    )
                 )
-                
-                # Plot current period
-                fig.add_trace(
-                    go.Scatter(
-                        x=[cat],
-                        y=['Current'],
-                        mode='markers+text',
-                        marker=dict(
-                            size=40,
-                            color=concentration_colors[curr_data_cat['Concentration']],
-                            line=dict(width=2, color='black')
-                        ),
-                        text=curr_text,
-                        textposition='middle center',
-                        textfont=dict(size=10, color='black', family='Arial Black'),
-                        showlegend=False,
-                        name=curr_data_cat['Concentration']
-                    ),
-                    row=2, col=1
+                price_fig.update_layout(
+                    title='Futures Price',
+                    height=300,
+                    showlegend=False,
+                    hovermode='x unified',
+                    margin=dict(l=60, r=60, t=40, b=40),
+                    yaxis=dict(title="Price"),
+                    xaxis=dict(type='date')
                 )
-            
-            # Plot 4: Total Positions
-            for period in ['Previous', 'Current']:
-                period_data = plot_df[plot_df['Period'] == period]
-                fig.add_trace(
-                    go.Bar(
-                        x=period_data['Category'],
-                        y=period_data['Total Position'],
-                        name=period,
-                        marker_color=colors[period],
-                        showlegend=False
-                    ),
-                    row=2, col=2
-                )
-            
-            # Update layout
-            fig.update_layout(
-                title=f"Market Concentration Flow Analysis ({flow_lookback})",
-                height=800,
-                showlegend=True,
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1
-                )
-            )
-            
-            # Update axes
-            fig.update_xaxes(tickangle=-45)
-            fig.update_yaxes(title_text="Avg Position", row=1, col=1, tickformat=",.0f")
-            fig.update_yaxes(title_text="Trader Count", row=1, col=2, tickformat=",.0f")
-            fig.update_yaxes(title_text="Period", row=2, col=1, categoryorder="array", categoryarray=["Previous", "Current"])
-            fig.update_xaxes(row=2, col=1, tickangle=-25)
-            fig.update_yaxes(title_text="Total Position", row=2, col=2, tickformat=",.0f")
-            
-            # Display the chart
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Summary statistics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Previous Date", prev_data['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'))
-            with col2:
-                st.metric("Current Date", current_data['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'))
-            with col3:
-                # Calculate total trader change from the plot data
-                prev_total = plot_df[plot_df['Period'] == 'Previous']['Trader Count'].sum()
-                curr_total = plot_df[plot_df['Period'] == 'Current']['Trader Count'].sum()
-                total_trader_change = int(curr_total - prev_total)
-                st.metric("Total Trader Change", f"{total_trader_change:+d}")
-        
-        with tab4:
-            st.markdown("#### 🔥 Concentration Risk Heatmap")
-            
-            # Explanation expander
-            with st.expander("📖 Understanding the Concentration Risk Heatmap", expanded=False):
-                st.markdown("""
-                **What does each square represent?**
-                
-                Each square shows a **Risk Score (0-100)** for a specific trader category at a specific time period.
-                
-                **Risk Score Calculation:**
-                ```
-                Risk Score = (Position Concentration × 70%) + (Inverse Trader Participation × 30%)
-                ```
-                
-                **Important Methodology Note:**
-                - The "Top 4/8 Traders" concentration data **does NOT specify which trader groups** are actually in those top positions
-                - We estimate concentration risk by comparing trader counts in each category with overall concentration levels
-                - **Long Concentration Metrics**: Only analyze Non-Commercial Long & Commercial Long (directionally relevant)
-                - **Short Concentration Metrics**: Only analyze Non-Commercial Short & Commercial Short (directionally relevant)
-                - **Non-Reportable traders excluded**: These are small traders below reporting thresholds, extremely unlikely to hold positions large enough to be in top 4/8 traders
-                - Categories with fewer traders + high concentration = Higher estimated risk of being in the concentrated group
-                
-                **Color Scale:**
-                - 🟢 **Green (0-25)**: Low risk - Many traders, well-distributed positions
-                - 🟡 **Gold (25-50)**: Medium risk - Moderate concentration
-                - 🟠 **Orange (50-75)**: High risk - Significant concentration
-                - 🔴 **Red (75-100)**: Very high risk - Market dominated by few large traders
-                """)
-            
-            st.info("Visualizes concentration risk over time by combining trader participation rates with position concentration metrics")
-            
-            # Configuration columns
-            col1, col2, col3 = st.columns([1, 1, 1])
-            
-            with col1:
-                # Concentration metric selection
-                conc_metric = st.selectbox(
-                    "Position Concentration Metric:",
-                    [
-                        ("4 or Less Traders - Gross Long", "conc_gross_le_4_tdr_long"),
-                        ("4 or Less Traders - Gross Short", "conc_gross_le_4_tdr_short"),
-                        ("8 or Less Traders - Gross Long", "conc_gross_le_8_tdr_long"),
-                        ("8 or Less Traders - Gross Short", "conc_gross_le_8_tdr_short"),
-                        ("4 or Less Traders - Net Long", "conc_net_le_4_tdr_long_all"),
-                        ("4 or Less Traders - Net Short", "conc_net_le_4_tdr_short_all"),
-                        ("8 or Less Traders - Net Long", "conc_net_le_8_tdr_long_all"),
-                        ("8 or Less Traders - Net Short", "conc_net_le_8_tdr_short_all")
-                    ],
-                    format_func=lambda x: x[0],
-                    index=0,
-                    key="risk_heatmap_conc_metric"
-                )
-            
-            with col2:
-                # Time aggregation
-                time_agg = st.selectbox(
-                    "Time Aggregation:",
-                    ["Weekly", "Monthly", "Quarterly"],
-                    index=0,
-                    key="risk_heatmap_time_agg"
-                )
-            
-            with col3:
-                # Lookback period
-                lookback_years = st.slider(
-                    "Years of History:",
-                    min_value=1,
-                    max_value=10,
-                    value=3,
-                    step=1,
-                    key="risk_heatmap_lookback"
-                )
-            
-            heatmap_fig = create_concentration_risk_heatmap(df, instrument_name, conc_metric, time_agg, lookback_years)
-            if heatmap_fig:
-                st.plotly_chart(heatmap_fig, use_container_width=True)
-            else:
-                st.error("Unable to create concentration risk heatmap")
-        
-        with tab5:
-            st.markdown("#### 🎯 Market Structure Quadrant Analysis")
-            
-            # Explanation
-            with st.expander("📖 Understanding the Market Structure Quadrant", expanded=False):
-                st.markdown("""
-                **What does this chart show?**
-                
-                Maps the current market structure based on two key dimensions:
-                1. **X-axis**: Trader Participation (Few → Many traders)
-                2. **Y-axis**: Position Concentration (Low → High concentration)
-                
-                **Quadrants:**
-                - **Oligopolistic (Red)**: Few traders, high concentration - Highest risk
-                - **Crowded Concentration (Orange)**: Many traders, high concentration - Herding risk
-                - **Specialized (Yellow)**: Few traders, low concentration - Niche market
-                - **Democratic (Green)**: Many traders, low concentration - Most stable
-                
-                **Visualization Details:**
-                - **Bubble size**: Represents total open interest
-                - **Bubble opacity**: Current (100%), Past 4 weeks (70%), 2-3 months ago (40%)
-                - **Evolution**: Shows past 4 weeks, 2 months ago, and 3 months ago
-                - **Arrow**: Shows direction of movement from 1 week ago to current
-                """)
-            
-            # Configuration
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                # Concentration metric selection
-                conc_metric_quad = st.selectbox(
-                    "Select Concentration Metric:",
-                    [
-                        ("Top 4 Net Long", "conc_net_le_4_tdr_long_all"),
-                        ("Top 4 Net Short", "conc_net_le_4_tdr_short_all"),
-                        ("Top 4 Gross Long", "conc_gross_le_4_tdr_long"),
-                        ("Top 4 Gross Short", "conc_gross_le_4_tdr_short")
-                    ],
-                    format_func=lambda x: x[0],
-                    key="quad_conc_metric"
-                )
-            
-            with col2:
-                show_evolution = st.checkbox("Show Evolution", value=True, 
-                                           help="Shows past 4 weeks, 2 months ago, and 3 months ago",
-                                           key="quad_show_evolution")
-            
-            quad_fig = create_market_structure_quadrant(df, instrument_name, conc_metric_quad, show_evolution)
-            if quad_fig:
-                st.plotly_chart(quad_fig, use_container_width=True)
-                
-                # Current position summary
-                st.markdown("### Current Market Structure")
-                latest = df.iloc[-1]
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.metric("Latest Date", latest['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'))
-                    # Show trader count based on concentration metric direction
-                    if 'long' in conc_metric_quad[1].lower():
-                        if 'traders_noncomm_long_all' in df.columns:
-                            st.metric("Non-Commercial Long Traders", f"{latest['traders_noncomm_long_all']:.0f}")
-                    else:  # short
-                        if 'traders_noncomm_short_all' in df.columns:
-                            st.metric("Non-Commercial Short Traders", f"{latest['traders_noncomm_short_all']:.0f}")
-                
-                with col2:
-                    st.metric("Concentration Level", f"{latest[conc_metric_quad[1]]:.1f}%")
-                    # Show trader count based on concentration metric direction
-                    if 'long' in conc_metric_quad[1].lower():
-                        if 'traders_comm_long_all' in df.columns:
-                            st.metric("Commercial Long Traders", f"{latest['traders_comm_long_all']:.0f}")
-                    else:  # short
-                        if 'traders_comm_short_all' in df.columns:
-                            st.metric("Commercial Short Traders", f"{latest['traders_comm_short_all']:.0f}")
-        
-        with tab6:
-            st.markdown("#### 📈 Non-Commercial Spreading Activity")
-            
-            # Explanation
-            with st.expander("📖 Understanding Spreading Activity", expanded=False):
-                st.markdown("""
-                **What is the Spread/Directional Ratio?**
-                
-                Measures the relative preference for spread strategies vs directional positions among non-commercial traders:
-                
-                **Calculation:** Spread Traders ÷ (Long-Only + Short-Only Traders)
-                
-                **Interpretation:**
-                - **Ratio < 0.5**: Strong directional conviction (few spreaders)
-                - **Ratio = 1.0**: Equal balance between spread and directional traders
-                - **Ratio > 1.5**: High hedging/uncertainty (many spreaders)
-                
-                **Why This Matters:**
-                - Rising ratio often signals increasing market uncertainty
-                - Falling ratio suggests growing directional conviction
-                - Extreme values may indicate regime changes
-                - Helps identify when speculators are hedging vs taking outright positions
-                
-                **Note:** Only non-commercials can hold spread positions in COT data
-                """)
-            
-            spread_fig = create_spreading_activity_analysis(df, instrument_name)
+                st.plotly_chart(price_fig, use_container_width=True)
+
+            # Create and display spreading activity chart with filtered data
+            spread_fig = create_spreading_activity_analysis(df_spread_filtered, instrument_name)
             if spread_fig:
                 st.plotly_chart(spread_fig, use_container_width=True)
-                
+
                 # Current status
-                latest = df.iloc[-1]
+                latest = df_spread_filtered.iloc[-1]
                 col1, col2, col3, col4 = st.columns(4)
-                
+
                 with col1:
                     st.metric("Spread Traders", f"{latest['traders_noncomm_spread_all']:.0f}")
-                
+
                 with col2:
                     st.metric("Long-Only Traders", f"{latest['traders_noncomm_long_all']:.0f}")
-                
+
                 with col3:
                     st.metric("Short-Only Traders", f"{latest['traders_noncomm_short_all']:.0f}")
-                
+
                 with col4:
                     ratio = latest['traders_noncomm_spread_all'] / (latest['traders_noncomm_long_all'] + latest['traders_noncomm_short_all'])
                     st.metric("Current Ratio", f"{ratio:.3f}")
@@ -1656,40 +1283,82 @@ def display_trader_participation_chart(df, instrument_name):
             Spread positions are grouped with non-commercial as they represent speculative strategies.
             """)
         
-        # Configuration
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            divergence_type = st.selectbox(
-                "Divergence Type:",
-                [
-                    "Category Divergence (Commercial vs Non-Commercial)",
-                    "Directional Divergence (Long vs Short)"
-                ],
-                index=0
-            )
-        
-        with col2:
-            if divergence_type == "Category Divergence (Commercial vs Non-Commercial)":
-                conc_side = st.radio(
-                    "Position Side:",
-                    ["Long Positions", "Short Positions"],
-                    horizontal=True
-                )
-            elif divergence_type == "Directional Divergence (Long vs Short)":
-                trader_cat = st.radio(
-                    "Trader Category:",
-                    ["All Traders", "Commercial", "Non-Commercial"],
-                    horizontal=True
-                )
-        
-        # Determine which parameter to pass based on divergence type
-        if divergence_type == "Category Divergence (Commercial vs Non-Commercial)":
-            extra_param = conc_side
-        else:  # Directional Divergence (Long vs Short)
-            extra_param = trader_cat
-        
-        div_fig = create_concentration_divergence_analysis(df, instrument_name, divergence_type, extra_param)
+        # Configuration - only Category Divergence
+        divergence_type = "Category Divergence (Commercial vs Non-Commercial)"
+
+        conc_side = st.radio(
+            "Position Side:",
+            ["Long Positions", "Short Positions"],
+            horizontal=True
+        )
+
+        # Add time range selector buttons
+        st.markdown("#### Select Time Range")
+        col_buttons = st.columns(5)
+
+        # Initialize session state for range selection if not exists
+        if 'conc_div_range' not in st.session_state:
+            st.session_state.conc_div_range = '2Y'  # Default to 2Y
+
+        # Range buttons with highlighting for selected range
+        with col_buttons[0]:
+            if st.button("1Y", key="conc_div_range_1y", use_container_width=True,
+                        type="primary" if st.session_state.conc_div_range == '1Y' else "secondary"):
+                st.session_state.conc_div_range = '1Y'
+                st.rerun()
+        with col_buttons[1]:
+            if st.button("2Y", key="conc_div_range_2y", use_container_width=True,
+                        type="primary" if st.session_state.conc_div_range == '2Y' else "secondary"):
+                st.session_state.conc_div_range = '2Y'
+                st.rerun()
+        with col_buttons[2]:
+            if st.button("5Y", key="conc_div_range_5y", use_container_width=True,
+                        type="primary" if st.session_state.conc_div_range == '5Y' else "secondary"):
+                st.session_state.conc_div_range = '5Y'
+                st.rerun()
+        with col_buttons[3]:
+            if st.button("10Y", key="conc_div_range_10y", use_container_width=True,
+                        type="primary" if st.session_state.conc_div_range == '10Y' else "secondary"):
+                st.session_state.conc_div_range = '10Y'
+                st.rerun()
+        with col_buttons[4]:
+            if st.button("All", key="conc_div_range_all", use_container_width=True,
+                        type="primary" if st.session_state.conc_div_range == 'All' else "secondary"):
+                st.session_state.conc_div_range = 'All'
+                st.rerun()
+
+        st.markdown("---")
+
+        # Filter data based on selected time range
+        df_sorted = df.copy()
+        df_sorted = df_sorted.sort_values('report_date_as_yyyy_mm_dd')
+        df_sorted['report_date_as_yyyy_mm_dd'] = pd.to_datetime(df_sorted['report_date_as_yyyy_mm_dd'])
+        latest_date = df_sorted['report_date_as_yyyy_mm_dd'].max()
+
+        # Apply filtering based on selected range
+        if st.session_state.conc_div_range == '1Y':
+            start_date = latest_date - pd.DateOffset(years=1)
+            df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+            range_label = "1-year"
+        elif st.session_state.conc_div_range == '2Y':
+            start_date = latest_date - pd.DateOffset(years=2)
+            df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+            range_label = "2-year"
+        elif st.session_state.conc_div_range == '5Y':
+            start_date = latest_date - pd.DateOffset(years=5)
+            df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+            range_label = "5-year"
+        elif st.session_state.conc_div_range == '10Y':
+            start_date = latest_date - pd.DateOffset(years=10)
+            df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+            range_label = "10-year"
+        else:  # 'All'
+            df_filtered = df_sorted.copy()
+            range_label = "all-time"
+
+        df_filtered = df_filtered.reset_index(drop=True)
+
+        div_fig = create_concentration_divergence_analysis(df_filtered, instrument_name, divergence_type, conc_side, range_label)
         if div_fig:
             st.plotly_chart(div_fig, use_container_width=True)
     

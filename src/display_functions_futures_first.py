@@ -154,6 +154,271 @@ def display_cot_time_series_with_price(df, instrument_name):
 
     # Display synchronized multi-pane chart
     display_synchronized_charts(df, instrument_name, price_adjustment_code, selected_columns, selected_formulas)
+    # Add Market Concentration Flow Analysis
+    st.markdown("---")
+    st.markdown("#### Market Concentration")
+    st.markdown('<p style="color: #808080; font-size: 13px;">T% = Trader Count Percentile (where current trader count ranks vs historical since 2010). P% = Average Position Percentile (where average position size ranks vs historical). High concentration suggests potential for larger price moves as few traders control the market. Low concentration indicates a more stable, democratized market with diverse participation.</p>', unsafe_allow_html=True)
+            
+    # Time period selection
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        flow_lookback = st.selectbox(
+            "Compare periods:",
+            ["Week over Week", "Month over Month", "Quarter over Quarter"],
+            index=0
+        )
+            
+    # Map to days
+    lookback_map = {"Week over Week": 7, "Month over Month": 30, "Quarter over Quarter": 90}
+    lookback_days = lookback_map[flow_lookback]
+            
+    # Get current and previous period data
+    latest_date = df['report_date_as_yyyy_mm_dd'].max()
+    previous_date = latest_date - pd.Timedelta(days=lookback_days)
+            
+    # Find closest available dates
+    df['date_diff_prev'] = abs(df['report_date_as_yyyy_mm_dd'] - previous_date)
+    prev_idx = df['date_diff_prev'].idxmin()
+    prev_data = df.loc[prev_idx]
+            
+    current_data = df[df['report_date_as_yyyy_mm_dd'] == latest_date].iloc[0]
+            
+    # Create a grouped bar chart instead of Sankey for better visibility
+    categories = [
+        ('Non-Comm Long', 'noncomm_positions_long_all', 'traders_noncomm_long_all'),
+        ('Non-Comm Short', 'noncomm_positions_short_all', 'traders_noncomm_short_all'),
+        ('Commercial Long', 'comm_positions_long_all', 'traders_comm_long_all'),
+        ('Commercial Short', 'comm_positions_short_all', 'traders_comm_short_all')
+    ]
+            
+    # Prepare data for visualization
+    data_for_plot = []
+    for cat_name, pos_col, trader_col in categories:
+        # Previous period
+        prev_traders = float(prev_data[trader_col]) if pd.notna(prev_data[trader_col]) else 0
+        prev_avg = float(prev_data[pos_col]) / prev_traders if prev_traders > 0 else 0
+                
+        # Current period
+        curr_traders = float(current_data[trader_col]) if pd.notna(current_data[trader_col]) else 0
+        curr_avg = float(current_data[pos_col]) / curr_traders if curr_traders > 0 else 0
+                
+        # Classify concentration levels based on historical percentiles
+        def get_concentration_level(avg_pos, trader_count, pos_col, trader_col, df):
+            # Calculate historical percentiles for this category
+            # Use all data since 2010 for percentile calculation
+            lookback_date = pd.Timestamp('2010-01-01')
+            hist_data = df[df['report_date_as_yyyy_mm_dd'] >= lookback_date].copy()
+                    
+            # Calculate average positions for historical data
+            hist_data['avg_pos'] = hist_data[pos_col] / hist_data[trader_col]
+            hist_data = hist_data[hist_data[trader_col] > 0]  # Filter out zero traders
+                    
+            # Get percentiles
+            trader_percentile = stats.percentileofscore(hist_data[trader_col], trader_count)
+            avg_pos_percentile = stats.percentileofscore(hist_data['avg_pos'], avg_pos)
+                    
+            # High concentration: Few traders (low percentile) with large positions (high percentile)
+            # Low concentration: Many traders (high percentile) with small positions (low percentile)
+                    
+            if trader_percentile <= 33 and avg_pos_percentile >= 67:
+                return "High"  # Few traders, large positions
+            elif trader_percentile >= 67 and avg_pos_percentile <= 33:
+                return "Low"   # Many traders, small positions
+            elif trader_percentile <= 33 or avg_pos_percentile >= 67:
+                return "Medium-High"  # Either few traders OR large positions
+            elif trader_percentile >= 67 or avg_pos_percentile <= 33:
+                return "Medium-Low"   # Either many traders OR small positions
+            else:
+                return "Medium"  # Middle range for both
+                
+        prev_level = get_concentration_level(prev_avg, prev_traders, pos_col, trader_col, df)
+        curr_level = get_concentration_level(curr_avg, curr_traders, pos_col, trader_col, df)
+                
+        # Calculate percentiles for display
+        lookback_date = pd.Timestamp('2010-01-01')
+        hist_data = df[df['report_date_as_yyyy_mm_dd'] >= lookback_date].copy()
+        hist_data['avg_pos'] = hist_data[pos_col] / hist_data[trader_col]
+        hist_data = hist_data[hist_data[trader_col] > 0]
+                
+        prev_trader_pct = stats.percentileofscore(hist_data[trader_col], prev_traders)
+        prev_pos_pct = stats.percentileofscore(hist_data['avg_pos'], prev_avg)
+        curr_trader_pct = stats.percentileofscore(hist_data[trader_col], curr_traders)
+        curr_pos_pct = stats.percentileofscore(hist_data['avg_pos'], curr_avg)
+                
+        data_for_plot.append({
+            'Category': cat_name,
+            'Period': 'Previous',
+            'Concentration': prev_level,
+            'Avg Position': prev_avg,
+            'Trader Count': prev_traders,
+            'Total Position': float(prev_data[pos_col]),
+            'Trader Percentile': prev_trader_pct,
+            'Position Percentile': prev_pos_pct
+        })
+                
+        data_for_plot.append({
+            'Category': cat_name,
+            'Period': 'Current',
+            'Concentration': curr_level,
+            'Avg Position': curr_avg,
+            'Trader Count': curr_traders,
+            'Total Position': float(current_data[pos_col]),
+            'Trader Percentile': curr_trader_pct,
+            'Position Percentile': curr_pos_pct
+        })
+            
+    # Create DataFrame
+    plot_df = pd.DataFrame(data_for_plot)
+            
+    # Create subplots
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=('Average Position per Trader', 'Trader Count', 
+                      'Concentration Levels (T%=Traders, P%=Position)', 'Total Positions'),
+        vertical_spacing=0.18,
+        horizontal_spacing=0.12,
+        specs=[[{"type": "bar"}, {"type": "bar"}],
+               [{"type": "scatter"}, {"type": "bar"}]]
+    )
+            
+    # Color mapping
+    colors = {'Previous': '#90EE90', 'Current': '#4169E1'}
+    concentration_colors = {
+        'High': '#DC143C',         # Crimson red - high concentration risk
+        'Medium-High': '#FF8C00',  # Dark orange
+        'Medium': '#FFD700',       # Gold
+        'Medium-Low': '#9ACD32',   # Yellow green
+        'Low': '#32CD32'           # Lime green - low concentration (more democratic)
+    }
+            
+    # Plot 1: Average Position per Trader
+    for period in ['Previous', 'Current']:
+        period_data = plot_df[plot_df['Period'] == period]
+        fig.add_trace(
+            go.Bar(
+                x=period_data['Category'],
+                y=period_data['Avg Position'],
+                name=period,
+                marker_color=colors[period],
+                showlegend=True
+            ),
+            row=1, col=1
+        )
+            
+    # Plot 2: Trader Count
+    for period in ['Previous', 'Current']:
+        period_data = plot_df[plot_df['Period'] == period]
+        fig.add_trace(
+            go.Bar(
+                x=period_data['Category'],
+                y=period_data['Trader Count'],
+                name=period,
+                marker_color=colors[period],
+                showlegend=False
+            ),
+            row=1, col=2
+        )
+            
+    # Plot 3: Concentration Level with Percentiles
+    for cat in ['Non-Comm Long', 'Non-Comm Short', 'Commercial Long', 'Commercial Short']:
+        prev_data_cat = plot_df[(plot_df['Category'] == cat) & (plot_df['Period'] == 'Previous')].iloc[0]
+        curr_data_cat = plot_df[(plot_df['Category'] == cat) & (plot_df['Period'] == 'Current')].iloc[0]
+                
+        # Create text with percentiles
+        prev_text = f"T:{prev_data_cat['Trader Percentile']:.0f}%<br>P:{prev_data_cat['Position Percentile']:.0f}%"
+        curr_text = f"T:{curr_data_cat['Trader Percentile']:.0f}%<br>P:{curr_data_cat['Position Percentile']:.0f}%"
+                
+        # Plot previous period
+        fig.add_trace(
+            go.Scatter(
+                x=[cat],
+                y=['Previous'],
+                mode='markers+text',
+                marker=dict(
+                    size=40,
+                    color=concentration_colors[prev_data_cat['Concentration']],
+                    line=dict(width=2, color='black')
+                ),
+                text=prev_text,
+                textposition='middle center',
+                textfont=dict(size=10, color='black', family='Arial Black'),
+                showlegend=False,
+                name=prev_data_cat['Concentration']
+            ),
+            row=2, col=1
+        )
+                
+        # Plot current period
+        fig.add_trace(
+            go.Scatter(
+                x=[cat],
+                y=['Current'],
+                mode='markers+text',
+                marker=dict(
+                    size=40,
+                    color=concentration_colors[curr_data_cat['Concentration']],
+                    line=dict(width=2, color='black')
+                ),
+                text=curr_text,
+                textposition='middle center',
+                textfont=dict(size=10, color='black', family='Arial Black'),
+                showlegend=False,
+                name=curr_data_cat['Concentration']
+            ),
+            row=2, col=1
+        )
+            
+    # Plot 4: Total Positions
+    for period in ['Previous', 'Current']:
+        period_data = plot_df[plot_df['Period'] == period]
+        fig.add_trace(
+            go.Bar(
+                x=period_data['Category'],
+                y=period_data['Total Position'],
+                name=period,
+                marker_color=colors[period],
+                showlegend=False
+            ),
+            row=2, col=2
+        )
+            
+    # Update layout
+    fig.update_layout(
+        title=f"Market Concentration Flow Analysis ({flow_lookback})",
+        height=800,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
+            
+    # Update axes
+    fig.update_xaxes(tickangle=-45)
+    fig.update_yaxes(title_text="Avg Position", row=1, col=1, tickformat=",.0f")
+    fig.update_yaxes(title_text="Trader Count", row=1, col=2, tickformat=",.0f")
+    fig.update_yaxes(title_text="Period", row=2, col=1, categoryorder="array", categoryarray=["Previous", "Current"])
+    fig.update_xaxes(row=2, col=1, tickangle=-25)
+    fig.update_yaxes(title_text="Total Position", row=2, col=2, tickformat=",.0f")
+            
+    # Display the chart
+    st.plotly_chart(fig, use_container_width=True)
+            
+    # Summary statistics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Previous Date", prev_data['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'))
+    with col2:
+        st.metric("Current Date", current_data['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'))
+    with col3:
+        # Calculate total trader change from the plot data
+        prev_total = plot_df[plot_df['Period'] == 'Previous']['Trader Count'].sum()
+        curr_total = plot_df[plot_df['Period'] == 'Current']['Trader Count'].sum()
+        total_trader_change = int(curr_total - prev_total)
+        st.metric("Total Trader Change", f"{total_trader_change:+d}")
 
 def display_synchronized_charts(df, instrument_name, price_adjustment, selected_columns, selected_formulas=None):
     """Display price chart with synchronized COT data subplots"""

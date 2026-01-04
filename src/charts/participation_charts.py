@@ -9,56 +9,69 @@ import numpy as np
 from config import PARTICIPATION_CHART_HEIGHT, CONCENTRATION_COLORS
 
 
-def create_participation_density_dashboard(df, instrument_name, percentile_data=None, concentration_type='Net'):
-    """Create avg position per trader dashboard with concentration analysis"""
+def create_participation_density_dashboard(df, instrument_name, percentile_data=None, concentration_type='Net', price_df=None):
+    """Create avg position per trader dashboard with concentration analysis and price chart"""
     try:
         # Copy and prepare data
         df_plot = df.copy()
         df_plot = df_plot.sort_values('report_date_as_yyyy_mm_dd')
-        
+
         # Calculate average position per trader
         df_plot['avg_pos_per_trader'] = df_plot['open_interest_all'] / df_plot['traders_tot_all']
-        
+
         # Calculate concentration
         if 'conc_net_le_4_tdr_long_all' in df_plot.columns and 'conc_net_le_4_tdr_short_all' in df_plot.columns:
             df_plot['concentration_4'] = (df_plot['conc_net_le_4_tdr_long_all'] + df_plot['conc_net_le_4_tdr_short_all']) / 2
         else:
             df_plot['concentration_4'] = 20  # Default value
-        
+
         # Handle percentile data
         if percentile_data is None:
             percentile_data = [50] * len(df_plot)
-        
-        # Create fresh subplot figure
+
+        # Create subplot figure with price chart on top
         fig = make_subplots(
             rows=3, cols=1,
             shared_xaxes=True,
-            vertical_spacing=0.03,
-            row_heights=[0.5, 0.25, 0.25],
+            vertical_spacing=0.05,
+            row_heights=[0.3, 0.4, 0.3],
             specs=[
-                [{"secondary_y": True}],
                 [{"secondary_y": False}],
+                [{"secondary_y": True}],
                 [{"secondary_y": False}]
             ],
             subplot_titles=(
+                'Futures Price',
                 'Average Position per Trader',
-                'Top 4 Traders Concentration',
-                'Percentile Rank'
+                'Top 4 Traders Net Concentration'
             ),
             horizontal_spacing=0.01
         )
+
+        # Chart 0: Price chart (if available)
+        if price_df is not None and not price_df.empty:
+            fig.add_trace(
+                go.Scatter(
+                    x=price_df['date'],
+                    y=price_df['close'],
+                    name='Price',
+                    line=dict(color='#2E86AB', width=2),
+                    mode='lines'
+                ),
+                row=1, col=1
+            )
         
         # Chart 1: Average Position per Trader (bars) with Total Traders (line)
-        # Create color array based on concentration levels
+        # Create color array based on rolling 2-year percentile of average position per trader
         bar_colors = []
-        for conc in df_plot['concentration_4']:
-            if conc < 15:
+        for percentile in percentile_data:
+            if percentile < 33:
                 bar_colors.append(CONCENTRATION_COLORS['low'])
-            elif conc < 25:
+            elif percentile < 67:
                 bar_colors.append(CONCENTRATION_COLORS['medium'])
             else:
                 bar_colors.append(CONCENTRATION_COLORS['high'])
-        
+
         fig.add_trace(
             go.Bar(
                 x=df_plot['report_date_as_yyyy_mm_dd'],
@@ -67,9 +80,9 @@ def create_participation_density_dashboard(df, instrument_name, percentile_data=
                 marker_color=bar_colors,
                 marker_line_width=0
             ),
-            row=1, col=1, secondary_y=False
+            row=2, col=1, secondary_y=False
         )
-        
+
         fig.add_trace(
             go.Scatter(
                 x=df_plot['report_date_as_yyyy_mm_dd'],
@@ -77,49 +90,46 @@ def create_participation_density_dashboard(df, instrument_name, percentile_data=
                 name='Total Traders',
                 line=dict(color='blue', width=2)
             ),
-            row=1, col=1, secondary_y=True
+            row=2, col=1, secondary_y=True
         )
-        
-        # Chart 2: Concentration
-        fig.add_trace(
-            go.Scatter(
-                x=df_plot['report_date_as_yyyy_mm_dd'],
-                y=df_plot['concentration_4'],
-                name='Top 4 Concentration',
-                fill='tozeroy',
-                line=dict(color='red'),
-                fillcolor='rgba(255, 0, 0, 0.1)'
-            ),
-            row=2, col=1
-        )
-        
-        # Chart 3: Percentile
-        fig.add_trace(
-            go.Scatter(
-                x=df_plot['report_date_as_yyyy_mm_dd'],
-                y=percentile_data,
-                name='Percentile',
-                fill='tozeroy',
-                line=dict(color='purple'),
-                fillcolor='rgba(128, 0, 128, 0.1)'
-            ),
-            row=3, col=1
-        )
-        
-        # Add reference lines
-        fig.add_hline(y=15, row=2, col=1, line_dash="dash", line_color="green", annotation_text="Low")
-        fig.add_hline(y=25, row=2, col=1, line_dash="dash", line_color="orange", annotation_text="Medium")
-        fig.add_hline(y=35, row=2, col=1, line_dash="dash", line_color="red", annotation_text="High")
-        
-        fig.add_hline(y=20, row=3, col=1, line_dash="dot", line_color="green", annotation_text="20th")
-        fig.add_hline(y=50, row=3, col=1, line_dash="dot", line_color="gray", annotation_text="50th")
-        fig.add_hline(y=80, row=3, col=1, line_dash="dot", line_color="red", annotation_text="80th")
-        
-        # Update axes
-        fig.update_yaxes(title_text="Avg Position", row=1, col=1, secondary_y=False)
-        fig.update_yaxes(title_text="Traders", row=1, col=1, secondary_y=True)
-        fig.update_yaxes(title_text="Concentration %", row=2, col=1)
-        fig.update_yaxes(title_text="Percentile", row=3, col=1, range=[0, 100])
+
+        # Chart 2: Separate Long and Short Concentration
+        # Add long concentration line (red)
+        if 'conc_net_le_4_tdr_long_all' in df_plot.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df_plot['report_date_as_yyyy_mm_dd'],
+                    y=df_plot['conc_net_le_4_tdr_long_all'],
+                    name='4 or Less Long',
+                    line=dict(color='red', width=2),
+                    mode='lines'
+                ),
+                row=3, col=1
+            )
+
+        # Add short concentration line (orange)
+        if 'conc_net_le_4_tdr_short_all' in df_plot.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df_plot['report_date_as_yyyy_mm_dd'],
+                    y=df_plot['conc_net_le_4_tdr_short_all'],
+                    name='4 or Less Short',
+                    line=dict(color='orange', width=2),
+                    mode='lines'
+                ),
+                row=3, col=1
+            )
+
+        # Add reference lines for concentration
+        fig.add_hline(y=15, row=3, col=1, line_dash="dash", line_color="green", annotation_text="Low")
+        fig.add_hline(y=25, row=3, col=1, line_dash="dash", line_color="orange", annotation_text="Medium")
+        fig.add_hline(y=35, row=3, col=1, line_dash="dash", line_color="red", annotation_text="High")
+
+        # Update axes with autorange for adaptive y-axis
+        fig.update_yaxes(title_text="Price", row=1, col=1, autorange=True)
+        fig.update_yaxes(title_text="Avg Position", row=2, col=1, secondary_y=False, autorange=True)
+        fig.update_yaxes(title_text="Traders", row=2, col=1, secondary_y=True, autorange=True)
+        fig.update_yaxes(title_text="Concentration %", row=3, col=1, autorange=True)
         
         # Update layout
         fig.update_layout(
@@ -139,25 +149,14 @@ def create_participation_density_dashboard(df, instrument_name, percentile_data=
                 showgrid=True,
                 gridwidth=1,
                 gridcolor='rgba(128,128,128,0.2)',
-                row=row, 
+                row=row,
                 col=1
             )
-        
-        # Add range selector to bottom x-axis only
+
+        # Add range slider to bottom x-axis only (no buttons)
         fig.update_xaxes(
             rangeslider_visible=True,
             rangeslider_thickness=0.05,
-            rangeselector=dict(
-                buttons=list([
-                    dict(count=1, label="YTD", step="year", stepmode="todate"),
-                    dict(count=1, label="1Y", step="year", stepmode="backward"),
-                    dict(count=2, label="2Y", step="year", stepmode="backward"),
-                    dict(count=5, label="5Y", step="year", stepmode="backward"),
-                    dict(label="All", step="all")
-                ]),
-                xanchor='left',
-                x=0
-            ),
             row=3, col=1
         )
         
@@ -165,6 +164,74 @@ def create_participation_density_dashboard(df, instrument_name, percentile_data=
         
     except Exception as e:
         st.error(f"Error creating participation density dashboard: {str(e)}")
+        return None
+
+
+def create_individual_category_chart(df, position_col, trader_col, title):
+    """Create a single category chart (avg position + trader count) without percentile"""
+    try:
+        df_plot = df.copy()
+        df_plot = df_plot.sort_values('report_date_as_yyyy_mm_dd')
+
+        # Calculate the average position for this category
+        df_plot['avg_position'] = df_plot[position_col] / df_plot[trader_col]
+
+        # Create single chart with secondary y-axis
+        fig = make_subplots(
+            rows=1, cols=1,
+            specs=[[{"secondary_y": True}]],
+            subplot_titles=(title,)
+        )
+
+        # Add average position bars
+        fig.add_trace(
+            go.Bar(
+                x=df_plot['report_date_as_yyyy_mm_dd'],
+                y=df_plot['avg_position'],
+                name='Avg Position',
+                marker_color='#90EE90',
+                marker_line_width=0,
+                showlegend=False
+            ),
+            row=1, col=1, secondary_y=False
+        )
+
+        # Add trader count line
+        fig.add_trace(
+            go.Scatter(
+                x=df_plot['report_date_as_yyyy_mm_dd'],
+                y=df_plot[trader_col],
+                name='Traders',
+                line=dict(color='blue', width=2),
+                showlegend=False
+            ),
+            row=1, col=1, secondary_y=True
+        )
+
+        # Update axes
+        fig.update_yaxes(title_text="Avg Position", row=1, col=1, secondary_y=False, autorange=True)
+        fig.update_yaxes(title_text="Traders", row=1, col=1, secondary_y=True, autorange=True)
+
+        # Update layout
+        fig.update_layout(
+            height=300,
+            showlegend=False,
+            hovermode='x unified',
+            margin=dict(l=60, r=60, t=40, b=40)
+        )
+
+        # Update x-axis
+        fig.update_xaxes(
+            type='date',
+            autorange=True,
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(128,128,128,0.2)'
+        )
+
+        return fig
+    except Exception as e:
+        st.error(f"Error creating category chart: {str(e)}")
         return None
 
 

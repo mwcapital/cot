@@ -11,6 +11,134 @@ from scipy import stats
 from config import PARTICIPATION_CHART_HEIGHT, CONCENTRATION_COLORS
 
 
+def create_market_structure_timeline(df, instrument_name):
+    """Create simplified market structure timeline showing concentration over time"""
+    try:
+        df_plot = df.copy()
+        df_plot = df_plot.sort_values('report_date_as_yyyy_mm_dd')
+
+        # Calculate combined concentration metrics
+        # Non-Commercial: average of long and short concentration
+        if 'conc_net_le_4_tdr_long_all' in df_plot.columns and 'conc_net_le_4_tdr_short_all' in df_plot.columns:
+            df_plot['noncomm_concentration'] = (df_plot['conc_net_le_4_tdr_long_all'] + df_plot['conc_net_le_4_tdr_short_all']) / 2
+        else:
+            df_plot['noncomm_concentration'] = 0
+
+        # Commercial: average of long and short concentration
+        if 'conc_gross_le_4_tdr_long' in df_plot.columns and 'conc_gross_le_4_tdr_short' in df_plot.columns:
+            df_plot['comm_concentration'] = (df_plot['conc_gross_le_4_tdr_long'] + df_plot['conc_gross_le_4_tdr_short']) / 2
+        else:
+            df_plot['comm_concentration'] = 0
+
+        # Create figure
+        fig = go.Figure()
+
+        # Add Non-Commercial concentration (primary line)
+        fig.add_trace(
+            go.Scatter(
+                x=df_plot['report_date_as_yyyy_mm_dd'],
+                y=df_plot['noncomm_concentration'],
+                name='Non-Commercial',
+                line=dict(color='#2E86AB', width=3),
+                mode='lines',
+                hovertemplate='<b>Non-Commercial</b><br>Date: %{x}<br>Concentration: %{y:.1f}%<extra></extra>'
+            )
+        )
+
+        # Add Commercial concentration (secondary line)
+        fig.add_trace(
+            go.Scatter(
+                x=df_plot['report_date_as_yyyy_mm_dd'],
+                y=df_plot['comm_concentration'],
+                name='Commercial',
+                line=dict(color='#32CD32', width=2, dash='dash'),
+                mode='lines',
+                hovertemplate='<b>Commercial</b><br>Date: %{x}<br>Concentration: %{y:.1f}%<extra></extra>'
+            )
+        )
+
+        # Add background zones for market structure states
+        # High Concentration Zone (>30%)
+        fig.add_hrect(
+            y0=30, y1=100,
+            fillcolor="rgba(220, 20, 60, 0.1)",  # Red
+            layer="below",
+            line_width=0,
+            annotation_text="High Concentration",
+            annotation_position="top right",
+            annotation_font_size=10,
+            annotation_font_color="rgba(220, 20, 60, 0.6)"
+        )
+
+        # Medium Concentration Zone (15-30%)
+        fig.add_hrect(
+            y0=15, y1=30,
+            fillcolor="rgba(255, 215, 0, 0.1)",  # Gold
+            layer="below",
+            line_width=0,
+            annotation_text="Medium Concentration",
+            annotation_position="top right",
+            annotation_font_size=10,
+            annotation_font_color="rgba(255, 215, 0, 0.6)"
+        )
+
+        # Low Concentration Zone (<15%)
+        fig.add_hrect(
+            y0=0, y1=15,
+            fillcolor="rgba(50, 205, 50, 0.1)",  # Green
+            layer="below",
+            line_width=0,
+            annotation_text="Low Concentration",
+            annotation_position="top right",
+            annotation_font_size=10,
+            annotation_font_color="rgba(50, 205, 50, 0.6)"
+        )
+
+        # Add horizontal reference lines
+        fig.add_hline(y=15, line_dash="dot", line_color="green", line_width=1, opacity=0.5)
+        fig.add_hline(y=30, line_dash="dot", line_color="red", line_width=1, opacity=0.5)
+
+        # Update layout
+        fig.update_layout(
+            title=f"Market Structure Timeline - {instrument_name}",
+            xaxis_title="Date",
+            yaxis_title="Concentration % (Top 4 Traders)",
+            height=600,
+            showlegend=True,
+            hovermode='x unified',
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
+        )
+
+        # Update axes
+        fig.update_xaxes(
+            type='date',
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(128,128,128,0.2)',
+            rangeslider_visible=True,
+            rangeslider_thickness=0.05
+        )
+
+        fig.update_yaxes(
+            range=[0, max(50, df_plot['noncomm_concentration'].max() * 1.1)],
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(128,128,128,0.2)'
+        )
+
+        return fig
+
+    except Exception as e:
+        st.error(f"Error creating market structure timeline: {str(e)}")
+        return None
+
+
 def create_market_concentration_flow(df, instrument_name):
     """Create market concentration flow analysis"""
     try:
@@ -489,13 +617,13 @@ def create_market_structure_quadrant(df, instrument_name, conc_metric, show_evol
         return None
 
 
-def create_concentration_divergence_analysis(df, instrument_name, divergence_type, conc_side='Long Positions'):
+def create_concentration_divergence_analysis(df, instrument_name, divergence_type, conc_side='Long Positions', range_label='2-year'):
     """Create concentration divergence analysis"""
     try:
-        # Filter data to periods with enough history
-        df_div = df[df['report_date_as_yyyy_mm_dd'] >= pd.Timestamp('2015-01-01')].copy()
-        
-        # Create subplots
+        # Data is already filtered by time range, just make a copy
+        df_div = df.copy()
+
+        # Create subplots with dynamic title for distribution
         fig = make_subplots(
             rows=3, cols=1,
             shared_xaxes=True,
@@ -504,7 +632,7 @@ def create_concentration_divergence_analysis(df, instrument_name, divergence_typ
             subplot_titles=[
                 'Concentration Levels',
                 'Divergence Score',
-                'Probability Distribution (%)'
+                f'Distribution ({range_label})'
             ]
         )
         

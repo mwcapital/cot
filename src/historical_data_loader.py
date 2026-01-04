@@ -11,7 +11,7 @@ import os
 @st.cache_data
 def load_historical_data():
     """Load and parse the historical COT data file (1986-2016)"""
-    historical_file = 'instrument_management/FUT86_16.txt'
+    historical_file = 'instrument_management/LegacyF/FUT86_16.txt'
     
     if not os.path.exists(historical_file):
         return None

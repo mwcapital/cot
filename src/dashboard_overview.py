@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from data_fetcher import fetch_cftc_data_ytd_only, fetch_cftc_data_2year, fetch_cftc_data
+from data_fetcher import fetch_cftc_data_2year, fetch_cftc_data
 import plotly.graph_objects as go
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
@@ -663,18 +663,21 @@ def create_sparkline(df, column_name):
 def fetch_single_instrument_data(category, instrument, api_token):
     """Helper function to fetch data for a single instrument"""
     try:
-        # Fetch YTD data for basic dashboard metrics
-        df_ytd = fetch_cftc_data_ytd_only(instrument, api_token)
-
-        # Fetch 2-year data for correlation calculations
+        # Fetch 2-year data for all calculations (consistent with rest of app)
         df_2year = fetch_cftc_data_2year(instrument, api_token)
 
-        if df_ytd is not None and not df_ytd.empty:
+        if df_2year is not None and not df_2year.empty:
             # Get latest data point
-            latest = df_ytd.iloc[-1]
+            latest = df_2year.iloc[-1]
 
-            # Data is already YTD only from optimized fetch
-            ytd_df = df_ytd
+            # Get YTD subset from the 2-year data
+            from datetime import datetime
+            current_year = datetime.now().year
+            ytd_df = df_2year[df_2year['report_date_as_yyyy_mm_dd'].dt.year == current_year]
+
+            # If no current year data yet (start of year), use last 8 weeks
+            if ytd_df.empty:
+                ytd_df = df_2year.tail(8)
             
             # Create sparkline data as a list of values for LineChartColumn
             ytd_sparkline = None
@@ -741,8 +744,8 @@ def fetch_single_instrument_data(category, instrument, api_token):
 
                 # Non-Commercial Net Positions
                 'NC Net Position': latest.get('net_noncomm_positions', np.nan),
-                'NC Net YTD %ile': calculate_ytd_percentile(
-                    ytd_df.get('net_noncomm_positions', pd.Series()),
+                'NC Net 2Y %ile': calculate_ytd_percentile(
+                    df_2year.get('net_noncomm_positions', pd.Series()),
                     latest.get('net_noncomm_positions', np.nan)
                 ),
                 'NC Corr_P': nc_corr_p,
@@ -751,8 +754,8 @@ def fetch_single_instrument_data(category, instrument, api_token):
 
                 # Commercial Longs
                 'Comm Long': latest.get('comm_positions_long_all', np.nan),
-                'Comm Long YTD %ile': calculate_ytd_percentile(
-                    ytd_df.get('comm_positions_long_all', pd.Series()),
+                'Comm Long 2Y %ile': calculate_ytd_percentile(
+                    df_2year.get('comm_positions_long_all', pd.Series()),
                     latest.get('comm_positions_long_all', np.nan)
                 ),
                 'CL Corr_P': comm_long_corr_p,
@@ -761,8 +764,8 @@ def fetch_single_instrument_data(category, instrument, api_token):
 
                 # Commercial Shorts
                 'Comm Short': latest.get('comm_positions_short_all', np.nan),
-                'Comm Short YTD %ile': calculate_ytd_percentile(
-                    ytd_df.get('comm_positions_short_all', pd.Series()),
+                'Comm Short 2Y %ile': calculate_ytd_percentile(
+                    df_2year.get('comm_positions_short_all', pd.Series()),
                     latest.get('comm_positions_short_all', np.nan)
                 ),
                 'CS Corr_P': comm_short_corr_p,
@@ -2010,21 +2013,37 @@ def display_participation_comparison(api_token):
 
 def display_dashboard(api_token):
     """Display the main dashboard overview"""
-    st.header("Commodity Markets Overview")
+
+    # Fetch dashboard data first to get the latest date
+    with st.spinner("Loading market data..."):
+        df = fetch_dashboard_data(api_token)
+
+    if df.empty:
+        st.warning("No data available for dashboard instruments")
+        return
+
+    # Get the latest COT report date from the fetched data
+    latest_date_str = ""
+    if not df.empty:
+        # Try to get report date from the first successful fetch
+        # The data is from Socrata API, so get the most recent report date
+        try:
+            # Fetch a quick sample to get latest report date
+            from data_fetcher import fetch_cftc_data_2year
+            sample_df = fetch_cftc_data_2year("GOLD - COMMODITY EXCHANGE INC.", api_token)
+            if sample_df is not None and not sample_df.empty:
+                latest_date = pd.to_datetime(sample_df['report_date_as_yyyy_mm_dd']).max()
+                latest_date_str = f" - Latest COT Data: {latest_date.strftime('%B %d, %Y')}"
+        except:
+            pass
+
+    st.header(f"Commodity Markets Overview{latest_date_str}")
     st.markdown(
         "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
         "Key metrics and positioning data for major commodity futures markets. Updated weekly with CFTC Commitments of Traders reports."
         "</p>",
         unsafe_allow_html=True
     )
-
-    # Fetch dashboard data
-    with st.spinner("Loading market data..."):
-        df = fetch_dashboard_data(api_token)
-    
-    if df.empty:
-        st.warning("No data available for dashboard instruments")
-        return
     
     # Format the dataframe for display
     display_df = df.copy()
@@ -2045,7 +2064,7 @@ def display_dashboard(api_token):
         display_df['OI Change'] = display_df['OI Change'].apply(format_oi_change)
     
     # Format percentile columns
-    percentile_cols = ['NC Net YTD %ile', 'Comm Long YTD %ile', 'Comm Short YTD %ile']
+    percentile_cols = ['NC Net 2Y %ile', 'Comm Long 2Y %ile', 'Comm Short 2Y %ile']
     for col in percentile_cols:
         if col in display_df.columns:
             display_df[col] = display_df[col].apply(lambda x: f"{x:.0f}%" if pd.notna(x) else "")
@@ -2080,17 +2099,17 @@ def display_dashboard(api_token):
         "Open Interest": st.column_config.TextColumn("OI", help="Current Open Interest from Futures Data"),
         "OI Change": st.column_config.TextColumn("OI Δ", help="Daily Change in Open Interest"),
         "NC Net Position": st.column_config.TextColumn("NC Net", help="Non-Commercial Net Position"),
-        "NC Net YTD %ile": st.column_config.TextColumn("YTD %", help="YTD Percentile"),
+        "NC Net 2Y %ile": st.column_config.TextColumn("2Y %", help="2-Year Percentile"),
         "NC Corr_P": st.column_config.TextColumn("Corr_P", help="Pearson: NC Position Changes vs Weekly Returns", width="small"),
         "NC Corr_S": st.column_config.TextColumn("Corr_S", help="Spearman: NC Position Changes vs Weekly Returns", width="small"),
         "NC L_L": st.column_config.TextColumn("L_L", help="Lead-Lag: Best NC Position Changes vs Returns (±2wks)", width="small"),
         "Comm Long": st.column_config.TextColumn("Comm L", help="Commercial Long Positions"),
-        "Comm Long YTD %ile": st.column_config.TextColumn("YTD %", help="YTD Percentile"),
+        "Comm Long 2Y %ile": st.column_config.TextColumn("2Y %", help="2-Year Percentile"),
         "CL Corr_P": st.column_config.TextColumn("Corr_P", help="Pearson: Comm Long Changes vs Weekly Returns", width="small"),
         "CL Corr_S": st.column_config.TextColumn("Corr_S", help="Spearman: Comm Long Changes vs Weekly Returns", width="small"),
         "CL L_L": st.column_config.TextColumn("L_L", help="Lead-Lag: Best Comm Long Changes vs Returns (±2wks)", width="small"),
         "Comm Short": st.column_config.TextColumn("Comm S", help="Commercial Short Positions"),
-        "Comm Short YTD %ile": st.column_config.TextColumn("YTD %", help="YTD Percentile"),
+        "Comm Short 2Y %ile": st.column_config.TextColumn("2Y %", help="2-Year Percentile"),
         "CS Corr_P": st.column_config.TextColumn("Corr_P", help="Pearson: Comm Short Changes vs Weekly Returns", width="small"),
         "CS Corr_S": st.column_config.TextColumn("Corr_S", help="Spearman: Comm Short Changes vs Weekly Returns", width="small"),
         "CS L_L": st.column_config.TextColumn("L_L", help="Lead-Lag: Best Comm Short Changes vs Returns (±2wks)", width="small"),

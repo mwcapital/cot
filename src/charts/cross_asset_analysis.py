@@ -102,11 +102,11 @@ def create_cross_asset_analysis(selected_instruments, trader_category, api_token
 
         # Show warnings for failed instruments
         if failed_instruments:
-            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([i.split('-')[0].strip() for i in failed_instruments])}")
+            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([get_short_instrument_name(i) for i in failed_instruments])}")
 
         # Show success message
         if instrument_data:
-            st.success(f"✓ Successfully loaded data for {len(instrument_data)} instrument(s): {', '.join([i.split('-')[0].strip() for i in instrument_data.keys()])}")
+            st.success(f"✓ Successfully loaded data for {len(instrument_data)} instrument(s): {', '.join([get_short_instrument_name(i) for i in instrument_data.keys()])}")
 
         if not instrument_data:
             st.error("No valid data found for selected instruments")
@@ -121,7 +121,7 @@ def create_cross_asset_analysis(selected_instruments, trader_category, api_token
         # Prepare data for plotting
         instruments_full = [item[0] for item in sorted_instruments]
         # Shorten instrument names - take only the part before first "-"
-        instruments_short = [name.split('-')[0].strip() for name in instruments_full]
+        instruments_short = [get_short_instrument_name(name) for name in instruments_full]
         z_scores = [item[1]['z_score'] for item in sorted_instruments]
         
         # Nice mint/salad green color
@@ -285,11 +285,11 @@ def create_cross_asset_wow_changes(selected_instruments, trader_category, api_to
 
         # Show warnings for failed instruments
         if failed_instruments:
-            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([i.split('-')[0].strip() for i in failed_instruments])}")
+            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([get_short_instrument_name(i) for i in failed_instruments])}")
 
         # Show success message
         if instrument_data:
-            st.success(f"✓ Successfully loaded data for {len(instrument_data)} instrument(s): {', '.join([i.split('-')[0].strip() for i in instrument_data.keys()])}")
+            st.success(f"✓ Successfully loaded data for {len(instrument_data)} instrument(s): {', '.join([get_short_instrument_name(i) for i in instrument_data.keys()])}")
 
         if not instrument_data:
             st.error("No valid data found for selected instruments")
@@ -304,7 +304,7 @@ def create_cross_asset_wow_changes(selected_instruments, trader_category, api_to
         # Prepare data for plotting
         instruments_full = [item[0] for item in sorted_instruments]
         # Shorten instrument names - take only the part before first "-"
-        instruments_short = [name.split('-')[0].strip() for name in instruments_full]
+        instruments_short = [get_short_instrument_name(name) for name in instruments_full]
         changes = [item[1]['change_pct_oi'] for item in sorted_instruments]
         
         # Nice mint/salad green color
@@ -373,6 +373,27 @@ def create_cross_asset_wow_changes(selected_instruments, trader_category, api_to
 
 
 # Placeholder functions for other chart types - can be implemented later if needed
+def get_short_instrument_name(instrument):
+    """Get friendly display name from futures_symbols_enhanced.json mapping"""
+    try:
+        import json
+        mapping_path = 'instrument_management/futures/futures_symbols_enhanced.json'
+        with open(mapping_path, 'r') as f:
+            mapping_data = json.load(f)
+
+        # Search for the COT instrument name in the mapping
+        for symbol, symbol_data in mapping_data['futures_symbols'].items():
+            cot_instruments = symbol_data.get('cot_mapping', {}).get('instruments', [])
+            for cot_name in cot_instruments:
+                if cot_name == instrument or instrument.startswith(cot_name.split(' - ')[0]):
+                    return symbol_data.get('name', instrument.split('-')[0].strip())
+
+        # Fallback: return first part before dash
+        return instrument.split('-')[0].strip()
+    except:
+        return instrument.split('-')[0].strip()
+
+
 def create_positioning_concentration_charts(selected_instruments, trader_category, api_token, instruments_db):
     """Create time series and bar charts for positioning concentration analysis"""
     try:
@@ -433,11 +454,11 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
 
         # Show warnings for failed instruments
         if failed_instruments:
-            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([i.split('-')[0].strip() for i in failed_instruments])}")
+            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([get_short_instrument_name(i) for i in failed_instruments])}")
 
         # Show success message
         if all_data:
-            st.success(f"✓ Successfully loaded data for {len(all_data)} instrument(s): {', '.join([i.split('-')[0].strip() for i in all_data.keys()])}")
+            st.success(f"✓ Successfully loaded data for {len(all_data)} instrument(s): {', '.join([get_short_instrument_name(i) for i in all_data.keys()])}")
 
         if not all_data:
             st.error("No valid data found for selected instruments")
@@ -453,7 +474,7 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
         # Add traces for each instrument
         for idx, (instrument, data) in enumerate(all_data.items()):
             # Shorten name for display
-            short_name = instrument.split('-')[0].strip()
+            short_name = get_short_instrument_name(instrument)
 
             time_series_fig.add_trace(go.Scatter(
                 x=data['dates'],
@@ -509,7 +530,7 @@ def create_positioning_concentration_charts(selected_instruments, trader_categor
 
         # Prepare data for bar chart
         instruments_full = [item[0] for item in sorted_instruments]
-        instruments_short = [name.split('-')[0].strip() for name in instruments_full]
+        instruments_short = [get_short_instrument_name(name) for name in instruments_full]
         latest_values = [item[1]['latest_pct'] for item in sorted_instruments]
 
         # Use single color for absolute positions
@@ -608,9 +629,9 @@ def create_cross_asset_participation_comparison(selected_instruments, api_token,
 
         # Show data loading summary
         if failed_instruments and all_data:
-            st.info(f"✓ Loaded {len(all_data)}/{len(selected_instruments)} instruments successfully. Failed: {', '.join([i.split('-')[0].strip() for i in failed_instruments])}")
+            st.info(f"✓ Loaded {len(all_data)}/{len(selected_instruments)} instruments successfully. Failed: {', '.join([get_short_instrument_name(i) for i in failed_instruments])}")
         elif all_data:
-            st.success(f"✓ Successfully loaded data for {len(all_data)} instrument(s): {', '.join([i.split('-')[0].strip() for i in all_data.keys()])}")
+            st.success(f"✓ Successfully loaded data for {len(all_data)} instrument(s): {', '.join([get_short_instrument_name(i) for i in all_data.keys()])}")
         elif failed_instruments:
             st.error(f"Failed to fetch data for all {len(failed_instruments)} instrument(s)")
 
@@ -635,7 +656,7 @@ def create_cross_asset_participation_comparison(selected_instruments, api_token,
         
         # 1. Total trader count time series
         for idx, (instrument, data) in enumerate(all_data.items()):
-            short_name = instrument.split('-')[0].strip()
+            short_name = get_short_instrument_name(instrument)
             
             fig.add_trace(go.Scatter(
                 x=data['dates'],
@@ -650,7 +671,7 @@ def create_cross_asset_participation_comparison(selected_instruments, api_token,
         
         # 2. YoY % change in trader count
         for idx, (instrument, data) in enumerate(all_data.items()):
-            short_name = instrument.split('-')[0].strip()
+            short_name = get_short_instrument_name(instrument)
             
             # Calculate YoY change
             import pandas as pd
@@ -670,7 +691,7 @@ def create_cross_asset_participation_comparison(selected_instruments, api_token,
         
         # 3. Average position per trader
         for idx, (instrument, data) in enumerate(all_data.items()):
-            short_name = instrument.split('-')[0].strip()
+            short_name = get_short_instrument_name(instrument)
             
             # Calculate avg position per trader
             avg_position = data['open_interest'] / data['total_traders'].replace(0, 1)
@@ -688,7 +709,7 @@ def create_cross_asset_participation_comparison(selected_instruments, api_token,
         
         # 4. Participation score (traders as % of max historical)
         for idx, (instrument, data) in enumerate(all_data.items()):
-            short_name = instrument.split('-')[0].strip()
+            short_name = get_short_instrument_name(instrument)
             
             # Calculate participation score
             max_traders = data['total_traders'].max()
@@ -818,11 +839,11 @@ def create_relative_strength_matrix(selected_instruments, api_token, time_period
 
         # Show warnings for failed instruments
         if failed_instruments:
-            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([i.split('-')[0].strip() for i in failed_instruments])}")
+            st.warning(f"⚠️ Failed to fetch data for {len(failed_instruments)} instrument(s): {', '.join([get_short_instrument_name(i) for i in failed_instruments])}")
 
         # Show success message
         if all_data:
-            st.success(f"✓ Successfully loaded data for {len(all_data)} instrument(s): {', '.join([i.split('-')[0].strip() for i in all_data.keys()])}")
+            st.success(f"✓ Successfully loaded data for {len(all_data)} instrument(s): {', '.join([get_short_instrument_name(i) for i in all_data.keys()])}")
 
         if len(all_data) < 2:
             st.warning("Need at least 2 instruments with valid data for correlation matrix")
@@ -837,8 +858,8 @@ def create_relative_strength_matrix(selected_instruments, api_token, time_period
         # Create heatmap
         fig = go.Figure(data=go.Heatmap(
             z=correlation_matrix.values,
-            x=[name.split('-')[0].strip() for name in correlation_matrix.columns],
-            y=[name.split('-')[0].strip() for name in correlation_matrix.index],
+            x=[get_short_instrument_name(name) for name in correlation_matrix.columns],
+            y=[get_short_instrument_name(name) for name in correlation_matrix.index],
             colorscale='RdBu',
             zmid=0,
             text=np.round(correlation_matrix.values, 2),
@@ -959,7 +980,7 @@ def create_market_structure_matrix(all_instruments_data, selected_instruments, c
                     'trader_percentile': trader_percentile,
                     'conc_percentile': conc_percentile,
                     'open_interest': open_interest,
-                    'short_name': instrument.split('-')[0].strip()
+                    'short_name': get_short_instrument_name(instrument)
                 })
         
         progress_bar.empty()
