@@ -23,9 +23,12 @@ This is a Streamlit-based web application for analyzing CFTC (Commodity Futures 
 
 ### Core Modules
 - `src/dashboard_overview.py` - Main dashboard with overview table, plots, and positioning analysis
-- `src/data_fetcher.py` - Fetches COT data from CFTC API
+- `src/data_fetcher.py` - Fetches COT data from CFTC API with instrument stitching
 - `src/futures_price_fetcher.py` - Fetches futures price data from Supabase
 - `src/multi_instrument_handler.py` - Handles multi-instrument analysis flows
+- `src/historical_data_loader.py` - Loads pre-2000 historical data from FUT86_16.txt
+- `src/display_functions_exact.py` - Single instrument analysis charts with time range controls
+- `src/display_functions_futures_first.py` - Futures-first display functions
 - `src/display_functions_clean.py` - Time series charts with Lightweight Charts integration
 
 ### Chart Modules
@@ -146,6 +149,90 @@ df['net_pct_oi'] = (abs(df[cols['net']]) / df['open_interest_all'] * 100).fillna
 
 **Why:** Concentration analysis focuses on magnitude of positioning, not direction (long/short).
 
+### 6. Instrument Stitching (Historical Data)
+
+Some instruments have been renamed over time in CFTC data. The app stitches multiple API queries + historical file data to create continuous time series.
+
+**Historical Data File:**
+- Location: `instrument_management/LegacyF/FUT86_16.txt`
+- Contains: Legacy Futures COT data from 1986-2016
+- Loaded by: `src/historical_data_loader.py`
+
+**Stitched Instruments:**
+
+| Current Name | Historical Names (API) | FUT86_16.txt Name |
+|-------------|----------------------|-------------------|
+| CRUDE OIL, LIGHT SWEET - NYMEX | CRUDE OIL, LIGHT SWEET - NYMEX | CRUDE OIL, LIGHT-NEW YORK MERCANTILE EXCHANGE |
+| NAT GAS NYME | NATURAL GAS - NYMEX | NATURAL GAS- NEW YORK MERCANTILE EXCHANGE |
+| GASOLINE RBOB - NYMEX | UNLEADED GASOLINE + GASOLINE BLENDSTOCK | NO.2 HEATING OIL, N.Y. HARBOR-NEW YORK MERCANTILE EXCHANGE |
+| COPPER- #1 - COMEX | COPPER-GRADE #1 - COMEX | COPPER-COMMODITY EXCHANGE INC. |
+| E-MINI S&P 500 - CME | S&P 500 STOCK INDEX - CME | STANDARD & POORS 500 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE |
+| NASDAQ MINI - CME | NASDAQ-100 STOCK INDEX (MINI) + NASDAQ-100 | NASDAQ-100 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE |
+| DJIA x $5 - CBOT | DJIA Consolidated (CME+CBOT) | DOW JONES INDUSTRIAL AVG- CBOT |
+| RUSSELL E-MINI - CME | RUSSELL 2000 MINI (ICE) + E-MINI RUSSELL 2000 | RUSSELL 2000 MINI INDEX - ICE |
+
+**Note:** Russell 2000 moved from ICE to CME in 2017, so both exchanges are stitched.
+
+**Stitching Pattern in `data_fetcher.py`:**
+```python
+# Example: Multiple API queries merged, then historical file stitched
+if instrument_name_clean == "GASOLINE RBOB - NEW YORK MERCANTILE EXCHANGE":
+    historical_1_results = _fetch_with_retry(client, DATASET_CODE,
+        "market_and_exchange_names='UNLEADED GASOLINE, N.Y. HARBOR - ...'", ...)
+    historical_2_results = _fetch_with_retry(client, DATASET_CODE,
+        "market_and_exchange_names='GASOLINE BLENDSTOCK (RBOB) - ...'", ...)
+    current_results = _fetch_with_retry(client, DATASET_CODE,
+        "market_and_exchange_names='GASOLINE RBOB - ...'", ...)
+    results = historical_1_results + historical_2_results + current_results
+```
+
+### 7. Time Range Selectors
+
+**Pattern for adding time range buttons to charts:**
+
+```python
+# Add time range selector buttons
+st.markdown("#### Select Time Range")
+col_buttons = st.columns(5)
+
+# Initialize session state
+if 'chart_name_range' not in st.session_state:
+    st.session_state.chart_name_range = '2Y'  # Default
+
+# Range buttons
+with col_buttons[0]:
+    if st.button("1Y", key="chart_range_1y", use_container_width=True,
+                type="primary" if st.session_state.chart_name_range == '1Y' else "secondary"):
+        st.session_state.chart_name_range = '1Y'
+        st.rerun()
+# ... repeat for 2Y, 5Y, 10Y, All
+
+# Filter data based on selection
+if st.session_state.chart_name_range == '1Y':
+    start_date = latest_date - pd.DateOffset(years=1)
+    df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
+```
+
+### 8. Friendly Display Names
+
+**Use `futures_symbols_enhanced.json` for friendly instrument names:**
+
+```python
+def get_short_instrument_name(instrument):
+    """Get friendly display name from futures_symbols_enhanced.json mapping"""
+    mapping_path = 'instrument_management/futures/futures_symbols_enhanced.json'
+    with open(mapping_path, 'r') as f:
+        mapping_data = json.load(f)
+    for symbol, symbol_data in mapping_data['futures_symbols'].items():
+        cot_instruments = symbol_data.get('cot_mapping', {}).get('instruments', [])
+        for cot_name in cot_instruments:
+            if cot_name == instrument or instrument.startswith(cot_name.split(' - ')[0]):
+                return symbol_data.get('name', instrument.split('-')[0].strip())
+    return instrument.split('-')[0].strip()
+```
+
+This helper is in `src/charts/cross_asset_analysis.py` and maps COT names like "E-MINI S&P 500 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE" to friendly names like "E-mini S&P 500".
+
 ## File Paths
 
 ### NEVER use absolute paths in code
@@ -227,6 +314,24 @@ mapping_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
 5. Verify adjustment_method filter is applied
 
 ## Recent Important Changes
+
+### 2026-01 Changes:
+1. **Instrument stitching for extended history**:
+   - Added stitching for Gasoline RBOB, Copper, and all Index instruments
+   - Russell 2000 stitches ICE + CME data (contract moved exchanges in 2017)
+   - Fixed FUT86_16.txt file path in historical_data_loader.py
+
+2. **Changed YTD to 2-year percentiles**:
+   - Overview table now shows 2Y percentiles instead of YTD
+   - More consistent with other 2-year lookback calculations
+
+3. **Time range controls for Concentration Divergence**:
+   - Added 1Y/2Y/5Y/10Y/All buttons
+   - Distribution chart title shows selected range
+
+4. **Friendly display names for Index instruments**:
+   - Uses JSON mapping instead of splitting on "-"
+   - Fixes "E, E, E" display issue for E-MINI instruments
 
 ### 2025-09 Changes:
 1. **Fixed correlation discrepancies** between local and cloud by:
