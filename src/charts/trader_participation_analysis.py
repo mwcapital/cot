@@ -637,56 +637,33 @@ def create_concentration_divergence_analysis(df, instrument_name, divergence_typ
         )
         
         if divergence_type == "Category Divergence (Commercial vs Non-Commercial)":
-            # Calculate concentration scores based on selected side
+            # Use API-provided % of OI values directly (includes non-reportables in denominator)
             if conc_side == "Long Positions":
-                # Calculate position shares relative to total reportable long positions
-                df_div['comm_position_share'] = (df_div['comm_positions_long_all'] / df_div['tot_rept_positions_long_all']) * 100
-                df_div['noncomm_position_share'] = ((df_div['noncomm_positions_long_all'] + df_div['noncomm_postions_spread_all']) / df_div['tot_rept_positions_long_all']) * 100
-                
-                # Trader shares relative to total reportable long traders
-                df_div['comm_trader_share'] = (df_div['traders_comm_long_all'] / df_div['traders_tot_rept_long_all']) * 100
-                df_div['noncomm_trader_share'] = ((df_div['traders_noncomm_long_all'] + df_div['traders_noncomm_spread_all']) / df_div['traders_tot_rept_long_all']) * 100
-                
+                df_div['comm_pct_oi'] = df_div['pct_of_oi_comm_long_all']
+                df_div['noncomm_pct_oi'] = df_div['pct_of_oi_noncomm_long_all']
+                comm_label = 'Commercial Long (% of OI)'
+                noncomm_label = 'Non-Commercial Long (% of OI)'
             elif conc_side == "Short Positions":
-                # Calculate position shares relative to total reportable short positions
-                df_div['comm_position_share'] = (df_div['comm_positions_short_all'] / df_div['tot_rept_positions_short']) * 100
-                df_div['noncomm_position_share'] = ((df_div['noncomm_positions_short_all'] + df_div['noncomm_postions_spread_all']) / df_div['tot_rept_positions_short']) * 100
-                
-                # Trader shares relative to total reportable short traders
-                df_div['comm_trader_share'] = (df_div['traders_comm_short_all'] / df_div['traders_tot_rept_short_all']) * 100
-                df_div['noncomm_trader_share'] = ((df_div['traders_noncomm_short_all'] + df_div['traders_noncomm_spread_all']) / df_div['traders_tot_rept_short_all']) * 100
-            
-            # Calculate concentration: Position Share / Trader Share
-            df_div['comm_concentration'] = np.where(
-                df_div['comm_trader_share'] > 0,
-                df_div['comm_position_share'] / df_div['comm_trader_share'],
-                0
-            )
-            df_div['noncomm_concentration'] = np.where(
-                df_div['noncomm_trader_share'] > 0,
-                df_div['noncomm_position_share'] / df_div['noncomm_trader_share'],
-                0
-            )
-            
-            # Clean infinities
-            df_div['comm_concentration'] = df_div['comm_concentration'].replace([np.inf, -np.inf], 0).fillna(0)
-            df_div['noncomm_concentration'] = df_div['noncomm_concentration'].replace([np.inf, -np.inf], 0).fillna(0)
-            
-            # Calculate divergence
-            df_div['divergence'] = (df_div['noncomm_concentration'] - df_div['comm_concentration']) * 10
-            
-            # Plot concentrations
+                df_div['comm_pct_oi'] = df_div['pct_of_oi_comm_short_all']
+                df_div['noncomm_pct_oi'] = df_div['pct_of_oi_noncomm_short_all']
+                comm_label = 'Commercial Short (% of OI)'
+                noncomm_label = 'Non-Commercial Short (% of OI)'
+
+            # Calculate divergence: Non-Commercial % - Commercial %
+            df_div['divergence'] = df_div['noncomm_pct_oi'] - df_div['comm_pct_oi']
+
+            # Plot % of OI
             fig.add_trace(go.Scatter(
                 x=df_div['report_date_as_yyyy_mm_dd'],
-                y=df_div['comm_concentration'],
-                name='Commercial',
+                y=df_div['comm_pct_oi'],
+                name=comm_label,
                 line=dict(color='red', width=2)
             ), row=1, col=1)
-            
+
             fig.add_trace(go.Scatter(
                 x=df_div['report_date_as_yyyy_mm_dd'],
-                y=df_div['noncomm_concentration'],
-                name='Non-Commercial',
+                y=df_div['noncomm_pct_oi'],
+                name=noncomm_label,
                 line=dict(color='blue', width=2)
             ), row=1, col=1)
             
@@ -812,10 +789,10 @@ def create_concentration_divergence_analysis(df, instrument_name, divergence_typ
         
         # Update axes
         if divergence_type.startswith("Category"):
-            fig.update_yaxes(title_text="Concentration Score", row=1, col=1)
+            fig.update_yaxes(title_text="% of Open Interest", row=1, col=1)
         else:
-            fig.update_yaxes(title_text="Concentration %", row=1, col=1)
-        fig.update_yaxes(title_text="Divergence (%)", row=2, col=1)
+            fig.update_yaxes(title_text="% of Open Interest", row=1, col=1)
+        fig.update_yaxes(title_text="Divergence (pp)", row=2, col=1)
         fig.update_yaxes(title_text="Probability (%)", row=3, col=1)
         
         # Configure x-axes
@@ -828,317 +805,6 @@ def create_concentration_divergence_analysis(df, instrument_name, divergence_typ
     except Exception as e:
         st.error(f"Error creating concentration divergence analysis: {str(e)}")
         return None
-
-
-def create_single_component_view(df_hetero, column_name, title, instrument_name, description):
-    """Create a single component view for heterogeneity index"""
-    fig = go.Figure()
-    
-    # Add the component line
-    fig.add_trace(go.Scatter(
-        x=df_hetero['report_date_as_yyyy_mm_dd'],
-        y=df_hetero[column_name],
-        name=title,
-        line=dict(color='darkblue', width=2),
-        fill='tozeroy',
-        fillcolor='rgba(0, 0, 139, 0.1)'
-    ))
-    
-    # Add horizontal reference lines
-    fig.add_hline(y=25, line_dash="dot", line_color="green", opacity=0.5)
-    fig.add_hline(y=50, line_dash="dot", line_color="orange", opacity=0.5)
-    fig.add_hline(y=75, line_dash="dot", line_color="red", opacity=0.5)
-    
-    # Update layout
-    fig.update_layout(
-        title=dict(
-            text=f"{title} - {instrument_name}<br><sub>{description}</sub>",
-            font=dict(size=16),
-            x=0.5,
-            xanchor='center'
-        ),
-        height=500,
-        showlegend=False,
-        hovermode='x unified',
-        yaxis=dict(
-            title=title,
-            range=[0, 100],
-            tickvals=[0, 25, 50, 75, 100],
-            ticktext=['0', '25 (Low)', '50 (Moderate)', '75 (High)', '100']
-        ),
-        xaxis=dict(title='Date'),
-        margin=dict(l=60, r=40, t=80, b=60)
-    )
-    
-    return fig
-
-
-def create_heterogeneity_index(df, instrument_name, component_view="Full Index"):
-    """Create heterogeneity index analysis - EXACT from legacyF.py"""
-    try:
-        # Calculate heterogeneity components
-        df_hetero = df.copy()
-        
-        # Component 1: Directional Opposition (25%)
-        # Measures divergence in positioning relative to each group's own history
-        window = 52  # 52-week lookback
-        min_periods = 26  # Need at least 6 months of data
-        
-        # Calculate net positioning for each group
-        df_hetero['comm_net'] = df_hetero['comm_positions_long_all'] - df_hetero['comm_positions_short_all']
-        df_hetero['noncomm_net'] = df_hetero['noncomm_positions_long_all'] - df_hetero['noncomm_positions_short_all']
-        
-        # Calculate z-scores of net positions
-        df_hetero['comm_net_mean'] = df_hetero['comm_net'].rolling(window, min_periods=min_periods).mean()
-        df_hetero['comm_net_std'] = df_hetero['comm_net'].rolling(window, min_periods=min_periods).std()
-        df_hetero['comm_net_zscore'] = np.where(
-            df_hetero['comm_net_std'] > 0,
-            (df_hetero['comm_net'] - df_hetero['comm_net_mean']) / df_hetero['comm_net_std'],
-            0
-        )
-        
-        df_hetero['noncomm_net_mean'] = df_hetero['noncomm_net'].rolling(window, min_periods=min_periods).mean()
-        df_hetero['noncomm_net_std'] = df_hetero['noncomm_net'].rolling(window, min_periods=min_periods).std()
-        df_hetero['noncomm_net_zscore'] = np.where(
-            df_hetero['noncomm_net_std'] > 0,
-            (df_hetero['noncomm_net'] - df_hetero['noncomm_net_mean']) / df_hetero['noncomm_net_std'],
-            0
-        )
-        
-        # Divergence = how differently positioned they are
-        df_hetero['directional_divergence_raw'] = abs(df_hetero['comm_net_zscore'] - df_hetero['noncomm_net_zscore'])
-        
-        # Direct scaling: z-score diff of 0→0, 4→100 (capped at 100)
-        df_hetero['directional_opposition_scaled'] = np.minimum(df_hetero['directional_divergence_raw'] * 25, 100)
-        
-        # Scale to component (0-25)
-        df_hetero['directional_opposition'] = df_hetero['directional_opposition_scaled'] * 0.25
-        
-        # Component 2: Flow Intensity/Urgency (25%)
-        # Measures unusual urgency in positioning changes
-        flow_window = 52  # 52-week for flow statistics
-        flow_min_periods = 26
-        
-        # Calculate week-over-week changes in net positions
-        df_hetero['comm_flow'] = df_hetero['comm_net'].diff()
-        df_hetero['noncomm_flow'] = df_hetero['noncomm_net'].diff()
-        
-        # Calculate z-scores of flows (measure of urgency)
-        df_hetero['comm_flow_mean'] = df_hetero['comm_flow'].rolling(flow_window, min_periods=flow_min_periods).mean()
-        df_hetero['comm_flow_std'] = df_hetero['comm_flow'].rolling(flow_window, min_periods=flow_min_periods).std()
-        df_hetero['comm_flow_zscore'] = np.where(
-            df_hetero['comm_flow_std'] > 0,
-            (df_hetero['comm_flow'] - df_hetero['comm_flow_mean']) / df_hetero['comm_flow_std'],
-            0
-        )
-        
-        df_hetero['noncomm_flow_mean'] = df_hetero['noncomm_flow'].rolling(flow_window, min_periods=flow_min_periods).mean()
-        df_hetero['noncomm_flow_std'] = df_hetero['noncomm_flow'].rolling(flow_window, min_periods=flow_min_periods).std()
-        df_hetero['noncomm_flow_zscore'] = np.where(
-            df_hetero['noncomm_flow_std'] > 0,
-            (df_hetero['noncomm_flow'] - df_hetero['noncomm_flow_mean']) / df_hetero['noncomm_flow_std'],
-            0
-        )
-        
-        # Flow intensity divergence = difference in flow urgency
-        df_hetero['flow_intensity_raw'] = abs(df_hetero['comm_flow_zscore'] - df_hetero['noncomm_flow_zscore'])
-        
-        # Direct scaling: z-score diff of 0→0, 4→100 (capped at 100)
-        df_hetero['flow_intensity_scaled'] = np.minimum(df_hetero['flow_intensity_raw'] * 25, 100)
-        
-        # Scale to component weight (0-25)
-        df_hetero['flow_divergence'] = df_hetero['flow_intensity_scaled'] * 0.25
-        
-        # Component 3: Percentile Distance Approach (25%)
-        # Measures divergence between commercial and non-commercial average position sizes using percentile rankings
-        
-        # Calculate average positions for each group
-        df_hetero['nc_long_avg'] = df_hetero['noncomm_positions_long_all'] / df_hetero['traders_noncomm_long_all']
-        df_hetero['c_long_avg'] = df_hetero['comm_positions_long_all'] / df_hetero['traders_comm_long_all']
-        
-        # Replace inf/nan with 0
-        df_hetero['nc_long_avg'] = df_hetero['nc_long_avg'].replace([np.inf, -np.inf], np.nan).fillna(0)
-        df_hetero['c_long_avg'] = df_hetero['c_long_avg'].replace([np.inf, -np.inf], np.nan).fillna(0)
-        
-        # Calculate percentile rank for each group's average position (52-week history)
-        df_hetero['nc_long_avg_percentile'] = df_hetero['nc_long_avg'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
-        df_hetero['c_long_avg_percentile'] = df_hetero['c_long_avg'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
-        
-        # Absolute distance between percentiles
-        df_hetero['percentile_distance'] = abs(df_hetero['nc_long_avg_percentile'] - df_hetero['c_long_avg_percentile'])
-        
-        # Direct scaling: already 0-100, just scale to component weight (0-25)
-        df_hetero['commitment_divergence'] = df_hetero['percentile_distance'] * 0.25
-        
-        # Component 4: Cross-Category Positioning Divergence (25%)
-        # Measures when commercials and non-commercials are on opposite sides
-        
-        # Calculate % of OI for each category (using API values if available)
-        if 'pct_of_oi_noncomm_long_all' in df_hetero.columns:
-            df_hetero['pct_oi_nc_long'] = df_hetero['pct_of_oi_noncomm_long_all']
-            df_hetero['pct_oi_nc_short'] = df_hetero['pct_of_oi_noncomm_short_all']
-            df_hetero['pct_oi_c_long'] = df_hetero['pct_of_oi_comm_long_all']
-            df_hetero['pct_oi_c_short'] = df_hetero['pct_of_oi_comm_short_all']
-        else:
-            # Calculate manually if API values not available
-            df_hetero['pct_oi_nc_long'] = (df_hetero['noncomm_positions_long_all'] / df_hetero['open_interest_all']) * 100
-            df_hetero['pct_oi_nc_short'] = (df_hetero['noncomm_positions_short_all'] / df_hetero['open_interest_all']) * 100
-            df_hetero['pct_oi_c_long'] = (df_hetero['comm_positions_long_all'] / df_hetero['open_interest_all']) * 100
-            df_hetero['pct_oi_c_short'] = (df_hetero['comm_positions_short_all'] / df_hetero['open_interest_all']) * 100
-        
-        # Calculate cross-category averages
-        # When NC long and C short align (same direction)
-        df_hetero['aligned_nc_long_c_short'] = (df_hetero['pct_oi_nc_long'] + df_hetero['pct_oi_c_short']) / 2
-        
-        # When NC short and C long align (opposite direction)
-        df_hetero['aligned_nc_short_c_long'] = (df_hetero['pct_oi_nc_short'] + df_hetero['pct_oi_c_long']) / 2
-        
-        # Cross-category divergence: difference between the two alignments
-        df_hetero['cross_category_divergence_raw'] = abs(
-            df_hetero['aligned_nc_long_c_short'] - df_hetero['aligned_nc_short_c_long']
-        )
-        
-        # Direct scaling: 0→0, 50%→100 (typical max around 40-50%)
-        df_hetero['cross_category_scaled'] = np.minimum(df_hetero['cross_category_divergence_raw'] * 2, 100)
-        
-        # Scale to component weight (0-25)
-        df_hetero['directional_bias_divergence'] = df_hetero['cross_category_scaled'] * 0.25
-        
-        # Combine all components into final index
-        df_hetero['heterogeneity_index'] = (
-            df_hetero['directional_opposition'] +
-            df_hetero['flow_divergence'] +
-            df_hetero['commitment_divergence'] +
-            df_hetero['directional_bias_divergence']
-        ).clip(0, 100)
-        
-        # Handle component view selection
-        if component_view == "Directional Opposition":
-            return create_single_component_view(df_hetero, 'directional_opposition_scaled', 
-                                              'Directional Opposition (0-100)', instrument_name,
-                                              "Z-score divergence in net positions")
-        elif component_view == "Flow Intensity":
-            return create_single_component_view(df_hetero, 'flow_intensity_scaled', 
-                                              'Flow Intensity (0-100)', instrument_name,
-                                              "Z-score divergence in position flows")
-        elif component_view == "Percentile Distance":
-            return create_single_component_view(df_hetero, 'percentile_distance', 
-                                              'Percentile Distance (0-100)', instrument_name,
-                                              "Distance between average position percentiles")
-        elif component_view == "Cross-Category Positioning":
-            return create_single_component_view(df_hetero, 'cross_category_scaled', 
-                                              'Cross-Category Positioning (0-100)', instrument_name,
-                                              "Opposing market positions between groups")
-        
-        # Default: Create full visualization
-        fig = make_subplots(
-            rows=3, cols=1,
-            shared_xaxes=True,
-            vertical_spacing=0.05,
-            row_heights=[0.5, 0.3, 0.2],
-            subplot_titles=[
-                'Heterogeneity Index (0-100)',
-                'Component Breakdown',
-                'Regime Classification'
-            ]
-        )
-        
-        # 1. Main Heterogeneity Index
-        fig.add_trace(
-            go.Scatter(
-                x=df_hetero['report_date_as_yyyy_mm_dd'],
-                y=df_hetero['heterogeneity_index'],
-                name='Heterogeneity Index',
-                line=dict(color='black', width=2),
-                showlegend=False
-            ),
-            row=1, col=1
-        )
-        
-        # Add regime zones with subtle colors
-        fig.add_hrect(y0=0, y1=25, fillcolor="lightgreen", opacity=0.3, row=1, col=1, line_width=0)
-        fig.add_hrect(y0=25, y1=50, fillcolor="lightyellow", opacity=0.3, row=1, col=1, line_width=0)
-        fig.add_hrect(y0=50, y1=75, fillcolor="lightcoral", opacity=0.2, row=1, col=1, line_width=0)
-        fig.add_hrect(y0=75, y1=100, fillcolor="lightpink", opacity=0.3, row=1, col=1, line_width=0)
-        
-        # 2. Component Breakdown
-        components = ['directional_opposition', 'flow_divergence', 'commitment_divergence', 'directional_bias_divergence']
-        colors = ['red', 'blue', 'green', 'orange']
-        labels = ['Directional Opposition (25%)', 'Flow Intensity (25%)', 'Percentile Distance (25%)', 'Cross-Category Positioning (25%)']
-        
-        for comp, color, label in zip(components, colors, labels):
-            fig.add_trace(
-                go.Scatter(
-                    x=df_hetero['report_date_as_yyyy_mm_dd'],
-                    y=df_hetero[comp],
-                    name=label,
-                    stackgroup='components',
-                    fillcolor=color,
-                    line=dict(color=color, width=0.5)
-                ),
-                row=2, col=1
-            )
-        
-        # 3. Regime Classification
-        df_hetero['regime'] = pd.cut(
-            df_hetero['heterogeneity_index'],
-            bins=[0, 25, 50, 75, 100],
-            labels=['Low Divergence', 'Moderate', 'High Divergence', 'Extreme']
-        )
-        
-        # Create regime indicator
-        regime_colors = {
-            'Low Divergence': 'green',
-            'Moderate': 'yellow',
-            'High Divergence': 'orange',
-            'Extreme': 'red'
-        }
-        
-        for regime, color in regime_colors.items():
-            mask = df_hetero['regime'] == regime
-            fig.add_trace(
-                go.Scatter(
-                    x=df_hetero.loc[mask, 'report_date_as_yyyy_mm_dd'],
-                    y=[1] * mask.sum(),
-                    mode='markers',
-                    marker=dict(color=color, size=10, symbol='square'),
-                    name=regime,
-                    showlegend=True
-                ),
-                row=3, col=1
-            )
-        
-        # Update layout
-        fig.update_yaxes(title_text="Index Value", range=[0, 100], row=1, col=1, 
-                        showgrid=True, gridwidth=1, gridcolor='lightgray')
-        fig.update_yaxes(title_text="Contribution", range=[0, 100], row=2, col=1)
-        fig.update_yaxes(title_text="Regime", range=[0, 2], row=3, col=1, showticklabels=False)
-        
-        fig.update_xaxes(title_text="Date", row=3, col=1)
-        
-        fig.update_layout(
-            title=dict(
-                text=f"Market Heterogeneity Analysis - {instrument_name}",
-                font=dict(size=16),
-                x=0.5,
-                xanchor='center'
-            ),
-            height=900,
-            showlegend=True,
-            hovermode='x unified',
-            legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5),
-            margin=dict(l=60, r=40, t=60, b=60),  # Tighter margins for full width
-            autosize=True
-        )
-        
-        # Remove all annotations to keep chart clean
-        
-        return fig
-        
-    except Exception as e:
-        st.error(f"Error creating heterogeneity index: {str(e)}")
-        return None
-
 
 def create_spreading_activity_analysis(df, instrument_name):
     """Create spreading activity analysis"""

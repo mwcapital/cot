@@ -14,6 +14,7 @@ from futures_price_viewer_lwc import get_category_from_futures_symbol, get_event
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy import stats
+from charts.market_microstructure import create_market_microstructure_analysis
 
 def display_time_series_chart(df, instrument_name):
     """Display time series analysis with futures price/OI base layer"""
@@ -419,6 +420,11 @@ def display_cot_time_series_with_price(df, instrument_name):
         curr_total = plot_df[plot_df['Period'] == 'Current']['Trader Count'].sum()
         total_trader_change = int(curr_total - prev_total)
         st.metric("Total Trader Change", f"{total_trader_change:+d}")
+
+    # Market Microstructure Analysis at the bottom
+    st.markdown("---")
+    st.markdown("#### Market Microstructure Analysis")
+    create_market_microstructure_analysis(df, instrument_name)
 
 def display_synchronized_charts(df, instrument_name, price_adjustment, selected_columns, selected_formulas=None):
     """Display price chart with synchronized COT data subplots"""

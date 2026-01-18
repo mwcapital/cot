@@ -287,6 +287,18 @@ mapping_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
 - Participation
 - Strength Matrix
 
+### Single Instrument Analysis - Trader Participation Analysis Tab:
+- **Average Position Per Trader** - Concentration metrics using Net positions (4 or fewer traders)
+- **Concentration Momentum** - Momentum analysis of concentration metrics
+- **Participant Behavior Clusters** - Cluster analysis of trader behavior
+- **Market Microstructure Analysis** - Detailed market structure metrics
+- **Regime Detection** - Market regime classification based on positioning extremes and flow intensity
+
+### Deprecated/Stashed Ideas (`old_ideas_stash/`):
+- **Heterogeneity Index** - Attempted to measure commercial vs non-commercial disagreement
+  - Removed due to questionable math in Component 3 (percentile subtraction)
+  - Code preserved in `old_ideas_stash/heterogeneity_index_analysis.py`
+
 ## Common Tasks
 
 ### Adding a new chart to main dashboard:
@@ -315,7 +327,28 @@ mapping_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
 
 ## Recent Important Changes
 
-### 2026-01 Changes:
+### 2026-01-10 Changes:
+1. **Renamed "Participation Density Dashboard" to "Average Position Per Trader"**:
+   - More accurate description of what the analysis shows
+   - Consistent naming throughout the UI
+
+2. **Removed Concentration Divergence analysis**:
+   - Was dividing position share by trader share which lacked clear economic meaning
+   - API already provides % of OI directly - no need for complex calculations
+   - Simplified the Trader Participation Analysis tab
+
+3. **Removed Heterogeneity & Regime Analysis**:
+   - Component 3 (Percentile Distance) was mathematically questionable
+   - Only looked at LONG positions, ignored short side
+   - Index didn't reliably correlate with price reversals
+   - Code stashed in `old_ideas_stash/` for potential future improvements
+
+4. **Created `old_ideas_stash/` folder**:
+   - Gitignored folder for storing deprecated analysis ideas
+   - Preserves code for potential future revisiting
+   - Contains documentation of why ideas were removed
+
+### 2026-01 Changes (earlier):
 1. **Instrument stitching for extended history**:
    - Added stitching for Gasoline RBOB, Copper, and all Index instruments
    - Russell 2000 stitches ICE + CME data (contract moved exchanges in 2017)
@@ -325,11 +358,7 @@ mapping_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
    - Overview table now shows 2Y percentiles instead of YTD
    - More consistent with other 2-year lookback calculations
 
-3. **Time range controls for Concentration Divergence**:
-   - Added 1Y/2Y/5Y/10Y/All buttons
-   - Distribution chart title shows selected range
-
-4. **Friendly display names for Index instruments**:
+3. **Friendly display names for Index instruments**:
    - Uses JSON mapping instead of splitting on "-"
    - Fixes "E, E, E" display issue for E-MINI instruments
 

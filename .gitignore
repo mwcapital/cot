@@ -31,6 +31,7 @@ Thumbs.db
 *.backup
 old/
 legacy/
+old_ideas_stash/
 
 # Data files (if sensitive)
 # data/*.csv

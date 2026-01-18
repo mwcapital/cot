@@ -9,7 +9,7 @@ import numpy as np
 from config import PARTICIPATION_CHART_HEIGHT, CONCENTRATION_COLORS
 
 
-def create_participation_density_dashboard(df, instrument_name, percentile_data=None, concentration_type='Net', price_df=None):
+def create_participation_density_dashboard(df, instrument_name, percentile_data=None, concentration_type='Top 4 Net', price_df=None):
     """Create avg position per trader dashboard with concentration analysis and price chart"""
     try:
         # Copy and prepare data
@@ -19,11 +19,23 @@ def create_participation_density_dashboard(df, instrument_name, percentile_data=
         # Calculate average position per trader
         df_plot['avg_pos_per_trader'] = df_plot['open_interest_all'] / df_plot['traders_tot_all']
 
-        # Calculate concentration
-        if 'conc_net_le_4_tdr_long_all' in df_plot.columns and 'conc_net_le_4_tdr_short_all' in df_plot.columns:
-            df_plot['concentration_4'] = (df_plot['conc_net_le_4_tdr_long_all'] + df_plot['conc_net_le_4_tdr_short_all']) / 2
+        # Map concentration type to columns
+        concentration_map = {
+            "Top 4 Gross": ("conc_gross_le_4_tdr_long", "conc_gross_le_4_tdr_short"),
+            "Top 4 Net": ("conc_net_le_4_tdr_long_all", "conc_net_le_4_tdr_short_all"),
+            "Top 8 Gross": ("conc_gross_le_8_tdr_long", "conc_gross_le_8_tdr_short"),
+            "Top 8 Net": ("conc_net_le_8_tdr_long_all", "conc_net_le_8_tdr_short_all")
+        }
+
+        long_col, short_col = concentration_map.get(concentration_type, ("conc_net_le_4_tdr_long_all", "conc_net_le_4_tdr_short_all"))
+
+        # Calculate concentration using selected columns
+        if long_col in df_plot.columns and short_col in df_plot.columns:
+            df_plot['concentration_long'] = df_plot[long_col]
+            df_plot['concentration_short'] = df_plot[short_col]
         else:
-            df_plot['concentration_4'] = 20  # Default value
+            df_plot['concentration_long'] = 20  # Default value
+            df_plot['concentration_short'] = 20
 
         # Handle percentile data
         if percentile_data is None:
@@ -43,7 +55,7 @@ def create_participation_density_dashboard(df, instrument_name, percentile_data=
             subplot_titles=(
                 'Futures Price',
                 'Average Position per Trader',
-                'Top 4 Traders Net Concentration'
+                f'{concentration_type} Concentration'
             ),
             horizontal_spacing=0.01
         )
@@ -94,31 +106,29 @@ def create_participation_density_dashboard(df, instrument_name, percentile_data=
         )
 
         # Chart 2: Separate Long and Short Concentration
-        # Add long concentration line (red)
-        if 'conc_net_le_4_tdr_long_all' in df_plot.columns:
-            fig.add_trace(
-                go.Scatter(
-                    x=df_plot['report_date_as_yyyy_mm_dd'],
-                    y=df_plot['conc_net_le_4_tdr_long_all'],
-                    name='4 or Less Long',
-                    line=dict(color='red', width=2),
-                    mode='lines'
-                ),
-                row=3, col=1
-            )
+        # Add long concentration line (green)
+        fig.add_trace(
+            go.Scatter(
+                x=df_plot['report_date_as_yyyy_mm_dd'],
+                y=df_plot['concentration_long'],
+                name='Long',
+                line=dict(color='green', width=2),
+                mode='lines'
+            ),
+            row=3, col=1
+        )
 
-        # Add short concentration line (orange)
-        if 'conc_net_le_4_tdr_short_all' in df_plot.columns:
-            fig.add_trace(
-                go.Scatter(
-                    x=df_plot['report_date_as_yyyy_mm_dd'],
-                    y=df_plot['conc_net_le_4_tdr_short_all'],
-                    name='4 or Less Short',
-                    line=dict(color='orange', width=2),
-                    mode='lines'
-                ),
-                row=3, col=1
-            )
+        # Add short concentration line (red)
+        fig.add_trace(
+            go.Scatter(
+                x=df_plot['report_date_as_yyyy_mm_dd'],
+                y=df_plot['concentration_short'],
+                name='Short',
+                line=dict(color='red', width=2),
+                mode='lines'
+            ),
+            row=3, col=1
+        )
 
         # Add reference lines for concentration
         fig.add_hline(y=15, row=3, col=1, line_dash="dash", line_color="green", annotation_text="Low")
@@ -163,7 +173,7 @@ def create_participation_density_dashboard(df, instrument_name, percentile_data=
         return fig
         
     except Exception as e:
-        st.error(f"Error creating participation density dashboard: {str(e)}")
+        st.error(f"Error creating average position per trader chart: {str(e)}")
         return None
 
 

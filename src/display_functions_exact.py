@@ -18,14 +18,9 @@ from charts.trader_participation_analysis import (
     create_concentration_risk_heatmap,
     create_market_structure_quadrant,
     create_market_structure_timeline,
-    create_concentration_divergence_analysis,
-    create_heterogeneity_index,
     create_spreading_activity_analysis
 )
-from charts.concentration_momentum import create_concentration_momentum_analysis
 from charts.participant_behavior_clusters import create_participant_behavior_clusters
-from charts.regime_detection import create_regime_detection_dashboard
-from charts.market_microstructure import create_market_microstructure_analysis
 from futures_price_fetcher import FuturesPriceFetcher
 from futures_price_viewer_lwc import display_futures_price_chart
 
@@ -219,7 +214,7 @@ def create_participation_density_dashboard_original(df, instrument_name, percent
         return fig
         
     except Exception as e:
-        st.error(f"Error creating participation density dashboard: {str(e)}")
+        st.error(f"Error creating average position per trader chart: {str(e)}")
         return None
 
 
@@ -941,15 +936,22 @@ def display_trader_participation_chart(df, instrument_name):
     # Sub-analysis selection
     analysis_type = st.radio(
         "Select analysis type:",
-        ["Participation Density Dashboard", "Concentration Divergence", "Heterogeneity & Regime Analysis", 
-         "Concentration Momentum", "Participant Behavior Clusters", "Market Microstructure Analysis"],
+        ["Average Position Per Trader", "Participant Behavior Clusters", "Regime Detection"],
         key="trader_analysis_type",
         horizontal=True
     )
-    
-    if analysis_type == "Participation Density Dashboard":
+
+    if analysis_type == "Average Position Per Trader":
         st.markdown("#### 📊 Average Position per Trader Analysis")
-        st.markdown('<p style="color: #808080; font-size: 13px;">Concentration metrics use Net positions (4 or fewer traders). Percentiles calculated using 2-year rolling lookback. Price chart uses Non-Adjusted method. Bar colors: Green (below 33rd percentile), Yellow (33rd-67th percentile), Red (above 67th percentile).</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color: #808080; font-size: 13px;">Percentiles calculated using 2-year rolling lookback. Price chart uses Non-Adjusted method. Bar colors: Green (below 33rd percentile), Yellow (33rd-67th percentile), Red (above 67th percentile).</p>', unsafe_allow_html=True)
+
+        # Concentration type selector
+        concentration_type = st.selectbox(
+            "Concentration Metric:",
+            ["Top 4 Gross", "Top 4 Net", "Top 8 Gross", "Top 8 Net"],
+            key="avg_pos_concentration_type",
+            help="Select which concentration metric to display in the bottom chart"
+        )
 
         # Fixed price adjustment to Non-Adjusted
         price_adjustment_code = "NON"
@@ -1022,8 +1024,7 @@ def display_trader_participation_chart(df, instrument_name):
 
             st.markdown("---")
 
-            # Fixed settings: always use Net concentration with 2-year lookback
-            concentration_type = 'Net'
+            # Fixed settings: 2-year lookback
             lookback_days = 730  # 2 years
 
             # Filter data based on selected time range
@@ -1230,636 +1231,192 @@ def display_trader_participation_chart(df, instrument_name):
                 with col4:
                     ratio = latest['traders_noncomm_spread_all'] / (latest['traders_noncomm_long_all'] + latest['traders_noncomm_short_all'])
                     st.metric("Current Ratio", f"{ratio:.3f}")
-    
-    
-    elif analysis_type == "Concentration Divergence":
-        st.markdown("#### 🔄 Concentration Divergence Analysis")
-        
-        # Explanation
-        with st.expander("📖 Understanding Concentration Divergence", expanded=False):
-            st.markdown("""
-            **What is Concentration Divergence?**
-            
-            Measures the difference in market concentration between different groups:
-            - **Category Divergence**: Commercial vs Non-Commercial concentration
-            - **Directional Divergence**: Long vs Short side concentration
-            
-            **Category Divergence Methodology (Commercial vs Non-Commercial):**
-            
-            For Long Positions example:
-            1. **Position Shares** (% of total reportable long positions):
-               - Commercial Share = Commercial Long Positions ÷ Total Reportable Long × 100
-               - Non-Commercial Share = (Non-Comm Long + Spread) ÷ Total Reportable Long × 100
-            
-            2. **Trader Shares** (% of total reportable long traders):
-               - Commercial Trader Share = Commercial Long Traders ÷ Total Reportable Long Traders × 100
-               - Non-Commercial Trader Share = (Non-Comm Long + Spread Traders) ÷ Total Reportable Long Traders × 100
-            
-            3. **Concentration Scores** (position dominance relative to participation):
-               - Commercial Concentration = Commercial Position Share ÷ Commercial Trader Share
-               - Non-Commercial Concentration = Non-Commercial Position Share ÷ Non-Commercial Trader Share
-            
-            4. **Divergence Score** = (Non-Commercial Concentration - Commercial Concentration) × 10
-            
-            **Intuition & Rationale:**
-            - **Concentration > 1.0**: Group holds MORE than their "fair share" - average trader is larger than typical
-            - **Concentration < 1.0**: Group holds LESS than their "fair share" - average trader is smaller than typical
-            - **Positive Divergence**: Non-commercials are more concentrated (fewer large traders dominate)
-            - **Negative Divergence**: Commercials are more concentrated (fewer large hedgers dominate)
-            
-            **Example Interpretation:**
-            If commercials are 20% of traders but hold 40% of positions → Concentration = 2.0
-            If non-commercials are 80% of traders but hold 60% of positions → Concentration = 0.75
-            Divergence = (0.75 - 2.0) × 10 = -12.5 (commercials more concentrated)
-            
-            **Why This Matters:**
-            - Identifies which group has larger average position sizes
-            - Reveals market structure imbalances
-            - High concentration in one group may indicate conviction or risk
-            - Changes in divergence can signal shifting market dynamics
-            
-            **Note on Data:**
-            We use reportable positions/traders only (excluding non-reportable) for cleaner institutional analysis.
-            Spread positions are grouped with non-commercial as they represent speculative strategies.
-            """)
-        
-        # Configuration - only Category Divergence
-        divergence_type = "Category Divergence (Commercial vs Non-Commercial)"
 
-        conc_side = st.radio(
-            "Position Side:",
-            ["Long Positions", "Short Positions"],
-            horizontal=True
+    elif analysis_type == "Participant Behavior Clusters":
+        st.markdown("#### 🎯 Participant Behavior Clusters")
+        create_participant_behavior_clusters(df, instrument_name)
+
+    elif analysis_type == "Regime Detection":
+        st.markdown("#### 📊 Market Regime Detection")
+        st.markdown('<p style="color: #808080; font-size: 13px;">Detects market regimes based on positioning extremes, concentration levels, and flow intensity. Uses 52-week percentile rankings to classify current market state.</p>', unsafe_allow_html=True)
+
+        # Calculate regime metrics directly here
+        df_regime = df.copy()
+        window = 52
+        min_periods = 26
+
+        # Step 1: Calculate all percentile metrics
+        df_regime['long_conc_pct'] = df_regime['conc_gross_le_4_tdr_long'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+        df_regime['short_conc_pct'] = df_regime['conc_gross_le_4_tdr_short'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+
+        # Net positions
+        df_regime['comm_net'] = df_regime['comm_positions_long_all'] - df_regime['comm_positions_short_all']
+        df_regime['noncomm_net'] = df_regime['noncomm_positions_long_all'] - df_regime['noncomm_positions_short_all']
+        df_regime['comm_net_pct'] = df_regime['comm_net'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+        df_regime['noncomm_net_pct'] = df_regime['noncomm_net'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+
+        # Flow intensity
+        df_regime['comm_flow'] = df_regime['comm_net'].diff()
+        df_regime['noncomm_flow'] = df_regime['noncomm_net'].diff()
+        df_regime['flow_intensity'] = abs(df_regime['comm_flow']) + abs(df_regime['noncomm_flow'])
+        df_regime['flow_pct'] = df_regime['flow_intensity'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+
+        # Trader participation
+        df_regime['trader_total_pct'] = df_regime['traders_tot_all'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+
+        # Step 2: Calculate regime extremity score
+        def distance_from_center(pct):
+            return abs(pct - 50) * 2
+
+        df_regime['regime_extremity'] = df_regime.apply(lambda row:
+            max(distance_from_center(row['long_conc_pct']),
+                distance_from_center(row['short_conc_pct'])) * 0.25 +
+            max(distance_from_center(row['comm_net_pct']),
+                distance_from_center(row['noncomm_net_pct'])) * 0.25 +
+            row['flow_pct'] * 0.25 +
+            50 * 0.25  # Placeholder for heterogeneity
+        , axis=1)
+
+        # Step 3: Detect regime
+        def detect_regime(row):
+            EXTREME_HIGH = 85
+            EXTREME_LOW = 15
+            MODERATE_HIGH = 70
+            MODERATE_LOW = 30
+
+            if pd.isna(row['long_conc_pct']):
+                return "Insufficient Data", "gray"
+
+            # Check patterns
+            if row['long_conc_pct'] > EXTREME_HIGH and row['short_conc_pct'] < MODERATE_LOW:
+                return "Long Concentration Extreme", "red"
+            elif row['short_conc_pct'] > EXTREME_HIGH and row['long_conc_pct'] < MODERATE_LOW:
+                return "Short Concentration Extreme", "red"
+            elif row['long_conc_pct'] > EXTREME_HIGH and row['short_conc_pct'] > EXTREME_HIGH:
+                return "Bilateral Concentration", "orange"
+            elif row['noncomm_net_pct'] > EXTREME_HIGH and row['comm_net_pct'] < EXTREME_LOW:
+                return "Speculative Long Extreme", "red"
+            elif row['noncomm_net_pct'] < EXTREME_LOW and row['comm_net_pct'] > EXTREME_HIGH:
+                return "Commercial Long Extreme", "orange"
+            elif row['flow_pct'] > EXTREME_HIGH:
+                return "High Flow Volatility", "yellow"
+            elif row['regime_extremity'] < 40:
+                return "Balanced Market", "green"
+            else:
+                return "Transitional", "gray"
+
+        df_regime[['regime', 'regime_color']] = df_regime.apply(
+            lambda row: pd.Series(detect_regime(row)), axis=1
         )
 
-        # Add time range selector buttons
-        st.markdown("#### Select Time Range")
-        col_buttons = st.columns(5)
+        # Create visualization
+        latest = df_regime.iloc[-1]
 
-        # Initialize session state for range selection if not exists
-        if 'conc_div_range' not in st.session_state:
-            st.session_state.conc_div_range = '2Y'  # Default to 2Y
+        # Main metrics display
+        col1, col2, col3 = st.columns([2, 3, 2])
 
-        # Range buttons with highlighting for selected range
-        with col_buttons[0]:
-            if st.button("1Y", key="conc_div_range_1y", use_container_width=True,
-                        type="primary" if st.session_state.conc_div_range == '1Y' else "secondary"):
-                st.session_state.conc_div_range = '1Y'
-                st.rerun()
-        with col_buttons[1]:
-            if st.button("2Y", key="conc_div_range_2y", use_container_width=True,
-                        type="primary" if st.session_state.conc_div_range == '2Y' else "secondary"):
-                st.session_state.conc_div_range = '2Y'
-                st.rerun()
-        with col_buttons[2]:
-            if st.button("5Y", key="conc_div_range_5y", use_container_width=True,
-                        type="primary" if st.session_state.conc_div_range == '5Y' else "secondary"):
-                st.session_state.conc_div_range = '5Y'
-                st.rerun()
-        with col_buttons[3]:
-            if st.button("10Y", key="conc_div_range_10y", use_container_width=True,
-                        type="primary" if st.session_state.conc_div_range == '10Y' else "secondary"):
-                st.session_state.conc_div_range = '10Y'
-                st.rerun()
-        with col_buttons[4]:
-            if st.button("All", key="conc_div_range_all", use_container_width=True,
-                        type="primary" if st.session_state.conc_div_range == 'All' else "secondary"):
-                st.session_state.conc_div_range = 'All'
-                st.rerun()
-
-        st.markdown("---")
-
-        # Filter data based on selected time range
-        df_sorted = df.copy()
-        df_sorted = df_sorted.sort_values('report_date_as_yyyy_mm_dd')
-        df_sorted['report_date_as_yyyy_mm_dd'] = pd.to_datetime(df_sorted['report_date_as_yyyy_mm_dd'])
-        latest_date = df_sorted['report_date_as_yyyy_mm_dd'].max()
-
-        # Apply filtering based on selected range
-        if st.session_state.conc_div_range == '1Y':
-            start_date = latest_date - pd.DateOffset(years=1)
-            df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
-            range_label = "1-year"
-        elif st.session_state.conc_div_range == '2Y':
-            start_date = latest_date - pd.DateOffset(years=2)
-            df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
-            range_label = "2-year"
-        elif st.session_state.conc_div_range == '5Y':
-            start_date = latest_date - pd.DateOffset(years=5)
-            df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
-            range_label = "5-year"
-        elif st.session_state.conc_div_range == '10Y':
-            start_date = latest_date - pd.DateOffset(years=10)
-            df_filtered = df_sorted[df_sorted['report_date_as_yyyy_mm_dd'] >= start_date].copy()
-            range_label = "10-year"
-        else:  # 'All'
-            df_filtered = df_sorted.copy()
-            range_label = "all-time"
-
-        df_filtered = df_filtered.reset_index(drop=True)
-
-        div_fig = create_concentration_divergence_analysis(df_filtered, instrument_name, divergence_type, conc_side, range_label)
-        if div_fig:
-            st.plotly_chart(div_fig, use_container_width=True)
-    
-    elif analysis_type == "Heterogeneity & Regime Analysis":
-        st.markdown("#### 🔀 Market Heterogeneity & Regime Analysis")
-        
-        # Create tabs for the two analyses
-        tab1, tab2 = st.tabs(["Heterogeneity", "Regime Detection"])
-        
-        with tab1:
-            # Explanation
-            with st.expander("📖 Understanding Heterogeneity Index - Complete Guide", expanded=False):
-                st.markdown("""
-            ## **What is the Heterogeneity Index?**
-            
-            A composite measure (0-100) that quantifies market disagreement between commercial hedgers and non-commercial speculators across four distinct dimensions. Higher values indicate greater divergence in behavior, positioning, and market views between these two key groups.
-            
-            ## **Why This Matters**
-            
-            When commercials and non-commercials strongly disagree:
-            - **Market turning points** often occur as one group is typically right
-            - **Volatility increases** due to opposing forces
-            - **Trend changes** become more likely as positions unwind
-            - **Risk/reward improves** for following the historically correct group
-            
-            ---
-            
-            ## **Component 1: Directional Opposition (0-25 points)**
-            
-            ### What It Measures
-            Whether groups are at different extremes in their NET positioning relative to their own historical patterns.
-            
-            ### Calculation Details
-            1. **Net Position**: `comm_net = comm_long - comm_short` (same for non-comm)
-            2. **Z-Score**: How many standard deviations from 52-week average
-               - Example: If commercials typically net short -50k but are now -150k, that might be -3 z-score
-            3. **Divergence**: `abs(comm_zscore - noncomm_zscore)`
-            4. **Scaling**: Divergence × 25, capped at 100, then × 0.25
-            
-            ### Rationale & Interpretation
-            - **Why Z-scores?** Normalizes for different typical position sizes between groups
-            - **High values (20-25)**: One group at historical extreme, other is not
-            - **Low values (0-5)**: Both groups similarly positioned vs their history
-            - **Example**: Commercials at -3σ (very bearish) while non-commercials at +2σ (very bullish) = High divergence
-            
-            ### Key Questions Answered
-            - **Q: Why not just use position differences?** A: Groups have different normal ranges
-            - **Q: What if both are extreme but same direction?** A: Low divergence (both at +3σ = similar behavior)
-            
-            ---
-            
-            ## **Component 2: Flow Intensity/Urgency (0-25 points)**
-            
-            ### What It Measures
-            Whether one group is making UNUSUALLY LARGE position changes while the other isn't.
-            
-            ### Calculation Details
-            1. **Weekly Flow**: `comm_flow = this_week_net - last_week_net`
-            2. **Flow Z-Score**: How unusual is this week's change?
-               - Based on 52-week history of flows
-            3. **Divergence**: `abs(comm_flow_zscore - noncomm_flow_zscore)`
-            4. **Scaling**: Same as Component 1
-            
-            ### Rationale & Interpretation
-            - **Why flows matter**: Captures urgency/panic in positioning
-            - **High values (20-25)**: One group scrambling while other is calm
-            - **Low values (0-5)**: Both making normal-sized moves
-            - **Example**: Commercials suddenly cover shorts (z=3) while non-commercials barely change (z=0.2)
-            
-            ### Key Questions Answered
-            - **Q: How is this different from Component 1?** A: Measures rate of change, not levels
-            - **Q: Why use z-scores again?** A: Some weeks naturally have larger flows (expiry, events)
-            
-            ---
-            
-            ## **Component 3: Percentile Distance (0-25 points)**
-            
-            ### What It Measures
-            How far apart the groups are in terms of their average position sizes (concentration).
-            
-            ### Calculation Details
-            1. **Average Position**: `nc_avg = noncomm_long_positions / noncomm_long_traders`
-            2. **Historical Percentile**: Where does today's average rank vs 52-week history?
-               - 95th percentile = larger positions than 95% of past year
-            3. **Distance**: `abs(nc_percentile - comm_percentile)`
-            4. **Scaling**: Distance × 0.25 (already 0-100)
-            
-            ### Rationale & Interpretation
-            - **Why this matters**: Shows position concentration divergence
-            - **High values (20-25)**: One group using huge positions, other using small
-            - **Low values (0-5)**: Both groups have similar position concentrations
-            - **Example**: Non-comm at 90th percentile (huge positions) vs Comm at 20th (small positions)
-            
-            ### Key Questions Answered
-            - **Q: Why only long positions?** A: Simplicity; could extend to include shorts
-            - **Q: What about trader count changes?** A: Normalized by dividing by trader count
-            
-            ---
-            
-            ## **Component 4: Cross-Category Positioning (0-25 points)**
-            
-            ### What It Measures
-            Whether groups are betting AGAINST each other (opposite sides of market).
-            
-            ### Calculation Details
-            1. **Position Shares**: Use % of open interest for each position type
-            2. **Cross-Alignments**:
-               - `NC_long_with_C_short = average(%OI_nc_long, %OI_comm_short)`
-               - `NC_short_with_C_long = average(%OI_nc_short, %OI_comm_long)`
-            3. **Divergence**: `abs(difference between alignments)`
-            4. **Scaling**: Divergence × 2, capped at 100, then × 0.25
-            
-            ### Rationale & Interpretation
-            - **Why this formula?** When groups oppose, one alignment dominates
-            - **High values (20-25)**: Groups on opposite sides (classic disagreement)
-            - **Low values (0-5)**: Groups on same side (both bullish or bearish)
-            - **Example**: NC 35% long + C 30% short vs NC 5% short + C 10% long = Big divergence
-            
-            ### Key Questions Answered
-            - **Q: Why average the cross positions?** A: Captures total "opposition strength"
-            - **Q: What's the maximum possible?** A: About 50% difference (very rare)
-            
-            ---
-            
-            ## **Final Index Interpretation**
-            
-            ### Scale Breakdown
-            - **0-25**: Groups largely agree → Normal market conditions
-            - **25-50**: Some disagreement → Watch for developing divergence
-            - **50-75**: Significant disagreement → Potential turning point
-            - **75-100**: Extreme disagreement → High probability of major move
-            
-            ### Using the Dropdown
-            View individual components to identify:
-            - Which type of divergence is driving the index
-            - Whether it's position levels, flows, concentration, or opposition
-            - Historical context for each component
-            
-            ### Trading Implications
-            - **Rising index**: Increasing disagreement, volatility likely
-            - **Falling index**: Groups aligning, trend continuation likely
-            - **Extreme readings**: Often precede significant reversals
-            - **Component analysis**: Reveals the nature of disagreement
-            
-            ---
-            
-            ## **Real-World Reversal Scenarios**
-            
-            ### Scenario 1: The Unexpected Commercial Buying
-            **Setup**: Prices have been rising steadily, but speculators suddenly stop buying or even start selling, while commercials unexpectedly flip from their typical selling to aggressive buying.
-            
-            **How Our Index Captures This:**
-            - **Component 2 (Flow Intensity)**: Goes to 20-25 as commercials show urgent buying (z=3+) while specs show normal or negative flows
-            - **Component 4 (Cross-Category)**: May decrease as groups start aligning (both becoming bullish)
-            - **Signal**: This contradiction often foreshadows a major reversal - commercials rarely buy into strength unless they expect higher prices
-            
-            ### Scenario 2: The Classic Market Top
-            **Setup**: Managed-money speculators aggressively ramp up long positions while commercials simultaneously increase their short positions to extreme levels.
-            
-            **How Our Index Captures This:**
-            - **Component 1 (Directional Opposition)**: Maximum score (25) as specs hit +3σ bullish while commercials hit -3σ bearish
-            - **Component 2 (Flow Intensity)**: High scores as both groups make urgent moves in opposite directions
-            - **Component 4 (Cross-Category)**: Maximum score as NC long % and Comm short % both spike
-            - **Total Index**: Often 75-100, screaming "reversal ahead!"
-            
-            ### Scenario 3: The Quiet Divergence
-            **Setup**: While prices drift sideways, commercials quietly accumulate longs using larger position sizes, while speculators maintain many small short positions.
-            
-            **How Our Index Captures This:**
-            - **Component 3 (Percentile Distance)**: High score as commercial average positions hit 90th percentile while spec positions stay at 20th percentile
-            - **Component 1**: May be moderate as neither group is at z-score extremes yet
-            - **Signal**: Position concentration divergence often leads price divergence
-            
-            ### Key Insight
-                When the index reads above 75, it's often because one of these classic setups is occurring. The beauty of our multi-component approach is that it captures various forms of disagreement - whether it's urgent flows, extreme positions, concentration differences, or direct opposition. Historical analysis shows these patterns consistently precede major market turns.
-                """)
-            
-            # Add component view selector
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                component_view = st.selectbox(
-                    "View Component:",
-                    ["Full Index", "Directional Opposition", "Flow Intensity", "Percentile Distance", "Cross-Category Positioning"],
-                    index=0,
-                    key="heterogeneity_component_view"
-                )
-            
-            het_fig = create_heterogeneity_index(df, instrument_name, component_view)
-            if het_fig:
-                st.plotly_chart(het_fig, use_container_width=True)
-        
-        with tab2:
-            # Explanation
-            with st.expander("📖 Understanding Regime Detection - Complete Guide", expanded=False):
-                st.markdown("""
-            **What is Regime Detection?**
-            
-            A comprehensive system that identifies distinct market states by analyzing extreme readings across seven key dimensions of trader behavior. This helps identify when market conditions deviate significantly from historical norms.
-            
-            **Detailed Methodology:**
-            
-            **Step 1: Calculate Percentile Rankings (52-week rolling window)**
-            - Each metric is ranked against its own 52-week history
-            - Percentiles range from 0 (lowest in 52 weeks) to 100 (highest in 52 weeks)
-            - Minimum 26 weeks of data required to begin calculations
-            
-            **Step 2: Calculate Individual Metric Components**
-            
-            1. **Long Concentration Percentile** = `rank(conc_gross_le_4_tdr_long) / count * 100`
-               - Measures: How concentrated long positions are among top 4 traders
-               - High percentile (>85): Few traders control most long positions
-               
-            2. **Short Concentration Percentile** = `rank(conc_gross_le_4_tdr_short) / count * 100`
-               - Measures: How concentrated short positions are among top 4 traders
-               - High percentile (>85): Few traders control most short positions
-            
-            3. **Commercial Net Percentile** = `rank(comm_long - comm_short) / count * 100`
-               - Measures: How extreme commercial net positioning is
-               - High percentile (>85): Commercials unusually long
-               - Low percentile (<15): Commercials unusually short
-            
-            4. **Non-Commercial Net Percentile** = `rank(noncomm_long - noncomm_short) / count * 100`
-               - Measures: How extreme speculative net positioning is
-               - High percentile (>85): Speculators unusually long
-               - Low percentile (<15): Speculators unusually short
-            
-            5. **Flow Intensity Percentile** = `rank(|comm_flow| + |noncomm_flow|) / count * 100`
-               - Measures: Magnitude of weekly position changes
-               - High percentile (>85): Unusually large position adjustments
-            
-            6. **Total Traders Percentile** = `rank(traders_tot_all) / count * 100`
-               - Measures: Market participation level
-               - High percentile (>70): High participation
-               - Low percentile (<30): Low participation
-            
-            7. **Heterogeneity Percentile** = Currently fixed at 50 (placeholder)
-               - Would measure: Inter-group behavioral divergence
-            
-            **Step 3: Calculate Extremity Score (0-100)**
-            
-            ```
-            distance_from_center(x) = |x - 50| × 2
-            
-            Extremity = 0.25 × max(distance_from_center(long_conc), distance_from_center(short_conc))
-                      + 0.25 × max(distance_from_center(comm_net), distance_from_center(noncomm_net))
-                      + 0.25 × flow_intensity_percentile
-                      + 0.25 × heterogeneity_percentile
-            ```
-            
-            **Step 4: Regime Classification Rules**
-            
-            The system checks conditions in order and assigns the first matching regime:
-            
-            1. **🔴 Long Concentration Extreme**
-               - Condition: Long concentration >85th AND Short concentration <30th percentile
-               - Meaning: Long side dominated by few large traders, short side distributed
-               - Risk: Potential long squeeze if large longs liquidate
-            
-            2. **🔴 Short Concentration Extreme**
-               - Condition: Short concentration >85th AND Long concentration <30th percentile
-               - Meaning: Short side dominated by few large traders, long side distributed
-               - Risk: Potential short squeeze if large shorts cover
-            
-            3. **🟠 Bilateral Concentration**
-               - Condition: Both Long AND Short concentration >85th percentile
-               - Meaning: Both sides dominated by large institutional players
-               - Risk: Volatile moves when either side adjusts positions
-            
-            4. **🔴 Speculative Long Extreme**
-               - Condition: Non-commercial net >85th AND Commercial net <15th percentile
-               - Meaning: Speculators extremely long, commercials extremely short
-               - Risk: Classic overbought condition, vulnerable to reversal
-            
-            5. **🟠 Commercial Long Extreme**
-               - Condition: Non-commercial net <15th AND Commercial net >85th percentile
-               - Meaning: Commercials extremely long, speculators extremely short
-               - Risk: Potential bottom, commercials often early
-            
-            6. **🟡 High Flow Volatility**
-               - Condition: Flow intensity >85th percentile
-               - Meaning: Unusually large week-over-week position changes
-               - Risk: Market in transition, direction uncertain
-            
-            7. **🔴 Maximum Divergence**
-               - Condition: Heterogeneity >85th percentile
-               - Meaning: Trader groups behaving very differently from each other
-               - Risk: Fundamental disagreement, potential for large moves
-            
-            8. **🟢 Balanced Market**
-               - Condition: Extremity score <40
-               - Meaning: All metrics within normal ranges
-               - Risk: Low - normal market conditions
-            
-            9. **⚪ Transitional**
-               - Condition: Some elevation but no specific extreme pattern
-               - Meaning: Market between regimes
-               - Risk: Moderate - watch for emerging patterns
-            
-            **Extremity Score Interpretation:**
-            - **0-40**: Normal conditions (Green zone)
-            - **40-70**: Elevated conditions (Yellow zone)
-            - **70-100**: Extreme conditions (Red zone)
-            
-            **How to Use This Dashboard:**
-            
-            1. **Check Current Regime**: Identifies the dominant market characteristic
-            2. **Monitor Duration**: Longer durations suggest persistent conditions
-            3. **Review Extremity Score**: Higher scores = more unusual conditions
-            4. **Analyze Spider Chart**: See which specific metrics are extreme
-            5. **Study Timeline**: Understand regime persistence and transitions
-            
-            **Key Insights:**
-            - Multiple regimes can flash warnings before major moves
-            - Regime changes often precede trend changes
-            - Persistent extreme regimes suggest strong trends
-                - Rapid regime cycling indicates unstable conditions
-                """)
-            
-            # Calculate regime metrics directly here (matching legacyF.py exactly)
-            df_regime = df.copy()
-            window = 52
-            min_periods = 26
-            
-            # Step 1: Calculate all percentile metrics
-            df_regime['long_conc_pct'] = df_regime['conc_gross_le_4_tdr_long'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
-            df_regime['short_conc_pct'] = df_regime['conc_gross_le_4_tdr_short'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
-            
-            # Net positions
-            df_regime['comm_net'] = df_regime['comm_positions_long_all'] - df_regime['comm_positions_short_all']
-            df_regime['noncomm_net'] = df_regime['noncomm_positions_long_all'] - df_regime['noncomm_positions_short_all']
-            df_regime['comm_net_pct'] = df_regime['comm_net'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
-            df_regime['noncomm_net_pct'] = df_regime['noncomm_net'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
-            
-            # Flow intensity
-            df_regime['comm_flow'] = df_regime['comm_net'].diff()
-            df_regime['noncomm_flow'] = df_regime['noncomm_net'].diff()
-            df_regime['flow_intensity'] = abs(df_regime['comm_flow']) + abs(df_regime['noncomm_flow'])
-            df_regime['flow_pct'] = df_regime['flow_intensity'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
-            
-            # Trader participation
-            df_regime['trader_total_pct'] = df_regime['traders_tot_all'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
-            
-            # Heterogeneity placeholder
-            df_regime['heterogeneity_pct'] = 50
-            
-            # Step 2: Calculate regime extremity score
-            def distance_from_center(pct):
-                return abs(pct - 50) * 2
-            
-            df_regime['regime_extremity'] = df_regime.apply(lambda row: 
-                max(distance_from_center(row['long_conc_pct']), 
-                    distance_from_center(row['short_conc_pct'])) * 0.25 +
-                max(distance_from_center(row['comm_net_pct']), 
-                    distance_from_center(row['noncomm_net_pct'])) * 0.25 +
-                row['flow_pct'] * 0.25 +
-                row['heterogeneity_pct'] * 0.25
-            , axis=1)
-            
-            # Step 3: Detect regime
-            def detect_regime(row):
-                EXTREME_HIGH = 85
-                EXTREME_LOW = 15
-                MODERATE_HIGH = 70
-                MODERATE_LOW = 30
-                
-                if pd.isna(row['long_conc_pct']):
-                    return "Insufficient Data", "gray"
-                
-                # Check patterns
-                if row['long_conc_pct'] > EXTREME_HIGH and row['short_conc_pct'] < MODERATE_LOW:
-                    return "Long Concentration Extreme", "red"
-                elif row['short_conc_pct'] > EXTREME_HIGH and row['long_conc_pct'] < MODERATE_LOW:
-                    return "Short Concentration Extreme", "red"
-                elif row['long_conc_pct'] > EXTREME_HIGH and row['short_conc_pct'] > EXTREME_HIGH:
-                    return "Bilateral Concentration", "orange"
-                elif row['noncomm_net_pct'] > EXTREME_HIGH and row['comm_net_pct'] < EXTREME_LOW:
-                    return "Speculative Long Extreme", "red"
-                elif row['noncomm_net_pct'] < EXTREME_LOW and row['comm_net_pct'] > EXTREME_HIGH:
-                    return "Commercial Long Extreme", "orange"
-                elif row['flow_pct'] > EXTREME_HIGH:
-                    return "High Flow Volatility", "yellow"
-                elif row['heterogeneity_pct'] > EXTREME_HIGH:
-                    return "Maximum Divergence", "red"
-                elif row['regime_extremity'] < 40:
-                    return "Balanced Market", "green"
-                else:
-                    return "Transitional", "gray"
-            
-            df_regime[['regime', 'regime_color']] = df_regime.apply(
-                lambda row: pd.Series(detect_regime(row)), axis=1
-            )
-            
-            # Create visualization
-            latest = df_regime.iloc[-1]
-            
-            # Main metrics display
-            col1, col2, col3 = st.columns([2, 3, 2])
-            
-            with col1:
-                # Gauge-style display for extremity
-                fig_gauge = go.Figure(go.Indicator(
-                    mode = "gauge+number",
-                    value = latest['regime_extremity'],
-                    domain = {'x': [0, 1], 'y': [0, 1]},
-                    title = {'text': "Market Extremity"},
-                    gauge = {
-                        'axis': {'range': [None, 100]},
-                        'bar': {'color': "darkblue"},
-                        'steps': [
-                            {'range': [0, 40], 'color': "lightgreen"},
-                            {'range': [40, 70], 'color': "yellow"},
-                            {'range': [70, 100], 'color': "lightcoral"}
-                        ],
-                        'threshold': {
-                            'line': {'color': "red", 'width': 4},
-                            'thickness': 0.75,
-                            'value': 85
-                        }
+        with col1:
+            # Gauge-style display for extremity
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=latest['regime_extremity'],
+                domain={'x': [0, 1], 'y': [0, 1]},
+                title={'text': "Market Extremity"},
+                gauge={
+                    'axis': {'range': [None, 100]},
+                    'bar': {'color': "darkblue"},
+                    'steps': [
+                        {'range': [0, 40], 'color': "lightgreen"},
+                        {'range': [40, 70], 'color': "yellow"},
+                        {'range': [70, 100], 'color': "lightcoral"}
+                    ],
+                    'threshold': {
+                        'line': {'color': "red", 'width': 4},
+                        'thickness': 0.75,
+                        'value': 85
                     }
-                ))
-                fig_gauge.update_layout(height=300)
-                st.plotly_chart(fig_gauge, use_container_width=True)
-                
-            with col2:
-                # Spider chart of all metrics
-                categories = ['Long Conc', 'Short Conc', 'Comm Net', 'NonComm Net', 
-                             'Flow', 'Traders', 'Heterogeneity']
-                values = [
-                    latest['long_conc_pct'],
-                    latest['short_conc_pct'],
-                    latest['comm_net_pct'],
-                    latest['noncomm_net_pct'],
-                    latest['flow_pct'],
-                    latest['trader_total_pct'],
-                    latest['heterogeneity_pct']
-                ]
-                
-                fig_spider = go.Figure()
-                fig_spider.add_trace(go.Scatterpolar(
-                    r=values,
-                    theta=categories,
-                    fill='toself',
-                    name='Current',
-                    line_color='blue'
-                ))
-            
-                # Add reference circles
-                fig_spider.add_trace(go.Scatterpolar(
-                    r=[50]*7,
-                    theta=categories,
-                    name='Normal (50th)',
-                    line=dict(color='gray', dash='dash')
-                ))
-                
-                fig_spider.add_trace(go.Scatterpolar(
-                    r=[85]*7,
-                    theta=categories,
-                    name='Extreme (85th)',
-                    line=dict(color='red', dash='dot')
-                ))
-            
-                fig_spider.update_layout(
-                    polar=dict(
-                        radialaxis=dict(
-                            visible=True,
-                            range=[0, 100]
-                        )),
-                    showlegend=True,
-                    title="Percentile Rankings",
-                    height=300
-                )
-                st.plotly_chart(fig_spider, use_container_width=True)
-                
-            with col3:
-                # Current regime display
-                st.markdown("### Current Regime")
-                regime_color_map = {
-                    'red': '🔴',
-                    'orange': '🟠',
-                    'yellow': '🟡',
-                    'green': '🟢',
-                    'gray': '⚪'
                 }
-                st.markdown(f"## {regime_color_map.get(latest['regime_color'], '⚪')} {latest['regime']}")
-                
-                # Regime duration
-                current_regime = latest['regime']
-                regime_duration = 1
-                for i in range(2, min(len(df_regime), 20)):
-                    if df_regime.iloc[-i]['regime'] == current_regime:
-                        regime_duration += 1
-                    else:
-                        break
-            
-                st.metric("Duration", f"{regime_duration} weeks")
-                st.metric("Extremity Score", f"{latest['regime_extremity']:.1f} / 100")
-            
-            # Detailed metrics table
-            st.markdown("### Current Metrics")
-            metrics_data = {
-            'Metric': ['Long Concentration', 'Short Concentration', 'Commercial Net', 
+            ))
+            fig_gauge.update_layout(height=300)
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
+        with col2:
+            # Spider chart of all metrics
+            categories = ['Long Conc', 'Short Conc', 'Comm Net', 'NonComm Net',
+                         'Flow', 'Traders']
+            values = [
+                latest['long_conc_pct'],
+                latest['short_conc_pct'],
+                latest['comm_net_pct'],
+                latest['noncomm_net_pct'],
+                latest['flow_pct'],
+                latest['trader_total_pct']
+            ]
+
+            fig_spider = go.Figure()
+            fig_spider.add_trace(go.Scatterpolar(
+                r=values,
+                theta=categories,
+                fill='toself',
+                name='Current',
+                line_color='blue'
+            ))
+
+            # Add reference circles
+            fig_spider.add_trace(go.Scatterpolar(
+                r=[50]*6,
+                theta=categories,
+                name='Normal (50th)',
+                line=dict(color='gray', dash='dash')
+            ))
+
+            fig_spider.add_trace(go.Scatterpolar(
+                r=[85]*6,
+                theta=categories,
+                name='Extreme (85th)',
+                line=dict(color='red', dash='dot')
+            ))
+
+            fig_spider.update_layout(
+                polar=dict(
+                    radialaxis=dict(
+                        visible=True,
+                        range=[0, 100]
+                    )),
+                showlegend=True,
+                title="Percentile Rankings",
+                height=300
+            )
+            st.plotly_chart(fig_spider, use_container_width=True)
+
+        with col3:
+            # Current regime display
+            st.markdown("### Current Regime")
+            regime_color_map = {
+                'red': '🔴',
+                'orange': '🟠',
+                'yellow': '🟡',
+                'green': '🟢',
+                'gray': '⚪'
+            }
+            st.markdown(f"## {regime_color_map.get(latest['regime_color'], '⚪')} {latest['regime']}")
+
+            # Regime duration
+            current_regime = latest['regime']
+            regime_duration = 1
+            for i in range(2, min(len(df_regime), 20)):
+                if df_regime.iloc[-i]['regime'] == current_regime:
+                    regime_duration += 1
+                else:
+                    break
+
+            st.metric("Duration", f"{regime_duration} weeks")
+            st.metric("Extremity Score", f"{latest['regime_extremity']:.1f} / 100")
+
+        # Detailed metrics table
+        st.markdown("### Current Metrics")
+        metrics_data = {
+            'Metric': ['Long Concentration', 'Short Concentration', 'Commercial Net',
                       'Non-Commercial Net', 'Flow Intensity', 'Total Traders'],
             'Value': [
                 f"{latest['conc_gross_le_4_tdr_long']:.1f}%",
@@ -1886,117 +1443,101 @@ def display_trader_participation_chart(df, instrument_name):
                 '↑' if latest['trader_total_pct'] > 70 else '↓' if latest['trader_total_pct'] < 30 else '→'
             ]
         }
-        
-            metrics_df = pd.DataFrame(metrics_data)
-            st.dataframe(metrics_df, use_container_width=True, hide_index=True)
-            
-            # Regime Legend
-            st.markdown("### Regime Color Legend")
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.markdown("**🔴 Red Regimes (High Risk)**")
-                st.caption("• Long Concentration Extreme")
-                st.caption("• Short Concentration Extreme")
-                st.caption("• Speculative Long Extreme")
-                st.caption("• Maximum Divergence")
-            
-            with col2:
-                st.markdown("**🟠 Orange Regimes (Moderate Risk)**")
-                st.caption("• Bilateral Concentration")
-                st.caption("• Commercial Long Extreme")
-                st.markdown("**🟡 Yellow Regimes**")
-                st.caption("• High Flow Volatility")
-            
-            with col3:
-                st.markdown("**🟢 Green Regimes (Low Risk)**")
-                st.caption("• Balanced Market")
-                st.markdown("**⚪ Gray Regimes**")
-                st.caption("• Transitional")
-                st.caption("• Insufficient Data")
-            
-            # Regime timeline
-            st.markdown("### Regime History")
-            
-            # Create regime timeline chart
-            fig_timeline = go.Figure()
-            
-            # Get last 52 weeks of regime data
-            timeline_data = df_regime.tail(52).copy()
-            
-            # Create color mapping
-            color_map = {
+
+        metrics_df = pd.DataFrame(metrics_data)
+        st.dataframe(metrics_df, use_container_width=True, hide_index=True)
+
+        # Regime Legend
+        st.markdown("### Regime Color Legend")
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.markdown("**🔴 Red Regimes (High Risk)**")
+            st.caption("Long Concentration Extreme")
+            st.caption("Short Concentration Extreme")
+            st.caption("Speculative Long Extreme")
+
+        with col2:
+            st.markdown("**🟠 Orange Regimes (Moderate Risk)**")
+            st.caption("Bilateral Concentration")
+            st.caption("Commercial Long Extreme")
+            st.markdown("**🟡 Yellow Regimes**")
+            st.caption("High Flow Volatility")
+
+        with col3:
+            st.markdown("**🟢 Green Regimes (Low Risk)**")
+            st.caption("Balanced Market")
+            st.markdown("**⚪ Gray Regimes**")
+            st.caption("Transitional")
+            st.caption("Insufficient Data")
+
+        # Regime timeline
+        st.markdown("### Regime History (52 Weeks)")
+
+        # Create regime timeline chart
+        fig_timeline = go.Figure()
+
+        # Get last 52 weeks of regime data
+        timeline_data = df_regime.tail(52).copy()
+
+        # Create color mapping
+        color_map = {
             'Long Concentration Extreme': 'darkred',
             'Short Concentration Extreme': 'darkred',
             'Bilateral Concentration': 'orange',
             'Speculative Long Extreme': 'red',
             'Commercial Long Extreme': 'darkorange',
             'High Flow Volatility': 'gold',
-            'Maximum Divergence': 'darkred',
             'Balanced Market': 'green',
             'Transitional': 'gray',
             'Insufficient Data': 'lightgray'
         }
-            
-            # Add all possible regimes to ensure complete legend
-            all_regimes = [
+
+        # Add all possible regimes to ensure complete legend
+        all_regimes = [
             'Long Concentration Extreme',
-            'Short Concentration Extreme', 
+            'Short Concentration Extreme',
             'Bilateral Concentration',
             'Speculative Long Extreme',
             'Commercial Long Extreme',
             'High Flow Volatility',
-            'Maximum Divergence',
             'Balanced Market',
             'Transitional',
             'Insufficient Data'
         ]
-            
-            # Add regime bars - include all regimes for complete legend
-            for regime in all_regimes:
-                regime_mask = timeline_data['regime'] == regime
-                if regime_mask.sum() > 0:
-                    # Regime exists in data
-                    fig_timeline.add_trace(go.Bar(
-                        x=timeline_data.loc[regime_mask, 'report_date_as_yyyy_mm_dd'],
-                        y=[1] * regime_mask.sum(),
-                        name=regime,
-                        marker_color=color_map.get(regime, 'gray'),
-                        hovertemplate='%{x}<br>' + regime + '<extra></extra>',
-                        showlegend=True
-                    ))
-                else:
-                    # Add empty trace for legend
-                    fig_timeline.add_trace(go.Bar(
-                        x=[],
-                        y=[],
-                        name=regime,
-                        marker_color=color_map.get(regime, 'gray'),
-                        showlegend=True
-                    ))
-            
-            fig_timeline.update_layout(
-                barmode='stack',
-                showlegend=True,
-                height=200,
-                yaxis=dict(showticklabels=False, title=''),
-                xaxis=dict(title='Date'),
-                title='52-Week Regime Timeline'
-            )
-            
-            st.plotly_chart(fig_timeline, use_container_width=True)
-    
-    elif analysis_type == "Concentration Momentum":
-        st.markdown("#### 📈 Concentration Momentum Analysis")
-        create_concentration_momentum_analysis(df, instrument_name)
-    
-    elif analysis_type == "Participant Behavior Clusters":
-        st.markdown("#### 🎯 Participant Behavior Clusters")
-        create_participant_behavior_clusters(df, instrument_name)
-    
-    elif analysis_type == "Market Microstructure Analysis":
-        st.markdown("#### 📊 Market Microstructure Analysis")
-        create_market_microstructure_analysis(df, instrument_name)
-    
+
+        # Add regime bars
+        for regime in all_regimes:
+            regime_mask = timeline_data['regime'] == regime
+            if regime_mask.sum() > 0:
+                fig_timeline.add_trace(go.Bar(
+                    x=timeline_data.loc[regime_mask, 'report_date_as_yyyy_mm_dd'],
+                    y=[1] * regime_mask.sum(),
+                    name=regime,
+                    marker_color=color_map.get(regime, 'gray'),
+                    hovertemplate='%{x}<br>' + regime + '<extra></extra>',
+                    showlegend=True
+                ))
+            else:
+                # Add empty trace for legend
+                fig_timeline.add_trace(go.Bar(
+                    x=[],
+                    y=[],
+                    name=regime,
+                    marker_color=color_map.get(regime, 'gray'),
+                    showlegend=True
+                ))
+
+        fig_timeline.update_layout(
+            barmode='stack',
+            showlegend=True,
+            height=200,
+            yaxis=dict(showticklabels=False, title=''),
+            xaxis=dict(title='Date'),
+            title='52-Week Regime Timeline'
+        )
+
+        st.plotly_chart(fig_timeline, use_container_width=True)
+
     else:
         st.info(f"Analysis type '{analysis_type}' is not yet implemented.")
