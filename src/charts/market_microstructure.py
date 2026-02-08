@@ -13,88 +13,19 @@ from scipy import stats
 def create_market_microstructure_analysis(df, instrument_name):
     """Create comprehensive market microstructure analysis"""
     
-    st.markdown("#### 🔬 Market Microstructure Analysis")
+    # Title is rendered by the caller in display_functions_futures_first.py
     
-    # Explanation expander
-    with st.expander("📖 Understanding Market Microstructure", expanded=False):
-        st.markdown("""
-        **What is Market Microstructure Analysis?**
-        
-        A granular view of how different trader sizes and types interact in the market.
-        This analysis reveals the "ecosystem" of market participants.
-        
-        **Key Metrics:**
-        
-        1. **Size Distribution**
-           - Small traders: Bottom 50% by position size
-           - Medium traders: 50-90th percentile
-           - Large traders: 90-95th percentile
-           - Whales: Top 5%
-           
-        2. **Market Impact Potential**
-           - Measures how much each group could move the market
-           - Based on position size × concentration
-           
-        3. **Liquidity Provision**
-           - Identifies who provides vs consumes liquidity
-           - Based on position stability and two-sided exposure
-           
-        4. **Position Persistence**
-           - How long different groups maintain positions
-           - Indicates trading style (scalping vs investing)
-           
-        **Microstructure Patterns:**
-        - **Healthy**: Diverse participation across all sizes
-        - **Top-Heavy**: Dominated by large traders
-        - **Bifurcated**: Missing middle (only large and small)
-        - **Fragmented**: Many small traders, few large
-        
-        **Why It Matters:**
-        - Reveals market vulnerability to large trader actions
-        - Shows liquidity depth and resilience
-        - Identifies potential manipulation risks
-        - Helps predict volatility patterns
-        """)
-    
-    # Configuration
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        weeks_back = st.selectbox(
-            "Compare with:",
-            [0, 1, 2, 3, 4],
-            format_func=lambda x: "Current Week" if x == 0 else f"{x} Week{'s' if x > 1 else ''} Ago",
-            index=0,
-            help="Show data from selected week for comparison"
-        )
-    
-    with col2:
-        # Only show evolution checkbox for current week
-        if weeks_back == 0:
-            show_evolution = st.checkbox(
-                "Show Evolution Over Time",
-                value=True,
-                help="Track how microstructure changes"
-            )
-        else:
-            show_evolution = False
-            st.empty()  # Keep layout consistent
-    
+    # Fixed to current week
+    weeks_back = 0
+    show_evolution = True
+
     # Prepare data
     df_micro = df.copy()
-    
-    # Get the analysis window - single week based on selection
+
+    # Get the latest week
     sorted_dates = sorted(df_micro['report_date_as_yyyy_mm_dd'].unique(), reverse=True)
-    
-    if weeks_back < len(sorted_dates):
-        selected_date = sorted_dates[weeks_back]
-        analysis_data = df_micro[df_micro['report_date_as_yyyy_mm_dd'] == selected_date]
-        periods = 1
-    else:
-        # Fallback to latest available
-        selected_date = sorted_dates[0]
-        analysis_data = df_micro[df_micro['report_date_as_yyyy_mm_dd'] == selected_date]
-        periods = 1
+    selected_date = sorted_dates[0]
+    analysis_data = df_micro[df_micro['report_date_as_yyyy_mm_dd'] == selected_date]
     
     if len(analysis_data) > 0:
         # CORRECTED MICROSTRUCTURE CALCULATION
@@ -178,9 +109,9 @@ def create_market_microstructure_analysis(df, instrument_name):
         fig = make_subplots(
             rows=2, cols=2,
             subplot_titles=('Average Position Comparison', 'Market Control Breakdown',
-                          'Top Trader Dominance', 'Category vs Top Trader Analysis'),
+                          'Top Trader Dominance', ''),
             specs=[[{"type": "bar"}, {"type": "bar"}],
-                   [{"type": "scatter"}, {"type": "scatter"}]],
+                   [{"type": "scatter", "colspan": 2}, None]],
             vertical_spacing=0.15,
             horizontal_spacing=0.12
         )
@@ -360,401 +291,65 @@ def create_market_microstructure_analysis(df, instrument_name):
                 row=2, col=1
             )
         
-        # Plot 4: Category vs Top Trader Analysis
-        # Shows which categories likely contain the top traders
-        
-        if category_metrics:
-            # Calculate max value first for positioning
-            max_val = max([m['avg_position'] for m in category_metrics] + 
-                         [top_traders_metrics['long']['top_4_avg'], 
-                          top_traders_metrics['short']['top_4_avg']])
-            
-            # Prepare scatter data
-            for i, cat_metric in enumerate(category_metrics):
-                # Get corresponding top trader average
-                side = cat_metric['side']
-                top_4_avg = top_traders_metrics[side]['top_4_avg']
-                
-                # Scale down bubble sizes and add minimum size
-                bubble_size = max(15, min(50, cat_metric['total_traders'] / 4))
-                
-                fig.add_trace(go.Scatter(
-                    x=[cat_metric['avg_position']],
-                    y=[top_4_avg],
-                    mode='markers',
-                    marker=dict(
-                        size=bubble_size,
-                        color=cat_metric['color'],
-                        line=dict(width=2, color='black'),
-                        opacity=0.8
-                    ),
-                    name=cat_metric['category'],
-                    showlegend=False,
-                    hovertemplate='%{text}<br>Category Avg: %{x:,.0f}<br>Top 4 Avg: %{y:,.0f}<br>Ratio: %{customdata[0]:.1f}x<br>Traders: %{customdata[1]:.0f}<extra></extra>',
-                    text=[cat_metric['category']],
-                    customdata=[[cat_metric['ratio_to_top_4'], cat_metric['total_traders']]]
-                ), row=2, col=2)
-                
-                # Add text annotations with arrows pointing to bubbles
-                # Position text based on quadrant to avoid overlaps
-                x_pos = cat_metric['avg_position']
-                y_pos = top_4_avg
-                
-                # Determine text positioning based on location
-                if i == 0:  # Top-left
-                    text_x = x_pos - max_val * 0.15
-                    text_y = y_pos + max_val * 0.15
-                    ax = 20
-                    ay = -20
-                elif i == 1:  # Top-right
-                    text_x = x_pos + max_val * 0.15
-                    text_y = y_pos + max_val * 0.15
-                    ax = -20
-                    ay = -20
-                elif i == 2:  # Bottom-left
-                    text_x = x_pos - max_val * 0.15
-                    text_y = y_pos - max_val * 0.15
-                    ax = 20
-                    ay = 20
-                else:  # Bottom-right
-                    text_x = x_pos + max_val * 0.15
-                    text_y = y_pos - max_val * 0.15
-                    ax = -20
-                    ay = 20
-                
-                # Add category label with arrow
-                fig.add_annotation(
-                    x=x_pos,
-                    y=y_pos,
-                    text=f"<b>{cat_metric['category']}</b><br>{cat_metric['total_traders']:.0f} traders",
-                    showarrow=True,
-                    arrowhead=2,
-                    arrowsize=1,
-                    arrowwidth=2,
-                    arrowcolor=cat_metric['color'],
-                    ax=ax,
-                    ay=ay,
-                    bgcolor="white",
-                    bordercolor=cat_metric['color'],
-                    borderwidth=2,
-                    opacity=0.9,
-                    font=dict(size=10),
-                    row=2, col=2
-                )
-            
-            # Add diagonal line (y=x)
-            fig.add_trace(go.Scatter(
-                x=[0, max_val * 1.1],
-                y=[0, max_val * 1.1],
-                mode='lines',
-                line=dict(dash='dash', color='gray', width=1),
-                showlegend=False,
-                hoverinfo='skip'
-            ), row=2, col=2)
-            
-            # Add guide text
-            fig.add_annotation(
-                x=max_val * 0.55,
-                y=max_val * 0.45,
-                text="← Categories below line have<br>larger positions than top 4 avg",
-                showarrow=False,
-                font=dict(size=9, color='gray'),
-                opacity=0.7,
-                row=2, col=2
-            )
-        
         # Update layout
         week_label = "Current Week" if weeks_back == 0 else f"{weeks_back} Week{'s' if weeks_back > 1 else ''} Ago"
         fig.update_layout(
             title=f"Market Microstructure Analysis - {week_label} ({selected_date.strftime('%Y-%m-%d')})",
-            height=900,
+            height=700,
             showlegend=True
         )
-        
+
         fig.update_xaxes(title_text="Trader Group", row=1, col=1, tickangle=-45)
         fig.update_yaxes(title_text="Average Position (Contracts)", row=1, col=1)
         fig.update_xaxes(
-            title_text="Number of Top Traders", 
+            title_text="Number of Top Traders",
             row=2, col=1,
             tickmode='array',
             tickvals=[4, 8],
             ticktext=['4', '8']
         )
         fig.update_yaxes(title_text="% of Total Open Interest", row=2, col=1)
-        fig.update_xaxes(title_text="Category Average Position", row=2, col=2)
-        fig.update_yaxes(title_text="Top 4 Average Position", row=2, col=2)
         
         # Display chart
         st.plotly_chart(fig, use_container_width=True)
         
-        # Summary metrics with corrected calculations
-        st.markdown("### Market Structure Summary")
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        # Calculate total traders from categories
-        total_traders = sum(m['total_traders'] for m in category_metrics)
-        
+        # Key Insights
         # Calculate what % of each side the average top 4 trader controls
-        # Get total positions for each side
         total_long = float(analysis_data['tot_rept_positions_long_all'].iloc[0]) if 'tot_rept_positions_long_all' in analysis_data.columns else 0
         total_short = float(analysis_data['tot_rept_positions_short'].iloc[0]) if 'tot_rept_positions_short' in analysis_data.columns else 0
-        
-        # Calculate percentage of side controlled by each top 4 trader
         long_top4_avg = top_traders_metrics['long']['top_4_avg']
         short_top4_avg = top_traders_metrics['short']['top_4_avg']
-        
         long_pct_of_side = (long_top4_avg / total_long * 100) if total_long > 0 else 0
         short_pct_of_side = (short_top4_avg / total_short * 100) if total_short > 0 else 0
-        
-        # Average of both sides
-        avg_top4_control_of_side = (long_pct_of_side + short_pct_of_side) / 2
-        
-        # Determine likely composition
-        if category_metrics:
-            min_ratio = min(m['ratio_to_top_4'] for m in category_metrics)
-            likely_category = next(m['category'] for m in category_metrics if m['ratio_to_top_4'] == min_ratio)
-        else:
-            likely_category = "Unknown"
-        
-        # Calculate structure for each week (moved up to use in current status)
-        structure_data = []
-        weeks_data = df_micro.tail(52).copy()
-        
-        # Get latest date for calculations
-        latest_date = df_micro['report_date_as_yyyy_mm_dd'].max()
-        
-        # Calculate empirical percentiles for market structure determination
-        # Get historical data for the past 52 weeks
-        historical_window = df_micro[df_micro['report_date_as_yyyy_mm_dd'] >= (latest_date - pd.Timedelta(weeks=52))]
-        
-        if len(historical_window) > 10:  # Need enough data for percentiles
-            # Calculate historical control percentages
-            historical_controls = []
-            for _, week_data in historical_window.iterrows():
-                week_oi = week_data['open_interest_all']
-                week_total_long = week_data['tot_rept_positions_long_all'] if 'tot_rept_positions_long_all' in week_data else 0
-                week_total_short = week_data['tot_rept_positions_short'] if 'tot_rept_positions_short' in week_data else 0
-                
-                # Long side control
-                if week_total_long > 0 and week_oi > 0:
-                    week_long_top4_contracts = week_oi * (week_data['conc_gross_le_4_tdr_long'] / 100)
-                    week_long_top4_avg = week_long_top4_contracts / 4
-                    week_long_pct = (week_long_top4_avg / week_total_long * 100)
-                    historical_controls.append(week_long_pct)
-                
-                # Short side control
-                if week_total_short > 0 and week_oi > 0:
-                    week_short_top4_contracts = week_oi * (week_data['conc_gross_le_4_tdr_short'] / 100)
-                    week_short_top4_avg = week_short_top4_contracts / 4
-                    week_short_pct = (week_short_top4_avg / week_total_short * 100)
-                    historical_controls.append(week_short_pct)
-            
-            # Calculate percentiles
-            p75 = np.percentile(historical_controls, 75)  # Top 25% most concentrated
-            p50 = np.percentile(historical_controls, 50)  # Median
-            
-            # Now calculate structure for each week for the timeline
-            for _, week in weeks_data.iterrows():
-                week_oi = week['open_interest_all']
-                week_total_long = week['tot_rept_positions_long_all'] if 'tot_rept_positions_long_all' in week else 0
-                week_total_short = week['tot_rept_positions_short'] if 'tot_rept_positions_short' in week else 0
-                
-                # Calculate control percentages for this week
-                if week_total_long > 0 and week_oi > 0:
-                    week_long_top4_contracts = week_oi * (week['conc_gross_le_4_tdr_long'] / 100)
-                    week_long_top4_avg = week_long_top4_contracts / 4
-                    week_long_pct = (week_long_top4_avg / week_total_long * 100)
-                else:
-                    week_long_pct = 0
-                    
-                if week_total_short > 0 and week_oi > 0:
-                    week_short_top4_contracts = week_oi * (week['conc_gross_le_4_tdr_short'] / 100)
-                    week_short_top4_avg = week_short_top4_contracts / 4
-                    week_short_pct = (week_short_top4_avg / week_total_short * 100)
-                else:
-                    week_short_pct = 0
-                
-                # Use max for structure determination
-                week_max_control = max(week_long_pct, week_short_pct)
-                
-                # Assign structure based on percentiles
-                if week_max_control > p75:
-                    structure_value = 2  # Highly Concentrated
-                    structure_label = "High"
-                elif week_max_control > p50:
-                    structure_value = 1  # Moderately Concentrated
-                    structure_label = "Moderate"
-                else:
-                    structure_value = 0  # Well Distributed
-                    structure_label = "Low"
-                
-                structure_data.append({
-                    'date': week['report_date_as_yyyy_mm_dd'],
-                    'structure_value': structure_value,
-                    'structure_label': structure_label,
-                    'control_pct': week_max_control
-                })
-            
-            # Determine market structure
-            # For current week, always use the timeline's last entry for consistency
-            if weeks_back == 0 and structure_data:
-                # Use the most recent week from timeline
-                latest_week = structure_data[-1]
-                
-                if latest_week['structure_value'] == 2:
-                    structure = f"🔴 Highly Concentrated (>{p75:.1f}%)"
-                elif latest_week['structure_value'] == 1:
-                    structure = f"🟠 Moderately Concentrated ({p50:.1f}-{p75:.1f}%)"
-                else:
-                    structure = f"🟢 Well Distributed (<{p50:.1f}%)"
-            else:
-                # For historical weeks or if no structure data, calculate based on values
-                max_control = max(long_pct_of_side, short_pct_of_side)
-                if max_control > p75:
-                    structure = f"🔴 Highly Concentrated (>{p75:.1f}%)"
-                elif max_control > p50:
-                    structure = f"🟠 Moderately Concentrated ({p50:.1f}-{p75:.1f}%)"
-                else:
-                    structure = f"🟢 Well Distributed (<{p50:.1f}%)"
-        else:
-            # Fallback to fixed thresholds if not enough historical data
-            max_control = max(long_pct_of_side, short_pct_of_side)
-            if max_control > 6:
-                structure = "🔴 Highly Concentrated"
-            elif max_control > 4:
-                structure = "🟠 Moderately Concentrated"
-            else:
-                structure = "🟢 Well Distributed"
-        
-        with col1:
-            st.metric("Total Traders", f"{int(total_traders):,}")
-        with col2:
-            st.metric("Top-4 Long Control", f"{long_pct_of_side:.1f}% of Longs")
-        with col3:
-            st.metric("Top-4 Short Control", f"{short_pct_of_side:.1f}% of Shorts")
-        with col4:
-            st.metric("Top 4 Likely Type", likely_category)
-        with col5:
-            st.metric("Market Structure", structure)
-        
-        # Detailed insights
+
+        # Determine likely composition per side
+        long_cats = sorted([m for m in category_metrics if m['side'] == 'long'], key=lambda x: x['ratio_to_top_4'])
+        short_cats = sorted([m for m in category_metrics if m['side'] == 'short'], key=lambda x: x['ratio_to_top_4'])
+
         st.markdown("### Key Insights")
         insights_cols = st.columns(2)
-        
+
         with insights_cols[0]:
             st.markdown("**Top Trader Analysis:**")
             long_metrics = top_traders_metrics['long']
             short_metrics = top_traders_metrics['short']
-            
-            st.write(f"• Top 4 Long traders: {long_metrics['top_4_avg']:,.0f} contracts each")
-            st.write(f"• Top 4 Short traders: {short_metrics['top_4_avg']:,.0f} contracts each")
-            st.write(f"• Each top Long controls: {long_pct_of_side:.1f}% of all longs")
-            st.write(f"• Each top Short controls: {short_pct_of_side:.1f}% of all shorts")
-        
+            st.write(f"Top 4 Long traders: {long_metrics['top_4_avg']:,.0f} contracts avg each")
+            st.write(f"Top 4 Short traders: {short_metrics['top_4_avg']:,.0f} contracts avg each")
+            st.write(f"Each top Long controls: {long_pct_of_side:.1f}% of all longs")
+            st.write(f"Each top Short controls: {short_pct_of_side:.1f}% of all shorts")
+
         with insights_cols[1]:
             st.markdown("**Category Comparison:**")
-            if category_metrics:
-                # Sort by ratio to find most likely categories
-                sorted_categories = sorted(category_metrics, key=lambda x: x['ratio_to_top_4'])
-                
-                st.write(f"• Most likely top 4: {sorted_categories[0]['category']} ({sorted_categories[0]['ratio_to_top_4']:.1f}x)")
-                st.write(f"• Least likely top 4: {sorted_categories[-1]['category']} ({sorted_categories[-1]['ratio_to_top_4']:.1f}x)")
-                
-                # Average positions
-                comm_avg = np.mean([m['avg_position'] for m in category_metrics if 'Commercial' in m['category']])
-                noncomm_avg = np.mean([m['avg_position'] for m in category_metrics if 'Non-Commercial' in m['category']])
-                
-                st.write(f"• Commercial avg: {comm_avg:,.0f} contracts")
-                st.write(f"• Non-Commercial avg: {noncomm_avg:,.0f} contracts")
-        
-        # Market Structure History Heatmap
-        st.markdown("### Market Structure History (52 Weeks)")
-        
-        # Create heatmap
-        if structure_data:
-            # Prepare data for heatmap
-            dates = [d['date'] for d in structure_data]
-            values = [d['structure_value'] for d in structure_data]
-            labels = [d['structure_label'] for d in structure_data]
-            control_pcts = [d['control_pct'] for d in structure_data]
-            
-            # Create custom hover text
-            hover_text = []
-            for i in range(len(dates)):
-                hover_text.append(
-                    f"Date: {dates[i].strftime('%Y-%m-%d')}<br>" +
-                    f"Status: {labels[i]}<br>" +
-                    f"Max Control: {control_pcts[i]:.1f}%"
-                )
-            
-            # Create the timeline
-            fig_timeline = go.Figure()
-            
-            # Create a single row heatmap
-            fig_timeline.add_trace(go.Heatmap(
-                z=[values],  # Single row
-                text=[hover_text],
-                hovertemplate='%{text}<extra></extra>',
-                colorscale=[
-                    [0, '#4CAF50'],      # 0 = Green - Well Distributed
-                    [0.33, '#4CAF50'],   # Still green
-                    [0.34, '#FF9800'],   # 1 = Orange - Moderately Concentrated
-                    [0.66, '#FF9800'],   # Still orange
-                    [0.67, '#F44336'],   # 2 = Red - Highly Concentrated
-                    [1, '#F44336']       # Still red
-                ],
-                showscale=False,
-                xgap=2,
-                ygap=0,
-                zmin=0,
-                zmax=2
-            ))
-            
-            # Add x-axis labels for months
-            # Get unique months from dates
-            month_positions = []
-            month_labels = []
-            current_month = None
-            
-            for i, date in enumerate(dates):
-                month_year = date.strftime('%b %Y')
-                if month_year != current_month:
-                    month_positions.append(i)
-                    month_labels.append(month_year)
-                    current_month = month_year
-            
-            # Update layout
-            fig_timeline.update_layout(
-                title="52-Week Market Concentration Timeline",
-                height=120,
-                xaxis=dict(
-                    tickmode='array',
-                    tickvals=month_positions,
-                    ticktext=month_labels,
-                    tickangle=0,
-                    showgrid=False,
-                    side='bottom'
-                ),
-                yaxis=dict(
-                    showticklabels=False, 
-                    showgrid=False,
-                    fixedrange=True
-                ),
-                plot_bgcolor='white',
-                margin=dict(t=60, b=40, l=20, r=20)
-            )
-            
-            # Add legend
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.markdown("🟢 **Well Distributed** (<" + f"{p50:.1f}%)")
-            with col2:
-                st.markdown("🟠 **Moderately Concentrated** (" + f"{p50:.1f}-{p75:.1f}%)")
-            with col3:
-                st.markdown("🔴 **Highly Concentrated** (>" + f"{p75:.1f}%)")
-            
-            st.plotly_chart(fig_timeline, use_container_width=True)
-        
+            if long_cats:
+                st.write(f"Likely top-4 long: {long_cats[0]['category']} ({long_cats[0]['ratio_to_top_4']:.1f}x ratio)")
+            if short_cats:
+                st.write(f"Likely top-4 short: {short_cats[0]['category']} ({short_cats[0]['ratio_to_top_4']:.1f}x ratio)")
+
+            comm_avg = np.mean([m['avg_position'] for m in category_metrics if 'Commercial' in m['category']])
+            noncomm_avg = np.mean([m['avg_position'] for m in category_metrics if 'Non-Commercial' in m['category']])
+            st.write(f"Commercial avg: {comm_avg:,.0f} contracts")
+            st.write(f"Non-Commercial avg: {noncomm_avg:,.0f} contracts")
+
         # Show evolution if requested
         if show_evolution:
             st.markdown("### Microstructure Evolution")

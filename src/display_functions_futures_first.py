@@ -442,7 +442,7 @@ def display_cot_time_series_with_price(df, instrument_name):
     # Add Market Concentration Flow Analysis
     st.markdown("---")
     st.markdown("#### Market Concentration")
-    st.markdown('<p style="color: #808080; font-size: 13px;">T% = Trader Count Percentile (where current trader count ranks vs historical since 2010). P% = Average Position Percentile (where average position size ranks vs historical). High concentration suggests potential for larger price moves as few traders control the market. Low concentration indicates a more stable, democratized market with diverse participation. Comparing month over month.</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color: #808080; font-size: 13px;">Trader Pctl = where current trader count ranks vs historical since 2010. Position Pctl = where average position size per trader ranks vs historical. Concentration level: High (red) = few traders with large positions (T% &le; 33 and P% &ge; 67), Low (green) = many traders with small positions (T% &ge; 67 and P% &le; 33). MoM deltas show month-over-month change in trader count and average position.</p>', unsafe_allow_html=True)
 
     # Fixed to month over month comparison
     lookback_days = 30
@@ -545,159 +545,68 @@ def display_cot_time_series_with_price(df, instrument_name):
     # Create DataFrame
     plot_df = pd.DataFrame(data_for_plot)
             
-    # Create subplots
-    fig = make_subplots(
-        rows=2, cols=2,
-        subplot_titles=('Average Position per Trader', 'Trader Count', 
-                      'Concentration Levels (T%=Traders, P%=Position)', 'Total Positions'),
-        vertical_spacing=0.18,
-        horizontal_spacing=0.12,
-        specs=[[{"type": "bar"}, {"type": "bar"}],
-               [{"type": "scatter"}, {"type": "bar"}]]
-    )
-            
-    # Color mapping
-    colors = {'Previous': '#90EE90', 'Current': '#4169E1'}
-    concentration_colors = {
-        'High': '#DC143C',         # Crimson red - high concentration risk
-        'Medium-High': '#FF8C00',  # Dark orange
-        'Medium': '#FFD700',       # Gold
-        'Medium-Low': '#9ACD32',   # Yellow green
-        'Low': '#32CD32'           # Lime green - low concentration (more democratic)
+    # Color mapping for concentration levels
+    concentration_border = {
+        'High': '#DC143C',
+        'Medium-High': '#FF8C00',
+        'Medium': '#FFD700',
+        'Medium-Low': '#9ACD32',
+        'Low': '#32CD32'
     }
-            
-    # Plot 1: Average Position per Trader
-    for period in ['Previous', 'Current']:
-        period_data = plot_df[plot_df['Period'] == period]
-        fig.add_trace(
-            go.Bar(
-                x=period_data['Category'],
-                y=period_data['Avg Position'],
-                name=period,
-                marker_color=colors[period],
-                showlegend=True
-            ),
-            row=1, col=1
-        )
-            
-    # Plot 2: Trader Count
-    for period in ['Previous', 'Current']:
-        period_data = plot_df[plot_df['Period'] == period]
-        fig.add_trace(
-            go.Bar(
-                x=period_data['Category'],
-                y=period_data['Trader Count'],
-                name=period,
-                marker_color=colors[period],
-                showlegend=False
-            ),
-            row=1, col=2
-        )
-            
-    # Plot 3: Concentration Level with Percentiles
-    for cat in ['Non-Comm Long', 'Non-Comm Short', 'Commercial Long', 'Commercial Short']:
-        prev_data_cat = plot_df[(plot_df['Category'] == cat) & (plot_df['Period'] == 'Previous')].iloc[0]
-        curr_data_cat = plot_df[(plot_df['Category'] == cat) & (plot_df['Period'] == 'Current')].iloc[0]
-                
-        # Create text with percentiles
-        prev_text = f"T:{prev_data_cat['Trader Percentile']:.0f}%<br>P:{prev_data_cat['Position Percentile']:.0f}%"
-        curr_text = f"T:{curr_data_cat['Trader Percentile']:.0f}%<br>P:{curr_data_cat['Position Percentile']:.0f}%"
-                
-        # Plot previous period
-        fig.add_trace(
-            go.Scatter(
-                x=[cat],
-                y=['Previous'],
-                mode='markers+text',
-                marker=dict(
-                    size=40,
-                    color=concentration_colors[prev_data_cat['Concentration']],
-                    line=dict(width=2, color='black')
-                ),
-                text=prev_text,
-                textposition='middle center',
-                textfont=dict(size=10, color='black', family='Arial Black'),
-                showlegend=False,
-                name=prev_data_cat['Concentration']
-            ),
-            row=2, col=1
-        )
-                
-        # Plot current period
-        fig.add_trace(
-            go.Scatter(
-                x=[cat],
-                y=['Current'],
-                mode='markers+text',
-                marker=dict(
-                    size=40,
-                    color=concentration_colors[curr_data_cat['Concentration']],
-                    line=dict(width=2, color='black')
-                ),
-                text=curr_text,
-                textposition='middle center',
-                textfont=dict(size=10, color='black', family='Arial Black'),
-                showlegend=False,
-                name=curr_data_cat['Concentration']
-            ),
-            row=2, col=1
-        )
-            
-    # Plot 4: Total Positions
-    for period in ['Previous', 'Current']:
-        period_data = plot_df[plot_df['Period'] == period]
-        fig.add_trace(
-            go.Bar(
-                x=period_data['Category'],
-                y=period_data['Total Position'],
-                name=period,
-                marker_color=colors[period],
-                showlegend=False
-            ),
-            row=2, col=2
-        )
-            
-    # Update layout
-    fig.update_layout(
-        title="Market Concentration Flow Analysis (Month over Month)",
-        height=800,
-        showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        )
-    )
-            
-    # Update axes
-    fig.update_xaxes(tickangle=-45)
-    fig.update_yaxes(title_text="Avg Position", row=1, col=1, tickformat=",.0f")
-    fig.update_yaxes(title_text="Trader Count", row=1, col=2, tickformat=",.0f")
-    fig.update_yaxes(title_text="Period", row=2, col=1, categoryorder="array", categoryarray=["Previous", "Current"])
-    fig.update_xaxes(row=2, col=1, tickangle=-25)
-    fig.update_yaxes(title_text="Total Position", row=2, col=2, tickformat=",.0f")
-            
-    # Display the chart
-    st.plotly_chart(fig, use_container_width=True)
-            
-    # Summary statistics
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Previous Date", prev_data['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'))
-    with col2:
-        st.metric("Current Date", current_data['report_date_as_yyyy_mm_dd'].strftime('%Y-%m-%d'))
-    with col3:
-        # Calculate total trader change from the plot data
-        prev_total = plot_df[plot_df['Period'] == 'Previous']['Trader Count'].sum()
-        curr_total = plot_df[plot_df['Period'] == 'Current']['Trader Count'].sum()
-        total_trader_change = int(curr_total - prev_total)
-        st.metric("Total Trader Change", f"{total_trader_change:+d}")
+    concentration_bg = {
+        'High': 'rgba(220, 20, 60, 0.15)',
+        'Medium-High': 'rgba(255, 140, 0, 0.12)',
+        'Medium': 'rgba(255, 215, 0, 0.12)',
+        'Medium-Low': 'rgba(154, 205, 50, 0.12)',
+        'Low': 'rgba(50, 205, 50, 0.12)'
+    }
+
+    # Metric cards - one per category
+    card_cols = st.columns(4)
+    cat_names = ['Non-Comm Long', 'Non-Comm Short', 'Commercial Long', 'Commercial Short']
+
+    for i, cat_name in enumerate(cat_names):
+        curr = plot_df[(plot_df['Category'] == cat_name) & (plot_df['Period'] == 'Current')].iloc[0]
+        prev = plot_df[(plot_df['Category'] == cat_name) & (plot_df['Period'] == 'Previous')].iloc[0]
+
+        level = curr['Concentration']
+        border = concentration_border[level]
+        bg = concentration_bg[level]
+
+        trader_delta = int(curr['Trader Count'] - prev['Trader Count'])
+        avg_delta = curr['Avg Position'] - prev['Avg Position']
+        t_sign = "+" if trader_delta > 0 else ""
+        a_sign = "+" if avg_delta > 0 else ""
+
+        t_pct = curr['Trader Percentile']
+        p_pct = curr['Position Percentile']
+
+        with card_cols[i]:
+            st.markdown(f"""<div style="background:{bg}; border-left:4px solid {border}; padding:12px; border-radius:4px;">
+<div style="font-weight:bold; font-size:14px;">{cat_name}</div>
+<div style="color:{border}; font-size:12px; font-weight:bold; margin-bottom:10px;">{level}</div>
+<div><span style="font-size:11px; color:#808080;">Traders</span><br>
+<span style="font-size:20px; font-weight:bold;">{int(curr['Trader Count'])}</span>
+<span style="font-size:12px; color:#808080;"> ({t_sign}{trader_delta})</span></div>
+<div style="margin-top:6px;"><span style="font-size:11px; color:#808080;">Avg Position</span><br>
+<span style="font-size:20px; font-weight:bold;">{curr['Avg Position']:,.0f}</span>
+<span style="font-size:12px; color:#808080;"> ({a_sign}{avg_delta:,.0f})</span></div>
+<div style="margin-top:10px;">
+<div style="display:flex; justify-content:space-between; font-size:11px; color:#808080; margin-bottom:2px;">
+<span>Trader Pctl</span><span style="font-weight:bold; color:#333;">{t_pct:.0f}%</span></div>
+<div style="background:#e0e0e0; border-radius:3px; height:8px; width:100%;">
+<div style="background:#4169E1; border-radius:3px; height:8px; width:{t_pct:.0f}%;"></div></div>
+<div style="display:flex; justify-content:space-between; font-size:11px; color:#808080; margin-top:6px; margin-bottom:2px;">
+<span>Position Pctl</span><span style="font-weight:bold; color:#333;">{p_pct:.0f}%</span></div>
+<div style="background:#e0e0e0; border-radius:3px; height:8px; width:100%;">
+<div style="background:#FF8C00; border-radius:3px; height:8px; width:{p_pct:.0f}%;"></div></div>
+</div>
+</div>""", unsafe_allow_html=True)
 
     # Market Microstructure Analysis at the bottom
     st.markdown("---")
     st.markdown("#### Market Microstructure Analysis")
+    st.markdown('<p style="color: #808080; font-size: 13px;">Top trader positions are derived from CFTC gross concentration data: Top 4 Avg = (Total OI &times; conc_gross_le_4_tdr %) / 4. Note: CFTC only reports the combined figure for top 4 traders, not individual positions &mdash; dividing by 4 assumes equal sizing, which overstates the smallest and understates the largest. Next 4 Avg = (Top 8 total &minus; Top 4 total) / 4 (same caveat). Category averages = total category positions / trader count. Ratio annotations (e.g. 5.2x) show how many times larger a top-4 average is vs the category average. "Likely Top-4" identifies which category (Commercial or Non-Commercial) has the lowest ratio to the top-4 average &mdash; meaning their average position is closest to the top-4 size. This is an approximation, not a confirmed classification. Market Structure rating is based on 52-week percentiles of top-4 control (% of each side).</p>', unsafe_allow_html=True)
     create_market_microstructure_analysis(df, instrument_name)
 
 def display_synchronized_charts(df, instrument_name, price_adjustment, selected_columns, selected_formulas=None):
