@@ -39,7 +39,291 @@ def display_time_series_chart(df, instrument_name):
 def display_cot_time_series_with_price(df, instrument_name):
     """Display COT time series data with price chart and synchronized subplots"""
 
-    # Price adjustment selection at the top
+    # Market Regime Detection - overview at the top
+    st.markdown("#### Market Regime Detection")
+    st.markdown('<p style="color: #808080; font-size: 13px;">Market Extremity score (0-100) is the average of three components, each weighted by a third: <b>(1) Concentration</b> - how extreme is top-4 trader dominance vs past 52 weeks, <b>(2) Net Positioning</b> - how extreme are commercial/speculator net positions, <b>(3) Flow Intensity</b> - how much repositioning is happening. Higher score = further from normal market conditions.</p>', unsafe_allow_html=True)
+
+    # Calculate regime metrics
+    df_regime = df.copy()
+    window = 52
+    min_periods = 26
+
+    # Step 1: Calculate all percentile metrics
+    df_regime['long_conc_pct'] = df_regime['conc_gross_le_4_tdr_long'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+    df_regime['short_conc_pct'] = df_regime['conc_gross_le_4_tdr_short'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+
+    # Net positions
+    df_regime['comm_net'] = df_regime['comm_positions_long_all'] - df_regime['comm_positions_short_all']
+    df_regime['noncomm_net'] = df_regime['noncomm_positions_long_all'] - df_regime['noncomm_positions_short_all']
+    df_regime['comm_net_pct'] = df_regime['comm_net'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+    df_regime['noncomm_net_pct'] = df_regime['noncomm_net'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+
+    # Flow intensity
+    df_regime['comm_flow'] = df_regime['comm_net'].diff()
+    df_regime['noncomm_flow'] = df_regime['noncomm_net'].diff()
+    df_regime['flow_intensity'] = abs(df_regime['comm_flow']) + abs(df_regime['noncomm_flow'])
+    df_regime['flow_pct'] = df_regime['flow_intensity'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+
+    # Trader participation
+    df_regime['trader_total_pct'] = df_regime['traders_tot_all'].rolling(window, min_periods=min_periods).rank(pct=True) * 100
+
+    # Step 2: Calculate regime extremity score (3 components, 1/3 each)
+    def distance_from_center(pct):
+        return abs(pct - 50) * 2
+
+    df_regime['regime_extremity'] = df_regime.apply(lambda row:
+        max(distance_from_center(row['long_conc_pct']),
+            distance_from_center(row['short_conc_pct'])) / 3 +
+        max(distance_from_center(row['comm_net_pct']),
+            distance_from_center(row['noncomm_net_pct'])) / 3 +
+        row['flow_pct'] / 3
+    , axis=1)
+
+    # Step 3: Detect regime
+    def detect_regime(row):
+        EXTREME_HIGH = 80
+        EXTREME_LOW = 20
+
+        if pd.isna(row['long_conc_pct']):
+            return "Insufficient Data", "gray"
+
+        # 1. Bilateral concentration (check FIRST - rarest case)
+        if row['long_conc_pct'] > EXTREME_HIGH and row['short_conc_pct'] > EXTREME_HIGH:
+            return "Bilateral Concentration", "orange"
+
+        # 2. Single-sided concentration extremes
+        if row['long_conc_pct'] > EXTREME_HIGH:
+            return "Long Concentration Extreme", "red"
+        if row['short_conc_pct'] > EXTREME_HIGH:
+            return "Short Concentration Extreme", "red"
+
+        # 3. Speculative positioning extremes (symmetric)
+        if row['noncomm_net_pct'] > EXTREME_HIGH:
+            return "Speculative Long Extreme", "red"
+        if row['noncomm_net_pct'] < EXTREME_LOW:
+            return "Speculative Short Extreme", "red"
+
+        # 4. Commercial positioning extremes (independent signal)
+        if row['comm_net_pct'] > EXTREME_HIGH:
+            return "Commercial Long Extreme", "orange"
+        if row['comm_net_pct'] < EXTREME_LOW:
+            return "Commercial Short Extreme", "orange"
+
+        # 5. High flow volatility
+        if row['flow_pct'] > EXTREME_HIGH:
+            return "High Flow Volatility", "yellow"
+
+        # 6. Balanced market
+        if row['regime_extremity'] < 40:
+            return "Balanced Market", "green"
+
+        # 7. Default
+        return "Transitional", "gray"
+
+    df_regime[['regime', 'regime_color']] = df_regime.apply(
+        lambda row: pd.Series(detect_regime(row)), axis=1
+    )
+
+    # Create visualization
+    latest = df_regime.iloc[-1]
+
+    # Main metrics display
+    col1, col2, col3 = st.columns([2, 3, 2])
+
+    with col1:
+        # Gauge-style display for extremity
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=latest['regime_extremity'],
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': "Market Extremity"},
+            gauge={
+                'axis': {'range': [None, 100]},
+                'bar': {'color': "darkblue"},
+                'steps': [
+                    {'range': [0, 40], 'color': "lightgreen"},
+                    {'range': [40, 70], 'color': "yellow"},
+                    {'range': [70, 100], 'color': "lightcoral"}
+                ],
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': 85
+                }
+            }
+        ))
+        fig_gauge.update_layout(height=300)
+        st.plotly_chart(fig_gauge, use_container_width=True)
+
+    with col2:
+        # Spider chart of all metrics
+        categories = ['Long Conc', 'Short Conc', 'Comm Net', 'NonComm Net', 'Flow', 'Traders']
+        values = [
+            latest['long_conc_pct'],
+            latest['short_conc_pct'],
+            latest['comm_net_pct'],
+            latest['noncomm_net_pct'],
+            latest['flow_pct'],
+            latest['trader_total_pct']
+        ]
+
+        fig_spider = go.Figure()
+        fig_spider.add_trace(go.Scatterpolar(
+            r=values,
+            theta=categories,
+            fill='toself',
+            name='Current',
+            line_color='blue'
+        ))
+
+        # Add reference circles
+        fig_spider.add_trace(go.Scatterpolar(
+            r=[50]*6,
+            theta=categories,
+            name='Normal (50th)',
+            line=dict(color='gray', dash='dash')
+        ))
+
+        fig_spider.add_trace(go.Scatterpolar(
+            r=[85]*6,
+            theta=categories,
+            name='Extreme (85th)',
+            line=dict(color='red', dash='dot')
+        ))
+
+        fig_spider.update_layout(
+            polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+            showlegend=True,
+            title="Percentile Rankings",
+            height=300
+        )
+        st.plotly_chart(fig_spider, use_container_width=True)
+
+    with col3:
+        # Current regime display
+        st.markdown("### Current Regime")
+        regime_color_map = {
+            'red': '🔴',
+            'orange': '🟠',
+            'yellow': '🟡',
+            'green': '🟢',
+            'gray': '⚪'
+        }
+        st.markdown(f"## {regime_color_map.get(latest['regime_color'], '⚪')} {latest['regime']}")
+
+        # Regime duration
+        current_regime = latest['regime']
+        regime_duration = 1
+        for i in range(2, min(len(df_regime), 20)):
+            if df_regime.iloc[-i]['regime'] == current_regime:
+                regime_duration += 1
+            else:
+                break
+
+        st.metric("Duration", f"{regime_duration} weeks")
+        st.metric("Extremity Score", f"{latest['regime_extremity']:.1f} / 100")
+
+    # Regime Color Legend
+    st.markdown("### Regime Color Legend")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("**Red Regimes (High Risk)**")
+        st.caption("Long Concentration Extreme")
+        st.caption("Short Concentration Extreme")
+        st.caption("Speculative Long Extreme")
+        st.caption("Speculative Short Extreme")
+
+    with col2:
+        st.markdown("**Orange Regimes (Moderate Risk)**")
+        st.caption("Bilateral Concentration")
+        st.caption("Commercial Long Extreme")
+        st.caption("Commercial Short Extreme")
+        st.markdown("**Yellow Regimes**")
+        st.caption("High Flow Volatility")
+
+    with col3:
+        st.markdown("**Green Regimes (Low Risk)**")
+        st.caption("Balanced Market")
+        st.markdown("**Gray Regimes**")
+        st.caption("Transitional")
+        st.caption("Insufficient Data")
+
+    # Regime timeline
+    st.markdown("### Regime History (52 Weeks)")
+
+    # Create regime timeline chart
+    fig_timeline = go.Figure()
+
+    # Get last 52 weeks of regime data
+    timeline_data = df_regime.tail(52).copy()
+
+    # Create color mapping
+    regime_color_map_chart = {
+        'Long Concentration Extreme': 'darkred',
+        'Short Concentration Extreme': 'darkred',
+        'Bilateral Concentration': 'orange',
+        'Speculative Long Extreme': 'red',
+        'Speculative Short Extreme': 'red',
+        'Commercial Long Extreme': 'darkorange',
+        'Commercial Short Extreme': 'darkorange',
+        'High Flow Volatility': 'gold',
+        'Balanced Market': 'green',
+        'Transitional': 'gray',
+        'Insufficient Data': 'lightgray'
+    }
+
+    # Add all possible regimes to ensure complete legend
+    all_regimes = [
+        'Long Concentration Extreme',
+        'Short Concentration Extreme',
+        'Bilateral Concentration',
+        'Speculative Long Extreme',
+        'Speculative Short Extreme',
+        'Commercial Long Extreme',
+        'Commercial Short Extreme',
+        'High Flow Volatility',
+        'Balanced Market',
+        'Transitional',
+        'Insufficient Data'
+    ]
+
+    # Add regime bars
+    for regime in all_regimes:
+        regime_mask = timeline_data['regime'] == regime
+        if regime_mask.sum() > 0:
+            fig_timeline.add_trace(go.Bar(
+                x=timeline_data.loc[regime_mask, 'report_date_as_yyyy_mm_dd'],
+                y=[1] * regime_mask.sum(),
+                name=regime,
+                marker_color=regime_color_map_chart.get(regime, 'gray'),
+                hovertemplate='%{x}<br>' + regime + '<extra></extra>',
+                showlegend=True
+            ))
+        else:
+            # Add empty trace for legend
+            fig_timeline.add_trace(go.Bar(
+                x=[],
+                y=[],
+                name=regime,
+                marker_color=regime_color_map_chart.get(regime, 'gray'),
+                showlegend=True
+            ))
+
+    fig_timeline.update_layout(
+        barmode='stack',
+        showlegend=True,
+        height=200,
+        yaxis=dict(showticklabels=False, title=''),
+        xaxis=dict(title='Date'),
+        title='52-Week Regime Timeline'
+    )
+
+    st.plotly_chart(fig_timeline, use_container_width=True)
+
+    st.markdown("---")
+
+    # Price adjustment selection
     st.markdown("**Price Adjustment Method**")
     price_adjustment = st.radio(
         "Select adjustment:",
@@ -158,20 +442,10 @@ def display_cot_time_series_with_price(df, instrument_name):
     # Add Market Concentration Flow Analysis
     st.markdown("---")
     st.markdown("#### Market Concentration")
-    st.markdown('<p style="color: #808080; font-size: 13px;">T% = Trader Count Percentile (where current trader count ranks vs historical since 2010). P% = Average Position Percentile (where average position size ranks vs historical). High concentration suggests potential for larger price moves as few traders control the market. Low concentration indicates a more stable, democratized market with diverse participation.</p>', unsafe_allow_html=True)
-            
-    # Time period selection
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        flow_lookback = st.selectbox(
-            "Compare periods:",
-            ["Week over Week", "Month over Month", "Quarter over Quarter"],
-            index=0
-        )
-            
-    # Map to days
-    lookback_map = {"Week over Week": 7, "Month over Month": 30, "Quarter over Quarter": 90}
-    lookback_days = lookback_map[flow_lookback]
+    st.markdown('<p style="color: #808080; font-size: 13px;">T% = Trader Count Percentile (where current trader count ranks vs historical since 2010). P% = Average Position Percentile (where average position size ranks vs historical). High concentration suggests potential for larger price moves as few traders control the market. Low concentration indicates a more stable, democratized market with diverse participation. Comparing month over month.</p>', unsafe_allow_html=True)
+
+    # Fixed to month over month comparison
+    lookback_days = 30
             
     # Get current and previous period data
     latest_date = df['report_date_as_yyyy_mm_dd'].max()
@@ -385,7 +659,7 @@ def display_cot_time_series_with_price(df, instrument_name):
             
     # Update layout
     fig.update_layout(
-        title=f"Market Concentration Flow Analysis ({flow_lookback})",
+        title="Market Concentration Flow Analysis (Month over Month)",
         height=800,
         showlegend=True,
         legend=dict(
