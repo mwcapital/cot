@@ -1,0 +1,61 @@
+{
+  "source": "ICE Futures Europe",
+  "report_format": "Disaggregated",
+  "data_table": "ice_cot_data",
+  "report_type_filter": "FutOnly",
+  "instruments": {
+    "ICE Brent Crude Futures - ICE Futures Europe": {
+      "commodity_code": "B",
+      "commodity_group": "Energy",
+      "commodity_subgroup": "Crude Oil",
+      "exchange": "ICE Futures Europe"
+    },
+    "ICE Cocoa Futures - ICE Futures Europe": {
+      "commodity_code": "Cocoa",
+      "commodity_group": "Agricultural",
+      "commodity_subgroup": "Softs",
+      "exchange": "ICE Futures Europe"
+    },
+    "ICE Dubai 1st Line Futures - ICE Futures Europe": {
+      "commodity_code": "Dubai_1st",
+      "commodity_group": "Energy",
+      "commodity_subgroup": "Crude Oil",
+      "exchange": "ICE Futures Europe"
+    },
+    "ICE Gasoil Futures - ICE Futures Europe": {
+      "commodity_code": "G",
+      "commodity_group": "Energy",
+      "commodity_subgroup": "Petroleum Products",
+      "exchange": "ICE Futures Europe"
+    },
+    "ICE Robusta Coffee Futures - ICE Futures Europe": {
+      "commodity_code": "RC",
+      "commodity_group": "Agricultural",
+      "commodity_subgroup": "Softs",
+      "exchange": "ICE Futures Europe"
+    },
+    "ICE Wheat Futures - ICE Futures Europe": {
+      "commodity_code": "Wheat",
+      "commodity_group": "Agricultural",
+      "commodity_subgroup": "Grains",
+      "exchange": "ICE Futures Europe"
+    },
+    "ICE White Sugar Futures - ICE Futures Europe": {
+      "commodity_code": "W",
+      "commodity_group": "Agricultural",
+      "commodity_subgroup": "Softs",
+      "exchange": "ICE Futures Europe"
+    }
+  },
+  "all_instruments": [
+    "ICE Brent Crude Futures - ICE Futures Europe",
+    "ICE Cocoa Futures - ICE Futures Europe",
+    "ICE Dubai 1st Line Futures - ICE Futures Europe",
+    "ICE Gasoil Futures - ICE Futures Europe",
+    "ICE Robusta Coffee Futures - ICE Futures Europe",
+    "ICE Wheat Futures - ICE Futures Europe",
+    "ICE White Sugar Futures - ICE Futures Europe"
+  ],
+  "total_count": 7,
+  "last_updated": "2026-02-14"
+}
