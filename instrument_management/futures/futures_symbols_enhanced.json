@@ -34,14 +34,30 @@
         "matched": false
       }
     },
+    "BC": {
+      "name": "ICE Brent Crude",
+      "exchange": "ICE",
+      "category": "Energy",
+      "cot_mapping": {
+        "instruments": [
+          "ICE Brent Crude Futures - ICE Futures Europe"
+        ],
+        "codes": [],
+        "matched": true,
+        "source": "ice_cot_data"
+      }
+    },
     "BG": {
       "name": "Brent Gasoil",
       "exchange": "ICE",
       "category": "Energy",
       "cot_mapping": {
-        "instruments": [],
+        "instruments": [
+          "ICE Gasoil Futures - ICE Futures Europe"
+        ],
         "codes": [],
-        "matched": false
+        "matched": true,
+        "source": "ice_cot_data"
       }
     },
     "BN": {
@@ -639,9 +655,13 @@
       "exchange": "NYMEX",
       "category": "Energy",
       "cot_mapping": {
-        "instruments": [],
-        "codes": [],
-        "matched": false
+        "instruments": [
+          "NY HARBOR ULSD - NEW YORK MERCANTILE EXCHANGE"
+        ],
+        "codes": [
+          "022651"
+        ],
+        "matched": true
       }
     },
     "ZI": {
