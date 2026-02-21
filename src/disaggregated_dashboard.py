@@ -527,6 +527,12 @@ def display_disagg_dashboard(api_token):
     # Positioning Concentration Analysis section
     display_disagg_positioning_concentration(api_token)
 
+    # Relative Strength Matrix section
+    display_disagg_strength_matrix(api_token)
+
+    # Trader Participation Comparison section
+    display_disagg_participation_comparison(api_token)
+
 
 # -- Column mappings for disaggregated trader categories --
 
@@ -553,6 +559,20 @@ DISAGG_CATEGORY_COLUMNS = {
     "Swap Short": {
         "col": "swap__positions_short_all",
         "pct": "pct_of_oi_swap_short_all",
+    },
+    "Prod/Merc": {
+        "long": "prod_merc_positions_long",
+        "short": "prod_merc_positions_short",
+        "net": "net_pm_positions",
+        "pct_long": "pct_of_oi_prod_merc_long",
+        "pct_short": "pct_of_oi_prod_merc_short",
+    },
+    "Swap Dealers": {
+        "long": "swap_positions_long_all",
+        "short": "swap__positions_short_all",
+        "net": "net_swap_positions",
+        "pct_long": "pct_of_oi_swap_long_all",
+        "pct_short": "pct_of_oi_swap_short_all",
     },
     "Other Reportables": {
         "long": "other_rept_positions_long",
@@ -1457,6 +1477,412 @@ def display_disagg_positioning_concentration(api_token):
                         )
             else:
                 st.error("Unable to generate positioning concentration charts. Please check the data.")
+        else:
+            st.warning(f"No instruments found for category: {selected_category}")
+    else:
+        st.error(f"Category '{selected_category}' not found")
+
+
+def create_disagg_participation_comparison(selected_instruments, api_token):
+    """Create cross-asset participation comparison for disaggregated data"""
+    import time as _time
+    from plotly.subplots import make_subplots
+    import plotly.express as px
+
+    try:
+        all_data = {}
+        failed_instruments = []
+
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        for idx, instrument in enumerate(selected_instruments):
+            status_text.text(f"Fetching data for {instrument}...")
+            progress_bar.progress((idx + 1) / len(selected_instruments))
+
+            if idx > 0:
+                _time.sleep(0.5)
+
+            df = fetch_disagg_data_full(instrument, api_token)
+
+            if df is not None and not df.empty:
+                df = df.sort_values('report_date_as_yyyy_mm_dd')
+
+                data = {
+                    'dates': df['report_date_as_yyyy_mm_dd'],
+                    'total_traders': pd.to_numeric(df.get('traders_tot_all', pd.Series(dtype='float64')), errors='coerce'),
+                    'open_interest': pd.to_numeric(df.get('open_interest_all', pd.Series(dtype='float64')), errors='coerce'),
+                    'mm_long': pd.to_numeric(df.get('traders_m_money_long_all', pd.Series(dtype='float64')), errors='coerce'),
+                    'mm_short': pd.to_numeric(df.get('traders_m_money_short_all', pd.Series(dtype='float64')), errors='coerce'),
+                    'other_long': pd.to_numeric(df.get('traders_other_rept_long_all', pd.Series(dtype='float64')), errors='coerce'),
+                    'other_short': pd.to_numeric(df.get('traders_other_rept_short', pd.Series(dtype='float64')), errors='coerce'),
+                }
+                all_data[instrument] = data
+            else:
+                failed_instruments.append(instrument)
+
+        progress_bar.empty()
+        status_text.empty()
+
+        if failed_instruments and all_data:
+            st.info(
+                f"Loaded {len(all_data)}/{len(selected_instruments)} instruments. "
+                f"Failed: {', '.join([get_short_instrument_name(i) for i in failed_instruments])}"
+            )
+        elif all_data:
+            st.success(
+                f"Successfully loaded data for {len(all_data)} instrument(s): "
+                f"{', '.join([get_short_instrument_name(i) for i in all_data.keys()])}"
+            )
+        elif failed_instruments:
+            st.error(f"Failed to fetch data for all {len(failed_instruments)} instrument(s)")
+
+        if not all_data:
+            st.error("No valid data found for selected instruments")
+            return None
+
+        colors = px.colors.qualitative.Plotly[:len(all_data)]
+
+        range_buttons = list([
+            dict(count=1, label="1Y", step="year", stepmode="backward"),
+            dict(count=2, label="2Y", step="year", stepmode="backward"),
+            dict(count=5, label="5Y", step="year", stepmode="backward"),
+            dict(step="all", label="All"),
+        ])
+
+        fig = make_subplots(
+            rows=2, cols=2,
+            shared_xaxes='columns',
+            row_heights=[0.55, 0.45],
+            vertical_spacing=0.10,
+            horizontal_spacing=0.10,
+            subplot_titles=(
+                'Total Trader Count (solid=current, dotted=year ago)', 'Money Manager Trader Count',
+                'Avg Position per Trader', 'Other Reportables Trader Count',
+            ),
+        )
+
+        # 1. Total trader count with year-ago overlay (row 1, col 1)
+        for idx, (instrument, data) in enumerate(all_data.items()):
+            short_name = get_short_instrument_name(instrument)
+            traders = data['total_traders']
+            traders_lagged = traders.shift(52)
+            fig.add_trace(go.Scatter(
+                x=data['dates'], y=traders,
+                mode='lines', name=short_name,
+                line=dict(color=colors[idx], width=2),
+                showlegend=True, legendgroup=short_name,
+                hovertemplate=f'<b>{short_name}</b><br>Date: %{{x}}<br>Current: %{{y:,.0f}}<extra></extra>',
+            ), row=1, col=1)
+            fig.add_trace(go.Scatter(
+                x=data['dates'], y=traders_lagged,
+                mode='lines', name=f'{short_name} (year ago)',
+                line=dict(color=colors[idx], width=1, dash='dot'),
+                showlegend=False, legendgroup=short_name,
+                hovertemplate=f'<b>{short_name} year ago</b><br>Date: %{{x}}<br>Value: %{{y:,.0f}}<extra></extra>',
+            ), row=1, col=1)
+
+        # 2. Money Manager trader count (row 1, col 2)
+        for idx, (instrument, data) in enumerate(all_data.items()):
+            short_name = get_short_instrument_name(instrument)
+            mm_total = data['mm_long'].fillna(0) + data['mm_short'].fillna(0)
+            fig.add_trace(go.Scatter(
+                x=data['dates'], y=mm_total, mode='lines', name=short_name,
+                line=dict(color=colors[idx], width=2),
+                showlegend=False, legendgroup=short_name,
+                hovertemplate=f'<b>{short_name}</b><br>Date: %{{x}}<br>MM Traders: %{{y:,.0f}}<extra></extra>',
+            ), row=1, col=2)
+
+        # 3. Avg position per trader (row 2, col 1)
+        for idx, (instrument, data) in enumerate(all_data.items()):
+            short_name = get_short_instrument_name(instrument)
+            avg_position = data['open_interest'] / data['total_traders'].replace(0, 1)
+            fig.add_trace(go.Scatter(
+                x=data['dates'], y=avg_position, mode='lines', name=short_name,
+                line=dict(color=colors[idx], width=2),
+                showlegend=False, legendgroup=short_name,
+                hovertemplate=f'<b>{short_name}</b><br>Date: %{{x}}<br>Avg Position: %{{y:,.0f}}<extra></extra>',
+            ), row=2, col=1)
+
+        # 4. Other Reportables trader count (row 2, col 2)
+        for idx, (instrument, data) in enumerate(all_data.items()):
+            short_name = get_short_instrument_name(instrument)
+            other_total = data['other_long'].fillna(0) + data['other_short'].fillna(0)
+            fig.add_trace(go.Scatter(
+                x=data['dates'], y=other_total, mode='lines', name=short_name,
+                line=dict(color=colors[idx], width=2),
+                showlegend=False, legendgroup=short_name,
+                hovertemplate=f'<b>{short_name}</b><br>Date: %{{x}}<br>Other Rept: %{{y:,.0f}}<extra></extra>',
+            ), row=2, col=2)
+
+        fig.update_layout(
+            title=dict(
+                text="Cross-Asset Participation Comparison",
+                y=0.98, x=0.5, xanchor='center', yanchor='top',
+                font=dict(size=20),
+            ),
+            height=900,
+            hovermode='x unified',
+            margin=dict(t=120, b=50, l=60, r=40),
+        )
+
+        fig.update_yaxes(title_text="Total Traders", row=1, col=1)
+        fig.update_yaxes(title_text="MM Traders", row=1, col=2)
+        fig.update_yaxes(title_text="Avg Position Size", row=2, col=1)
+        fig.update_yaxes(title_text="Other Rept Traders", row=2, col=2)
+
+        fig.update_xaxes(
+            rangeselector=dict(buttons=range_buttons, yanchor="top", y=1.06),
+            row=1, col=1,
+        )
+
+        return fig
+
+    except Exception as e:
+        st.error(f"Error creating participation comparison: {str(e)}")
+        return None
+
+
+def display_disagg_participation_comparison(api_token):
+    """Display trader participation comparison for disaggregated data"""
+
+    st.markdown("---")
+    st.subheader("Trader Participation Comparison")
+    st.markdown(
+        "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
+        "Analyzes trader count trends, year-over-year changes, average positions per trader, "
+        "and participation scores across instruments. Includes Money Manager and Other Reportables breakdowns."
+        "</p>",
+        unsafe_allow_html=True,
+    )
+
+    key_instruments = load_futures_instruments()
+    all_categories = sorted(list(key_instruments.keys()))
+
+    col1_part, col2_part = st.columns([2, 6])
+    with col1_part:
+        st.markdown("Select asset category:")
+        selected_category = st.selectbox(
+            "Category",
+            options=all_categories,
+            index=all_categories.index("Metals") if "Metals" in all_categories else 0,
+            label_visibility="collapsed",
+            key="disagg_participation_category",
+        )
+
+    if selected_category in key_instruments:
+        category_instruments = list(key_instruments[selected_category].values())
+
+        if category_instruments:
+            with st.spinner(f"Analyzing trader participation for {selected_category} instruments..."):
+                fig = create_disagg_participation_comparison(category_instruments, api_token)
+
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+
+                html_string = fig.to_html(include_plotlyjs='cdn')
+                st.download_button(
+                    label="Download Participation Chart",
+                    data=html_string,
+                    file_name=f"disagg_participation_{selected_category}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                    mime="text/html",
+                    key="disagg_download_participation_chart",
+                )
+            else:
+                st.error("Unable to generate participation comparison. Please check the data.")
+        else:
+            st.warning(f"No instruments found for category: {selected_category}")
+    else:
+        st.error(f"Category '{selected_category}' not found")
+
+
+def create_disagg_strength_matrix(selected_instruments, api_token, time_period, trader_category):
+    """Create relative strength heatmap matrix showing positioning correlations for disaggregated categories"""
+    import time as _time
+
+    try:
+        all_data = {}
+        failed_instruments = []
+
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        period_days = {
+            "6 Months": 180,
+            "1 Year": 365,
+            "2 Years": 730,
+            "5 Years": 1825,
+            "10 Years": 3650,
+        }
+
+        cutoff_date = pd.Timestamp.now() - pd.DateOffset(days=period_days[time_period])
+
+        for idx, instrument in enumerate(selected_instruments):
+            status_text.text(f"Fetching data for {instrument}...")
+            progress_bar.progress((idx + 1) / len(selected_instruments))
+
+            if idx > 0:
+                _time.sleep(0.5)
+
+            df = fetch_disagg_data_2year(instrument, api_token)
+
+            if df is not None and not df.empty:
+                df = df[df['report_date_as_yyyy_mm_dd'] >= cutoff_date]
+
+                if not df.empty:
+                    df = df.sort_values('report_date_as_yyyy_mm_dd')
+
+                    series = _get_position_series(df, trader_category)
+                    if series is not None and not series.isna().all():
+                        all_data[instrument] = pd.Series(
+                            series.values,
+                            index=df['report_date_as_yyyy_mm_dd'].values,
+                        )
+                    else:
+                        failed_instruments.append(instrument)
+                else:
+                    failed_instruments.append(instrument)
+            else:
+                failed_instruments.append(instrument)
+
+        progress_bar.empty()
+        status_text.empty()
+
+        if failed_instruments:
+            st.warning(
+                f"Failed to fetch data for {len(failed_instruments)} instrument(s): "
+                f"{', '.join([get_short_instrument_name(i) for i in failed_instruments])}"
+            )
+
+        if all_data:
+            st.success(
+                f"Successfully loaded data for {len(all_data)} instrument(s): "
+                f"{', '.join([get_short_instrument_name(i) for i in all_data.keys()])}"
+            )
+
+        if len(all_data) < 2:
+            st.warning("Need at least 2 instruments with valid data for correlation matrix")
+            return None
+
+        df_combined = pd.DataFrame(all_data)
+        correlation_matrix = df_combined.corr()
+
+        fig = go.Figure(data=go.Heatmap(
+            z=correlation_matrix.values,
+            x=[get_short_instrument_name(name) for name in correlation_matrix.columns],
+            y=[get_short_instrument_name(name) for name in correlation_matrix.index],
+            colorscale='RdBu',
+            zmid=0,
+            text=np.round(correlation_matrix.values, 2),
+            texttemplate='%{text}',
+            textfont={"size": 14},
+            reversescale=True,
+            colorbar=dict(
+                title="Correlation",
+                tickmode="linear",
+                tick0=-1,
+                dtick=0.2,
+            ),
+        ))
+
+        fig.update_layout(
+            title=f"Positioning Correlation Matrix - {time_period}",
+            height=600,
+            width=700,
+            xaxis=dict(tickangle=-45, side="bottom"),
+            yaxis=dict(autorange="reversed"),
+            margin=dict(t=100, b=180, l=100, r=150),
+        )
+
+        fig.add_annotation(
+            text=f"{trader_category} Positioning Correlations",
+            xref="paper", yref="paper",
+            x=0.5, y=-0.28,
+            showarrow=False,
+            font=dict(size=12, color="gray"),
+            xanchor="center",
+        )
+
+        return fig
+
+    except Exception as e:
+        st.error(f"Error creating relative strength matrix: {str(e)}")
+        return None
+
+
+def display_disagg_strength_matrix(api_token):
+    """Display relative strength matrix for selected asset category (disaggregated)"""
+
+    st.markdown("---")
+    st.subheader("Relative Strength Matrix")
+    st.markdown(
+        "<p style='color: #888; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;'>"
+        "Positioning correlation matrix calculated using rolling window of Money Manager net positioning data."
+        "</p>",
+        unsafe_allow_html=True,
+    )
+
+    key_instruments = load_futures_instruments()
+    all_categories = sorted(list(key_instruments.keys()))
+
+    col1_str, col2_str, col3_str = st.columns([2, 2, 4])
+    with col1_str:
+        st.markdown("Select asset category:")
+        selected_category = st.selectbox(
+            "Category",
+            options=all_categories,
+            index=all_categories.index("Metals") if "Metals" in all_categories else 0,
+            label_visibility="collapsed",
+            key="disagg_strength_matrix_category",
+        )
+
+    with col2_str:
+        st.markdown("Select time period:")
+        time_period = st.selectbox(
+            "Time period",
+            options=["6 Months", "1 Year", "2 Years", "5 Years", "10 Years"],
+            index=1,
+            label_visibility="collapsed",
+            key="disagg_strength_matrix_time_period",
+        )
+
+    with col3_str:
+        st.markdown("Select trader category:")
+        trader_category = st.selectbox(
+            "Trader category",
+            options=[
+                "Money Managers Net",
+                "Prod/Merc Net",
+                "Other Reportables Net",
+            ],
+            index=0,
+            label_visibility="collapsed",
+            key="disagg_strength_matrix_trader_category",
+        )
+
+    if selected_category in key_instruments:
+        category_instruments = list(key_instruments[selected_category].values())
+
+        if category_instruments:
+            with st.spinner(f"Calculating positioning correlations for {selected_category} instruments..."):
+                fig = create_disagg_strength_matrix(
+                    category_instruments, api_token, time_period, trader_category
+                )
+
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+
+                if st.button("Download Strength Matrix", key="disagg_download_strength_matrix"):
+                    html_string = fig.to_html(include_plotlyjs='cdn')
+                    st.download_button(
+                        label="Download Chart",
+                        data=html_string,
+                        file_name=f"disagg_strength_matrix_{selected_category}_{time_period.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.html",
+                        mime="text/html",
+                        key="disagg_download_strength_btn",
+                    )
+            else:
+                st.error("Unable to generate strength matrix. Please check the data.")
         else:
             st.warning(f"No instruments found for category: {selected_category}")
     else:

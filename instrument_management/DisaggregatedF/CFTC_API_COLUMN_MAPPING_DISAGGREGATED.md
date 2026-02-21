@@ -29,7 +29,6 @@ swap__positions_spread_all         Swap__Positions_Spread_All             # Note
 m_money_positions_long_all         M_Money_Positions_Long_All
 m_money_positions_short_all        M_Money_Positions_Short_All
 m_money_positions_spread           M_Money_Positions_Spread_All
-
 tot_rept_positions_long_all        Tot_Rept_Positions_Long_All
 tot_rept_positions_short           Tot_Rept_Positions_Short_All
 nonrept_positions_long_all         NonRept_Positions_Long_All
