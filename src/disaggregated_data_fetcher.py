@@ -17,6 +17,27 @@ from disaggregated_historical_data_loader import get_disagg_historical_data_for_
 load_dotenv()
 
 
+@st.cache_data
+def load_disagg_instruments_database():
+    """Load the disaggregated instruments JSON database"""
+    try:
+        json_paths = [
+            'instrument_management/DisaggregatedF/instruments_DisaggregatedF.json',
+            '../instrument_management/DisaggregatedF/instruments_DisaggregatedF.json',
+        ]
+        for path in json_paths:
+            try:
+                with open(path, 'r') as f:
+                    return json.load(f)
+            except FileNotFoundError:
+                continue
+        st.error("instruments_DisaggregatedF.json file not found.")
+        return None
+    except Exception as e:
+        st.error(f"Error loading disaggregated instruments database: {e}")
+        return None
+
+
 def _fetch_with_retry(client, dataset_code, where_clause, select_columns, order_by, limit, max_retries=3):
     """Helper function to fetch data with retry logic"""
     for attempt in range(max_retries):

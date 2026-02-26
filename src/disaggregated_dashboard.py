@@ -1514,6 +1514,10 @@ def create_disagg_participation_comparison(selected_instruments, api_token):
                     'open_interest': pd.to_numeric(df.get('open_interest_all', pd.Series(dtype='float64')), errors='coerce'),
                     'mm_long': pd.to_numeric(df.get('traders_m_money_long_all', pd.Series(dtype='float64')), errors='coerce'),
                     'mm_short': pd.to_numeric(df.get('traders_m_money_short_all', pd.Series(dtype='float64')), errors='coerce'),
+                    'pm_long': pd.to_numeric(df.get('traders_prod_merc_long_all', pd.Series(dtype='float64')), errors='coerce'),
+                    'pm_short': pd.to_numeric(df.get('traders_prod_merc_short_all', pd.Series(dtype='float64')), errors='coerce'),
+                    'sw_long': pd.to_numeric(df.get('traders_swap_long_all', pd.Series(dtype='float64')), errors='coerce'),
+                    'sw_short': pd.to_numeric(df.get('traders_swap_short_all', pd.Series(dtype='float64')), errors='coerce'),
                     'other_long': pd.to_numeric(df.get('traders_other_rept_long_all', pd.Series(dtype='float64')), errors='coerce'),
                     'other_short': pd.to_numeric(df.get('traders_other_rept_short', pd.Series(dtype='float64')), errors='coerce'),
                 }
@@ -1551,14 +1555,15 @@ def create_disagg_participation_comparison(selected_instruments, api_token):
         ])
 
         fig = make_subplots(
-            rows=2, cols=2,
-            shared_xaxes='columns',
-            row_heights=[0.55, 0.45],
-            vertical_spacing=0.10,
+            rows=3, cols=2,
+            shared_xaxes='all',
+            row_heights=[0.35, 0.35, 0.30],
+            vertical_spacing=0.07,
             horizontal_spacing=0.10,
             subplot_titles=(
-                'Total Trader Count (solid=current, dotted=year ago)', 'Money Manager Trader Count',
-                'Avg Position per Trader', 'Other Reportables Trader Count',
+                'Total Trader Count (solid=current, dotted=year ago)', 'Avg Position per Trader (2Y Rolling Z-Score)',
+                'Money Manager Trader Count', 'Prod/Merc Trader Count',
+                'Swap Dealer Trader Count', 'Other Reportables Trader Count',
             ),
         )
 
@@ -1582,7 +1587,21 @@ def create_disagg_participation_comparison(selected_instruments, api_token):
                 hovertemplate=f'<b>{short_name} year ago</b><br>Date: %{{x}}<br>Value: %{{y:,.0f}}<extra></extra>',
             ), row=1, col=1)
 
-        # 2. Money Manager trader count (row 1, col 2)
+        # 2. Avg position per trader - rolling 2Y z-score (row 1, col 2)
+        for idx, (instrument, data) in enumerate(all_data.items()):
+            short_name = get_short_instrument_name(instrument)
+            avg_position = data['open_interest'] / data['total_traders'].replace(0, 1)
+            rolling_mean = avg_position.rolling(104, min_periods=26).mean()
+            rolling_std = avg_position.rolling(104, min_periods=26).std()
+            zscore = (avg_position - rolling_mean) / rolling_std.replace(0, np.nan)
+            fig.add_trace(go.Scatter(
+                x=data['dates'], y=zscore, mode='lines', name=short_name,
+                line=dict(color=colors[idx], width=2),
+                showlegend=False, legendgroup=short_name,
+                hovertemplate=f'<b>{short_name}</b><br>Date: %{{x}}<br>Z-Score: %{{y:.2f}}<extra></extra>',
+            ), row=1, col=2)
+
+        # 3. Money Manager trader count (row 2, col 1)
         for idx, (instrument, data) in enumerate(all_data.items()):
             short_name = get_short_instrument_name(instrument)
             mm_total = data['mm_long'].fillna(0) + data['mm_short'].fillna(0)
@@ -1591,20 +1610,31 @@ def create_disagg_participation_comparison(selected_instruments, api_token):
                 line=dict(color=colors[idx], width=2),
                 showlegend=False, legendgroup=short_name,
                 hovertemplate=f'<b>{short_name}</b><br>Date: %{{x}}<br>MM Traders: %{{y:,.0f}}<extra></extra>',
-            ), row=1, col=2)
-
-        # 3. Avg position per trader (row 2, col 1)
-        for idx, (instrument, data) in enumerate(all_data.items()):
-            short_name = get_short_instrument_name(instrument)
-            avg_position = data['open_interest'] / data['total_traders'].replace(0, 1)
-            fig.add_trace(go.Scatter(
-                x=data['dates'], y=avg_position, mode='lines', name=short_name,
-                line=dict(color=colors[idx], width=2),
-                showlegend=False, legendgroup=short_name,
-                hovertemplate=f'<b>{short_name}</b><br>Date: %{{x}}<br>Avg Position: %{{y:,.0f}}<extra></extra>',
             ), row=2, col=1)
 
-        # 4. Other Reportables trader count (row 2, col 2)
+        # 4. Prod/Merc trader count (row 2, col 2)
+        for idx, (instrument, data) in enumerate(all_data.items()):
+            short_name = get_short_instrument_name(instrument)
+            pm_total = data['pm_long'].fillna(0) + data['pm_short'].fillna(0)
+            fig.add_trace(go.Scatter(
+                x=data['dates'], y=pm_total, mode='lines', name=short_name,
+                line=dict(color=colors[idx], width=2),
+                showlegend=False, legendgroup=short_name,
+                hovertemplate=f'<b>{short_name}</b><br>Date: %{{x}}<br>PM Traders: %{{y:,.0f}}<extra></extra>',
+            ), row=2, col=2)
+
+        # 5. Swap Dealer trader count (row 3, col 1)
+        for idx, (instrument, data) in enumerate(all_data.items()):
+            short_name = get_short_instrument_name(instrument)
+            sw_total = data['sw_long'].fillna(0) + data['sw_short'].fillna(0)
+            fig.add_trace(go.Scatter(
+                x=data['dates'], y=sw_total, mode='lines', name=short_name,
+                line=dict(color=colors[idx], width=2),
+                showlegend=False, legendgroup=short_name,
+                hovertemplate=f'<b>{short_name}</b><br>Date: %{{x}}<br>SW Traders: %{{y:,.0f}}<extra></extra>',
+            ), row=3, col=1)
+
+        # 6. Other Reportables trader count (row 3, col 2)
         for idx, (instrument, data) in enumerate(all_data.items()):
             short_name = get_short_instrument_name(instrument)
             other_total = data['other_long'].fillna(0) + data['other_short'].fillna(0)
@@ -1613,7 +1643,7 @@ def create_disagg_participation_comparison(selected_instruments, api_token):
                 line=dict(color=colors[idx], width=2),
                 showlegend=False, legendgroup=short_name,
                 hovertemplate=f'<b>{short_name}</b><br>Date: %{{x}}<br>Other Rept: %{{y:,.0f}}<extra></extra>',
-            ), row=2, col=2)
+            ), row=3, col=2)
 
         fig.update_layout(
             title=dict(
@@ -1621,15 +1651,20 @@ def create_disagg_participation_comparison(selected_instruments, api_token):
                 y=0.98, x=0.5, xanchor='center', yanchor='top',
                 font=dict(size=20),
             ),
-            height=900,
+            height=1200,
             hovermode='x unified',
             margin=dict(t=120, b=50, l=60, r=40),
         )
 
         fig.update_yaxes(title_text="Total Traders", row=1, col=1)
-        fig.update_yaxes(title_text="MM Traders", row=1, col=2)
-        fig.update_yaxes(title_text="Avg Position Size", row=2, col=1)
-        fig.update_yaxes(title_text="Other Rept Traders", row=2, col=2)
+        fig.update_yaxes(title_text="Z-Score", row=1, col=2)
+        fig.add_hline(y=0, row=1, col=2, line_dash="dash", line_color="gray", opacity=0.5)
+        fig.add_hline(y=2, row=1, col=2, line_dash="dot", line_color="red", opacity=0.3)
+        fig.add_hline(y=-2, row=1, col=2, line_dash="dot", line_color="red", opacity=0.3)
+        fig.update_yaxes(title_text="MM Traders", row=2, col=1)
+        fig.update_yaxes(title_text="PM Traders", row=2, col=2)
+        fig.update_yaxes(title_text="SW Traders", row=3, col=1)
+        fig.update_yaxes(title_text="Other Rept Traders", row=3, col=2)
 
         fig.update_xaxes(
             rangeselector=dict(buttons=range_buttons, yanchor="top", y=1.06),
