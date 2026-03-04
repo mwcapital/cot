@@ -19,20 +19,75 @@ load_dotenv()
 
 @st.cache_data
 def load_disagg_instruments_database():
-    """Load the disaggregated instruments JSON database"""
+    """Load the disaggregated instruments JSON database and merge ICE instruments"""
     try:
         json_paths = [
             'instrument_management/DisaggregatedF/instruments_DisaggregatedF.json',
             '../instrument_management/DisaggregatedF/instruments_DisaggregatedF.json',
         ]
+        db = None
         for path in json_paths:
             try:
                 with open(path, 'r') as f:
-                    return json.load(f)
+                    db = json.load(f)
+                break
             except FileNotFoundError:
                 continue
-        st.error("instruments_DisaggregatedF.json file not found.")
-        return None
+        if db is None:
+            st.error("instruments_DisaggregatedF.json file not found.")
+            return None
+
+        # Merge ICE Futures Europe instruments
+        ice_paths = [
+            'instrument_management/ICE data/instruments_iceF.json',
+            '../instrument_management/ICE data/instruments_iceF.json',
+        ]
+        ice_data = None
+        for path in ice_paths:
+            try:
+                with open(path, 'r') as f:
+                    ice_data = json.load(f)
+                break
+            except FileNotFoundError:
+                continue
+
+        if ice_data and 'instruments' in ice_data:
+            exchange_name = "ICE FUTURES EUROPE"
+            for inst_name, inst_info in ice_data['instruments'].items():
+                # Add to all_instruments
+                if inst_name not in db['all_instruments']:
+                    db['all_instruments'].append(inst_name)
+
+                # Add to exchanges hierarchy
+                group = inst_info.get('commodity_group', 'OTHER')
+                subgroup = inst_info.get('commodity_subgroup', 'OTHER')
+                # Use commodity name from the instrument name (e.g. "ICE Brent Crude Futures")
+                commodity = inst_name.split(' Futures')[0].replace('ICE ', '') if 'Futures' in inst_name else inst_name.split(' - ')[0]
+
+                if exchange_name not in db['exchanges']:
+                    db['exchanges'][exchange_name] = {}
+                if group not in db['exchanges'][exchange_name]:
+                    db['exchanges'][exchange_name][group] = {}
+                if subgroup not in db['exchanges'][exchange_name][group]:
+                    db['exchanges'][exchange_name][group][subgroup] = {}
+                if commodity not in db['exchanges'][exchange_name][group][subgroup]:
+                    db['exchanges'][exchange_name][group][subgroup][commodity] = []
+                if inst_name not in db['exchanges'][exchange_name][group][subgroup][commodity]:
+                    db['exchanges'][exchange_name][group][subgroup][commodity].append(inst_name)
+
+                # Add to commodity_subgroups
+                if subgroup not in db.get('commodity_subgroups', {}):
+                    db['commodity_subgroups'][subgroup] = []
+                if inst_name not in db['commodity_subgroups'][subgroup]:
+                    db['commodity_subgroups'][subgroup].append(inst_name)
+
+                # Add to commodities
+                if commodity not in db.get('commodities', {}):
+                    db['commodities'][commodity] = []
+                if inst_name not in db['commodities'][commodity]:
+                    db['commodities'][commodity].append(inst_name)
+
+        return db
     except Exception as e:
         st.error(f"Error loading disaggregated instruments database: {e}")
         return None
@@ -76,9 +131,25 @@ def _get_supabase_client():
 
 @st.cache_data(ttl=3600)
 def _get_ice_instruments():
-    """Load set of ICE instrument names from futures_symbols_enhanced.json"""
+    """Load set of ICE instrument names from instruments_iceF.json and futures_symbols_enhanced.json"""
     ice_instruments = {}
     try:
+        # Load all ICE instruments from instruments_iceF.json
+        ice_paths = [
+            'instrument_management/ICE data/instruments_iceF.json',
+            '../instrument_management/ICE data/instruments_iceF.json',
+        ]
+        for path in ice_paths:
+            try:
+                with open(path, 'r') as f:
+                    ice_data = json.load(f)
+                for inst_name in ice_data.get('all_instruments', []):
+                    ice_instruments[inst_name] = None  # No futures symbol mapped
+                break
+            except FileNotFoundError:
+                continue
+
+        # Override with futures symbol mappings where available
         mapping_path = 'instrument_management/futures/futures_symbols_enhanced.json'
         with open(mapping_path, 'r') as f:
             data = json.load(f)
@@ -135,6 +206,67 @@ ICE_TO_DISAGG_COLUMNS = {
 }
 
 
+def _normalize_ice_dataframe(df):
+    """Extract additional_data fields and normalize ICE DataFrame to match CFTC standard columns"""
+    # Extract fields from additional_data JSONB
+    # Map additional_data keys (CamelCase) to CFTC disaggregated column names
+    ADDITIONAL_DATA_MAP = {
+        'Traders_Prod_Merc_Short_All': 'traders_prod_merc_short_all',
+        'Traders_Swap_Short_All': 'traders_swap_short_all',
+        'Traders_Swap_Spread_All': 'traders_swap_spread_all',
+        'Traders_M_Money_Short_All': 'traders_m_money_short_all',
+        'Traders_M_Money_Spread_All': 'traders_m_money_spread_all',
+        'Traders_Other_Rept_Long_All': 'traders_other_rept_long_all',
+        'Traders_Other_Rept_Short_All': 'traders_other_rept_short',
+        'Traders_Other_Rept_Spread_All': 'traders_other_rept_spread',
+        'Conc_Gross_LE_8_TDR_Long_All': 'conc_gross_le_8_tdr_long',
+        'Conc_Gross_LE_8_TDR_Short_All': 'conc_gross_le_8_tdr_short',
+        'Conc_Net_LE_8_TDR_Long_All': 'conc_net_le_8_tdr_long_all',
+        'Conc_Net_LE_8_TDR_Short_All': 'conc_net_le_8_tdr_short_all',
+    }
+
+    if 'additional_data' in df.columns:
+        # Parse additional_data once per row
+        def parse_ad(x):
+            if x is None:
+                return {}
+            if isinstance(x, str):
+                try:
+                    return json.loads(x)
+                except (json.JSONDecodeError, TypeError):
+                    return {}
+            if isinstance(x, dict):
+                return x
+            return {}
+
+        parsed = df['additional_data'].apply(parse_ad)
+        for ad_key, col_name in ADDITIONAL_DATA_MAP.items():
+            df[col_name] = parsed.apply(lambda d, k=ad_key: d.get(k))
+
+    # Rename direct columns to match CFTC disaggregated standard
+    df = df.rename(columns=ICE_TO_DISAGG_COLUMNS)
+
+    # Convert date
+    df['report_date_as_yyyy_mm_dd'] = pd.to_datetime(df['report_date_as_yyyy_mm_dd'])
+
+    # Convert numeric columns
+    non_numeric = ('report_date_as_yyyy_mm_dd', 'market_and_exchange_names',
+                   'id', 'report_date_yymmdd', 'report_type', 'commodity_code',
+                   'contract_units', 'cftc_region_code', 'additional_data',
+                   'created_at', 'updated_at')
+    for col in df.columns:
+        if col not in non_numeric:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # Calculate derived net positions
+    df['net_mm_positions'] = df['m_money_positions_long_all'] - df['m_money_positions_short_all']
+    df['net_pm_positions'] = df['prod_merc_positions_long'] - df['prod_merc_positions_short']
+    df['net_swap_positions'] = df['swap_positions_long_all'] - df['swap__positions_short_all']
+    df['net_other_positions'] = df['other_rept_positions_long'] - df['other_rept_positions_short']
+
+    return df
+
+
 @st.cache_data(ttl=3600)
 def _fetch_ice_data_2year(instrument_name):
     """Fetch 2 years of ICE COT data from Supabase and normalize column names"""
@@ -146,7 +278,6 @@ def _fetch_ice_data_2year(instrument_name):
         from datetime import datetime, timedelta
         two_years_ago = (datetime.now() - timedelta(days=730)).strftime('%Y-%m-%d')
 
-        # ICE instruments use market_name in Supabase
         response = supabase.from_('ice_cot_data').select(
             '*'
         ).eq(
@@ -161,31 +292,56 @@ def _fetch_ice_data_2year(instrument_name):
             return None
 
         df = pd.DataFrame(response.data)
+        return _normalize_ice_dataframe(df)
 
-        # Rename columns to match CFTC disaggregated standard
-        df = df.rename(columns=ICE_TO_DISAGG_COLUMNS)
+    except Exception as e:
+        print(f"Error fetching ICE data for {instrument_name}: {e}")
+        return None
 
-        # Convert date
-        df['report_date_as_yyyy_mm_dd'] = pd.to_datetime(df['report_date_as_yyyy_mm_dd'])
 
-        # Convert numeric columns
-        for col in df.columns:
-            if col not in ('report_date_as_yyyy_mm_dd', 'market_and_exchange_names',
-                          'id', 'report_date_yymmdd', 'report_type', 'commodity_code',
-                          'contract_units', 'cftc_region_code', 'additional_data',
-                          'created_at', 'updated_at'):
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+@st.cache_data(ttl=3600)
+def _fetch_ice_data_full(instrument_name):
+    """Fetch full history of ICE COT data from Supabase (back to 2011)"""
+    try:
+        supabase = _get_supabase_client()
+        if not supabase:
+            return None
 
-        # Calculate derived net positions
-        df['net_mm_positions'] = df['m_money_positions_long_all'] - df['m_money_positions_short_all']
-        df['net_pm_positions'] = df['prod_merc_positions_long'] - df['prod_merc_positions_short']
-        df['net_swap_positions'] = df['swap_positions_long_all'] - df['swap__positions_short_all']
-        df['net_other_positions'] = df['other_rept_positions_long'] - df['other_rept_positions_short']
+        # Supabase has a default limit of 1000 rows, fetch in pages
+        all_data = []
+        page_size = 1000
+        offset = 0
+
+        while True:
+            response = supabase.from_('ice_cot_data').select(
+                '*'
+            ).eq(
+                'market_name', instrument_name
+            ).eq(
+                'report_type', 'FutOnly'
+            ).order('report_date', desc=False).range(offset, offset + page_size - 1).execute()
+
+            if not response.data:
+                break
+            all_data.extend(response.data)
+            if len(response.data) < page_size:
+                break
+            offset += page_size
+
+        if not all_data:
+            return None
+
+        df = pd.DataFrame(all_data)
+        df = _normalize_ice_dataframe(df)
+
+        # Drop duplicates by date
+        df = df.drop_duplicates(subset=['report_date_as_yyyy_mm_dd'], keep='last')
+        df = df.sort_values('report_date_as_yyyy_mm_dd').reset_index(drop=True)
 
         return df
 
     except Exception as e:
-        print(f"Error fetching ICE data for {instrument_name}: {e}")
+        print(f"Error fetching full ICE data for {instrument_name}: {e}")
         return None
 
 
@@ -277,10 +433,10 @@ def fetch_disagg_data_full(instrument_name, api_token):
     data from F_Disagg06_16.txt for pre-API coverage.
     Routes to Supabase for ICE instruments (no historical stitching for ICE)."""
 
-    # ICE instruments only have 2-year data from Supabase, no historical file
+    # ICE instruments: fetch full history from Supabase (back to 2011)
     ice_instruments = _get_ice_instruments()
     if instrument_name in ice_instruments:
-        return _fetch_ice_data_2year(instrument_name)
+        return _fetch_ice_data_full(instrument_name)
 
     try:
         if ' (' in instrument_name and instrument_name.endswith(')'):
